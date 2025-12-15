@@ -2,6 +2,10 @@
 
 MCP server for PDF form filling and basic editing (merge, extract, rotate, flatten). Built with Python, `pypdf`, and `fillpdf`.
 
+## Status
+[![CI](https://github.com/nfsarch33/pdf-mcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/nfsarch33/pdf-mcp-server/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/nfsarch33/pdf-mcp-server/actions/workflows/codeql.yml/badge.svg)](https://github.com/nfsarch33/pdf-mcp-server/actions/workflows/codeql.yml)
+
 ## Setup (uv)
 1) Install `uv` if not present:
 ```bash
@@ -75,6 +79,11 @@ PY
 cd /path/to/pdf-mcp-server
 make test
 ```
+
+## Development workflow
+- Use feature branches off `main` and open a PR for review.
+- Keep each PR focused on a single tool or capability with tests.
+- For larger features, split into small PRs (tool surface, core implementation, tests, docs).
 
 ## License
 MIT, see `LICENSE`.
