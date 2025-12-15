@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.python-version
+.env
+.venv
+venv/
+env/
+.mypy_cache/
+.pytest_cache/
+
+# Build / dist
+build/
+dist/
+*.egg-info/
+
+# Editors
+.DS_Store
+.idea/
+.vscode/
+
+# UV / pip cache
+.uv/
+.pip-cache/
+
+# Local MCP smoke fixtures
+.mcp_smoke/
+

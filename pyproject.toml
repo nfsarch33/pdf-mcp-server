@@ -1,0 +1,19 @@
+[project]
+name = "pdf-mcp"
+version = "0.1.0"
+description = "Local MCP server for PDF form filling and basic editing"
+authors = [{ name = "Local User" }]
+requires-python = ">=3.10"
+dependencies = [
+    "mcp>=0.1.1",
+    "pypdf>=5.1.0",
+    "fillpdf>=0.7.3",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
