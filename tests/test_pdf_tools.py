@@ -306,6 +306,117 @@ def test_mcp_layer_can_call_all_tools(tmp_path: Path):
     assert Path(res["output_path"]).exists()
     assert res["added"] == 2
 
+    # comments (PyMuPDF Text annotations)
+    c1 = tmp_path / "c1.pdf"
+    c2 = tmp_path / "c2.pdf"
+    c3 = tmp_path / "c3.pdf"
+    res = asyncio.run(
+        call(
+            "add_comment",
+            {
+                "input_path": str(blank_a),
+                "output_path": str(c1),
+                "page": 1,
+                "text": "hello",
+                "pos": [72, 72],
+                "comment_id": "mcp-c-1",
+            },
+        )
+    )
+    assert Path(res["output_path"]).exists()
+
+    res = asyncio.run(
+        call(
+            "update_comment",
+            {
+                "input_path": str(c1),
+                "output_path": str(c2),
+                "comment_id": "mcp-c-1",
+                "text": "updated",
+            },
+        )
+    )
+    assert Path(res["output_path"]).exists()
+
+    res = asyncio.run(
+        call(
+            "remove_comment",
+            {
+                "input_path": str(c2),
+                "output_path": str(c3),
+                "comment_id": "mcp-c-1",
+            },
+        )
+    )
+    assert Path(res["output_path"]).exists()
+
+    # signatures (image insert / replace / resize / remove)
+    sig_png = tmp_path / "sig.png"
+    _write_test_png(sig_png)
+    s1 = tmp_path / "s1.pdf"
+    s2 = tmp_path / "s2.pdf"
+    s3 = tmp_path / "s3.pdf"
+    s4 = tmp_path / "s4.pdf"
+
+    res = asyncio.run(
+        call(
+            "add_signature_image",
+            {
+                "input_path": str(blank_a),
+                "output_path": str(s1),
+                "page": 1,
+                "image_path": str(sig_png),
+                "rect": [50, 50, 150, 100],
+            },
+        )
+    )
+    assert Path(res["output_path"]).exists()
+    sig_xref = int(res["signature_xref"])
+    assert sig_xref > 0
+
+    res = asyncio.run(
+        call(
+            "update_signature_image",
+            {
+                "input_path": str(s1),
+                "output_path": str(s2),
+                "page": 1,
+                "signature_xref": sig_xref,
+                "image_path": str(sig_png),
+            },
+        )
+    )
+    assert Path(res["output_path"]).exists()
+
+    res = asyncio.run(
+        call(
+            "update_signature_image",
+            {
+                "input_path": str(s2),
+                "output_path": str(s3),
+                "page": 1,
+                "signature_xref": sig_xref,
+                "rect": [60, 60, 200, 140],
+            },
+        )
+    )
+    assert Path(res["output_path"]).exists()
+    sig_xref2 = int(res["signature_xref"])
+    assert sig_xref2 > 0
+
+    res = asyncio.run(
+        call(
+            "remove_signature_image",
+            {
+                "input_path": str(s3),
+                "output_path": str(s4),
+                "page": 1,
+                "signature_xref": sig_xref2,
+            },
+        )
+    )
+    assert Path(res["output_path"]).exists()
+
 
 def test_merge_extract_rotate(tmp_path: Path):
     src1 = _make_pdf(tmp_path / "a.pdf", pages=2)
@@ -455,6 +566,159 @@ def test_text_watermark_adds_annotations(tmp_path: Path):
                 assert str(obj.get("/Contents")) == "WATERMARK"
                 found = True
         assert found
+
+
+def _write_test_png(path: Path) -> Path:
+    # Minimal valid 1x1 PNG (base64)
+    import base64
+
+    png_b64 = b"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7+Gk0AAAAASUVORK5CYII="
+    path.write_bytes(base64.b64decode(png_b64))
+    return path
+
+
+def test_comments_add_update_remove(tmp_path: Path):
+    import pymupdf
+
+    src = _make_pdf(tmp_path / "c.pdf", pages=1)
+    out1 = tmp_path / "c1.pdf"
+    out2 = tmp_path / "c2.pdf"
+    out3 = tmp_path / "c3.pdf"
+
+    res = pdf_tools.add_comment(
+        input_path=str(src),
+        output_path=str(out1),
+        page=1,
+        text="hello",
+        pos=[72, 72],
+        comment_id="c-1",
+    )
+    assert Path(res["output_path"]).exists()
+
+    # Verify comment exists by name
+    doc = pymupdf.open(str(out1))
+    try:
+        p = doc.load_page(0)
+        found = False
+        for a in p.annots() or []:
+            if a.info.get("name") == "c-1":
+                assert a.type[1] == "Text"
+                assert (a.info.get("content") or "") == "hello"
+                found = True
+        assert found
+    finally:
+        doc.close()
+
+    res = pdf_tools.update_comment(
+        input_path=str(out1),
+        output_path=str(out2),
+        comment_id="c-1",
+        text="updated",
+    )
+    assert Path(res["output_path"]).exists()
+
+    doc = pymupdf.open(str(out2))
+    try:
+        p = doc.load_page(0)
+        for a in p.annots() or []:
+            if a.info.get("name") == "c-1":
+                assert (a.info.get("content") or "") == "updated"
+    finally:
+        doc.close()
+
+    res = pdf_tools.remove_comment(
+        input_path=str(out2),
+        output_path=str(out3),
+        comment_id="c-1",
+    )
+    assert Path(res["output_path"]).exists()
+
+    doc = pymupdf.open(str(out3))
+    try:
+        p = doc.load_page(0)
+        assert all((a.info.get("name") != "c-1") for a in (p.annots() or []))
+    finally:
+        doc.close()
+
+
+def test_signature_add_update_resize_remove(tmp_path: Path):
+    import pymupdf
+
+    src = _make_pdf(tmp_path / "s.pdf", pages=1)
+    img1 = _write_test_png(tmp_path / "sig1.png")
+    img2 = _write_test_png(tmp_path / "sig2.png")
+
+    out1 = tmp_path / "s1.pdf"
+    out2 = tmp_path / "s2.pdf"
+    out3 = tmp_path / "s3.pdf"
+    out4 = tmp_path / "s4.pdf"
+
+    res = pdf_tools.add_signature_image(
+        input_path=str(src),
+        output_path=str(out1),
+        page=1,
+        image_path=str(img1),
+        rect=[50, 50, 150, 100],
+    )
+    xref = int(res["signature_xref"])
+    assert xref > 0
+
+    doc = pymupdf.open(str(out1))
+    try:
+        p = doc.load_page(0)
+        xrefs = [x[0] for x in p.get_images(full=True)]
+        assert xref in xrefs
+    finally:
+        doc.close()
+
+    # Update image bytes in place (keep xref)
+    res = pdf_tools.update_signature_image(
+        input_path=str(out1),
+        output_path=str(out2),
+        page=1,
+        signature_xref=xref,
+        image_path=str(img2),
+    )
+    assert int(res["signature_xref"]) == xref
+
+    # Resize (reinsert, xref may change)
+    res = pdf_tools.update_signature_image(
+        input_path=str(out2),
+        output_path=str(out3),
+        page=1,
+        signature_xref=xref,
+        rect=[60, 60, 200, 140],
+    )
+    xref2 = int(res["signature_xref"])
+    assert xref2 > 0
+
+    doc = pymupdf.open(str(out3))
+    try:
+        p = doc.load_page(0)
+        xrefs = [x[0] for x in p.get_images(full=True)]
+        assert xref2 in xrefs
+    finally:
+        doc.close()
+
+    # Remove
+    res = pdf_tools.remove_signature_image(
+        input_path=str(out3),
+        output_path=str(out4),
+        page=1,
+        signature_xref=xref2,
+    )
+    assert Path(res["output_path"]).exists()
+    doc = pymupdf.open(str(out4))
+    try:
+        p = doc.load_page(0)
+        # The signature should no longer be placed on the page.
+        try:
+            assert p.get_image_rects(xref2) == []
+        except ValueError:
+            # If garbage collection removed the xref entirely, that's also fine.
+            pass
+    finally:
+        doc.close()
 
 def test_rotate_invalid_degrees(tmp_path: Path):
     src = _make_pdf(tmp_path / "c.pdf", pages=1)

@@ -28,3 +28,6 @@ dist/
 # Local MCP smoke fixtures
 .mcp_smoke/
 
+# Personal/academic notes (keep out of open source repos)
+cursor-memory-complete-setup-guide.md
+

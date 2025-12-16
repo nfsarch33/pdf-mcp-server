@@ -246,6 +246,120 @@ def add_text_watermark(
     )
 
 
+@mcp.tool()
+@_handle_errors
+def add_comment(
+    input_path: str,
+    output_path: str,
+    page: int,
+    text: str,
+    pos: Sequence[float],
+    comment_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Add a PDF comment (sticky note) using PyMuPDF."""
+    return pdf_tools.add_comment(
+        input_path=input_path,
+        output_path=output_path,
+        page=page,
+        text=text,
+        pos=pos,
+        comment_id=comment_id,
+    )
+
+
+@mcp.tool()
+@_handle_errors
+def update_comment(
+    input_path: str,
+    output_path: str,
+    comment_id: str,
+    text: str,
+    pages: Optional[List[int]] = None,
+) -> Dict[str, Any]:
+    """Update a PDF comment by id using PyMuPDF."""
+    return pdf_tools.update_comment(
+        input_path=input_path,
+        output_path=output_path,
+        comment_id=comment_id,
+        text=text,
+        pages=pages,
+    )
+
+
+@mcp.tool()
+@_handle_errors
+def remove_comment(
+    input_path: str,
+    output_path: str,
+    comment_id: str,
+    pages: Optional[List[int]] = None,
+) -> Dict[str, Any]:
+    """Remove a PDF comment by id using PyMuPDF."""
+    return pdf_tools.remove_comment(
+        input_path=input_path,
+        output_path=output_path,
+        comment_id=comment_id,
+        pages=pages,
+    )
+
+
+@mcp.tool()
+@_handle_errors
+def add_signature_image(
+    input_path: str,
+    output_path: str,
+    page: int,
+    image_path: str,
+    rect: Sequence[float],
+) -> Dict[str, Any]:
+    """Add a signature image by inserting it on a page (PyMuPDF)."""
+    return pdf_tools.add_signature_image(
+        input_path=input_path,
+        output_path=output_path,
+        page=page,
+        image_path=image_path,
+        rect=rect,
+    )
+
+
+@mcp.tool()
+@_handle_errors
+def update_signature_image(
+    input_path: str,
+    output_path: str,
+    page: int,
+    signature_xref: int,
+    image_path: Optional[str] = None,
+    rect: Optional[Sequence[float]] = None,
+) -> Dict[str, Any]:
+    """Update or resize a signature image (PyMuPDF)."""
+    return pdf_tools.update_signature_image(
+        input_path=input_path,
+        output_path=output_path,
+        page=page,
+        signature_xref=signature_xref,
+        image_path=image_path,
+        rect=rect,
+    )
+
+
+@mcp.tool()
+@_handle_errors
+def remove_signature_image(
+    input_path: str,
+    output_path: str,
+    page: int,
+    signature_xref: int,
+) -> Dict[str, Any]:
+    """Remove a signature image by xref (PyMuPDF)."""
+    return pdf_tools.remove_signature_image(
+        input_path=input_path,
+        output_path=output_path,
+        page=page,
+        signature_xref=signature_xref,
+    )
+
+
 if __name__ == "__main__":
     mcp.run(transport="stdio")
 
