@@ -6,6 +6,10 @@ MCP server for PDF form filling and basic editing (merge, extract, rotate, flatt
 [![CI](https://github.com/nfsarch33/pdf-mcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/nfsarch33/pdf-mcp-server/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/nfsarch33/pdf-mcp-server/actions/workflows/codeql.yml/badge.svg)](https://github.com/nfsarch33/pdf-mcp-server/actions/workflows/codeql.yml)
 
+## CI notes
+- Dependency Review requires GitHub Dependency Graph to be enabled in the repository settings.
+- AI Review is optional and only runs if you add the `OPENAI_API_KEY` repository secret.
+
 ## Setup (uv)
 1) Install `uv` if not present:
 ```bash
@@ -57,11 +61,21 @@ Restart Cursor after saving.
 - `merge_pdfs(pdf_list, output_path)`: merge multiple PDFs.
 - `extract_pages(input_path, pages, output_path)`: 1-based pages, supports negatives (e.g., -1 = last).
 - `rotate_pages(input_path, pages, degrees, output_path)`: degrees must be multiple of 90.
+- `add_text_annotation(input_path, page, text, output_path, rect=None, annotation_id=None)`: add a FreeText annotation (managed text insertion).
+- `update_text_annotation(input_path, output_path, annotation_id, text, pages=None)`: update an annotation by id.
+- `remove_text_annotation(input_path, output_path, annotation_id, pages=None)`: remove an annotation by id.
+- `remove_annotations(input_path, output_path, pages, subtype=None)`: remove annotations on pages, optionally filtered by subtype (example FreeText).
+- `insert_pages(input_path, insert_from_path, at_page, output_path)`: insert all pages from another PDF before at_page (1-based).
+- `remove_pages(input_path, pages, output_path)`: remove specific 1-based pages.
+- `insert_text(input_path, page, text, output_path, rect=None, text_id=None)`: insert text via a managed FreeText annotation.
+- `edit_text(input_path, output_path, text_id, text, pages=None)`: edit managed inserted text.
+- `remove_text(input_path, output_path, text_id, pages=None)`: remove managed inserted text.
 
 ## Conventions
 - Paths should be absolute; outputs are created with parent directories if missing.
 - Inputs must exist and be files; errors return `{ "error": "..." }`.
 - Form flattening prefers fillpdf+poppler; falls back to a pypdf-only flatten (removes form structures).
+ - Text insert/edit/remove is implemented via managed FreeText annotations, not by editing PDF content streams.
 
 ## Smoke tests (manual)
 ```bash

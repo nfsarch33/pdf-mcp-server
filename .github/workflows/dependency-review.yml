@@ -13,4 +13,11 @@ jobs:
       - uses: actions/checkout@v4
       - name: Dependency Review
         uses: actions/dependency-review-action@v4
+        continue-on-error: true
+      - name: Dependency Review note
+        if: always()
+        run: |
+          echo "Dependency Review requires GitHub Dependency Graph to be enabled for this repository."
+          echo "If you want this check to be enforced, enable it under:"
+          echo "Settings > Security & analysis > Dependency graph"
 
