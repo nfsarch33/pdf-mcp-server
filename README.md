@@ -6,6 +6,10 @@ MCP server for PDF form filling and basic editing (merge, extract, rotate, flatt
 [![CI](https://github.com/nfsarch33/pdf-mcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/nfsarch33/pdf-mcp-server/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/nfsarch33/pdf-mcp-server/actions/workflows/codeql.yml/badge.svg)](https://github.com/nfsarch33/pdf-mcp-server/actions/workflows/codeql.yml)
 
+## CI notes
+- Dependency Review requires GitHub Dependency Graph to be enabled in the repository settings.
+- AI Review is optional and only runs if you add the `OPENAI_API_KEY` repository secret.
+
 ## Setup (uv)
 1) Install `uv` if not present:
 ```bash
