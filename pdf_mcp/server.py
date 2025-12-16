@@ -225,6 +225,27 @@ def set_pdf_metadata(
     )
 
 
+@mcp.tool()
+@_handle_errors
+def add_text_watermark(
+    input_path: str,
+    output_path: str,
+    text: str,
+    pages: Optional[List[int]] = None,
+    rect: Optional[Sequence[float]] = None,
+    annotation_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Add a simple text watermark or stamp via FreeText annotations."""
+    return pdf_tools.add_text_watermark(
+        input_path,
+        output_path,
+        text,
+        pages=pages,
+        rect=rect,
+        annotation_id=annotation_id,
+    )
+
+
 if __name__ == "__main__":
     mcp.run(transport="stdio")
 

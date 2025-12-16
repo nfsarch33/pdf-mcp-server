@@ -72,6 +72,7 @@ Restart Cursor after saving.
 - `remove_text(input_path, output_path, text_id, pages=None)`: remove managed inserted text.
 - `get_pdf_metadata(pdf_path)`: return basic PDF document metadata.
 - `set_pdf_metadata(input_path, output_path, title=None, author=None, subject=None, keywords=None)`: set basic metadata fields.
+- `add_text_watermark(input_path, output_path, text, pages=None, rect=None, annotation_id=None)`: add a simple text watermark or stamp via FreeText annotations.
 
 ## Conventions
 - Paths should be absolute; outputs are created with parent directories if missing.
