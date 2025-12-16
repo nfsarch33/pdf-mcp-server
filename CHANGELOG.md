@@ -6,12 +6,16 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 0.1.1 - 2025-12-16
+
 ### Added
-- Text watermark or stamp tool implemented as FreeText annotations.
-- PyMuPDF-powered tools: comments (Text annotations) and signature image add, update, resize, remove.
-- Form-field value clearing tool: clear (delete) values while keeping fields fillable.
-- PDF encryption tool: password-protect PDFs (use after signing to protect signed PDFs).
-- Repository license switched to GNU AGPL-3.0.
+- `clear_pdf_form_fields`: clear (delete) values for selected form fields while keeping fields fillable.
+- `encrypt_pdf`: password-protect PDFs (intended after `add_signature_image` to protect a signed PDF).
+- Cursor post-push smoke test: `scripts/cursor_smoke.py` and `docs/CURSOR_SMOKE_TEST.md`.
+
+### Changed
+- Form filling is more robust on non-standard AcroForms; values are persisted in `/V` and `encrypt_pdf` normalizes trailer IDs for compatibility.
+- Memory/rules hygiene: repo includes `.cursor/rules/template.rules` and documented SOP to keep academic/personal content untracked.
 
 ## 0.1.0
 
