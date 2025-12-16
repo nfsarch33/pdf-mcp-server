@@ -105,3 +105,6 @@ make test
 ## License
 MIT, see `LICENSE`.
 
+## Changelog
+See `CHANGELOG.md`.
+
