@@ -197,6 +197,34 @@ def remove_text(
     return pdf_tools.remove_text(input_path, output_path, text_id, pages=pages)
 
 
+@mcp.tool()
+@_handle_errors
+def get_pdf_metadata(pdf_path: str) -> Dict[str, Any]:
+    """Get basic PDF document metadata."""
+    return pdf_tools.get_pdf_metadata(pdf_path)
+
+
+@mcp.tool()
+@_handle_errors
+def set_pdf_metadata(
+    input_path: str,
+    output_path: str,
+    title: Optional[str] = None,
+    author: Optional[str] = None,
+    subject: Optional[str] = None,
+    keywords: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Set basic PDF document metadata (title, author, subject, keywords)."""
+    return pdf_tools.set_pdf_metadata(
+        input_path,
+        output_path,
+        title=title,
+        author=author,
+        subject=subject,
+        keywords=keywords,
+    )
+
+
 if __name__ == "__main__":
     mcp.run(transport="stdio")
 

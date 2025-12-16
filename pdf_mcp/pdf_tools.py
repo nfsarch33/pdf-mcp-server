@@ -3,7 +3,7 @@ from __future__ import annotations
 import secrets
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Sequence
+from typing import Dict, Iterable, List, Optional, Sequence, Any
 
 from pypdf import PdfReader, PdfWriter
 from pypdf.generic import ArrayObject, DictionaryObject, NameObject, NumberObject, TextStringObject
@@ -517,4 +517,67 @@ def remove_text(
     pages: Optional[List[int]] = None,
 ) -> Dict:
     return remove_text_annotation(input_path, output_path, text_id, pages=pages)
+
+
+def get_pdf_metadata(pdf_path: str) -> Dict[str, Any]:
+    """Return basic document metadata (title, author, etc.) if present."""
+    path = _ensure_file(pdf_path)
+    reader = PdfReader(str(path))
+    md = reader.metadata or {}
+    # pypdf metadata keys can be like "/Title", "/Author". Normalize to plain keys.
+    normalized: Dict[str, Any] = {}
+    for k, v in dict(md).items():
+        key = str(k)
+        if key.startswith("/"):
+            key = key[1:]
+        normalized[key] = None if v is None else str(v)
+    return {"metadata": normalized}
+
+
+def set_pdf_metadata(
+    input_path: str,
+    output_path: str,
+    title: Optional[str] = None,
+    author: Optional[str] = None,
+    subject: Optional[str] = None,
+    keywords: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Set basic PDF document metadata.
+
+    Only provided fields are updated; unspecified fields are preserved when possible.
+    """
+    src = _ensure_file(input_path)
+    dst = _prepare_output(output_path)
+
+    reader = PdfReader(str(src))
+    writer = PdfWriter()
+    writer.clone_document_from_reader(reader)
+
+    existing = reader.metadata or {}
+    merged: Dict[str, str] = {}
+    for k, v in dict(existing).items():
+        if v is None:
+            continue
+        key = str(k)
+        if not key.startswith("/"):
+            key = f"/{key}"
+        merged[key] = str(v)
+
+    if title is not None:
+        merged["/Title"] = title
+    if author is not None:
+        merged["/Author"] = author
+    if subject is not None:
+        merged["/Subject"] = subject
+    if keywords is not None:
+        merged["/Keywords"] = keywords
+
+    if merged:
+        writer.add_metadata(merged)
+
+    with dst.open("wb") as output_file:
+        writer.write(output_file)
+
+    return {"output_path": str(dst), "updated": {k: v for k, v in {"title": title, "author": author, "subject": subject, "keywords": keywords}.items() if v is not None}}
 

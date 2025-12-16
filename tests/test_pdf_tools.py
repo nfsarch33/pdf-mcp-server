@@ -269,6 +269,26 @@ def test_mcp_layer_can_call_all_tools(tmp_path: Path):
     assert Path(res["output_path"]).exists()
     assert PdfReader(str(removed_pages)).get_num_pages() == 2
 
+    # metadata tools
+    meta_out = tmp_path / "mcp_meta.pdf"
+    res = asyncio.run(
+        call(
+            "set_pdf_metadata",
+            {
+                "input_path": str(blank_b),
+                "output_path": str(meta_out),
+                "title": "T",
+                "author": "A",
+            },
+        )
+    )
+    assert Path(res["output_path"]).exists()
+
+    res = asyncio.run(call("get_pdf_metadata", {"pdf_path": str(meta_out)}))
+    md = res["metadata"]
+    assert md.get("Title") == "T"
+    assert md.get("Author") == "A"
+
 
 def test_merge_extract_rotate(tmp_path: Path):
     src1 = _make_pdf(tmp_path / "a.pdf", pages=2)
@@ -365,6 +385,27 @@ def test_remove_pages_refuse_all(tmp_path: Path):
         assert False, "Expected PdfToolError"
     except PdfToolError as exc:
         assert "remove all pages" in str(exc)
+
+
+def test_pdf_metadata_roundtrip(tmp_path: Path):
+    src = _make_pdf(tmp_path / "meta.pdf", pages=1)
+    out = tmp_path / "meta_out.pdf"
+
+    res = pdf_tools.set_pdf_metadata(
+        str(src),
+        str(out),
+        title="My Title",
+        author="My Author",
+        subject="My Subject",
+        keywords="k1,k2",
+    )
+    assert Path(res["output_path"]).exists()
+
+    got = pdf_tools.get_pdf_metadata(str(out))["metadata"]
+    assert got.get("Title") == "My Title"
+    assert got.get("Author") == "My Author"
+    assert got.get("Subject") == "My Subject"
+    assert got.get("Keywords") == "k1,k2"
 
 def test_rotate_invalid_degrees(tmp_path: Path):
     src = _make_pdf(tmp_path / "c.pdf", pages=1)
