@@ -31,4 +31,10 @@ Cursor has its own memory system and MCP tooling. This repo keeps a portable, re
 - Files like `cursor-memory-complete-setup-guide.md` must remain untracked and ignored.
 - Use placeholders in docs instead of personal filesystem paths.
 
+## Academic / personal content hygiene (SOP)
+
+- Do not commit academic notes or personal files into this repo.
+- Keep them untracked and add explicit `.gitignore` entries when needed.
+- Canonical guidance for the global memory system is stored in Pepper (git) under `~/memo/global-memories/` (not in this repo).
+
 
