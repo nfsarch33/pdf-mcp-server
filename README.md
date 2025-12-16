@@ -58,6 +58,7 @@ Restart Cursor after saving.
 ## Available tools (initial)
 - `get_pdf_form_fields(pdf_path)`: list fields and count.
 - `fill_pdf_form(input_path, output_path, data, flatten=False)`: fill fields; optional flatten (uses fillpdf if available, else pypdf fallback).
+- `clear_pdf_form_fields(input_path, output_path, fields=None)`: clear (delete) values for selected form fields while keeping fields fillable.
 - `flatten_pdf(input_path, output_path)`: flatten forms/annotations.
 - `merge_pdfs(pdf_list, output_path)`: merge multiple PDFs.
 - `extract_pages(input_path, pages, output_path)`: 1-based pages, supports negatives (e.g., -1 = last).
@@ -80,6 +81,7 @@ Restart Cursor after saving.
 - `add_signature_image(input_path, output_path, page, image_path, rect)`: add a signature image to a page (returns `signature_xref`).
 - `update_signature_image(input_path, output_path, page, signature_xref, image_path=None, rect=None)`: update or resize a signature image.
 - `remove_signature_image(input_path, output_path, page, signature_xref)`: remove a signature image.
+- `encrypt_pdf(input_path, output_path, user_password, owner_password=None, ...)`: encrypt (password-protect) a PDF (use after `add_signature_image` to protect a signed PDF).
 
 ## Conventions
 - Paths should be absolute; outputs are created with parent directories if missing.

@@ -60,6 +60,46 @@ def flatten_pdf(input_path: str, output_path: str) -> Dict[str, Any]:
 
 @mcp.tool()
 @_handle_errors
+def clear_pdf_form_fields(
+    input_path: str,
+    output_path: str,
+    fields: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    """Clear (delete) values for PDF form fields while keeping fields fillable."""
+    return pdf_tools.clear_pdf_form_fields(input_path, output_path, fields=fields)
+
+
+@mcp.tool()
+@_handle_errors
+def encrypt_pdf(
+    input_path: str,
+    output_path: str,
+    user_password: str,
+    owner_password: Optional[str] = None,
+    allow_printing: bool = True,
+    allow_modifying: bool = False,
+    allow_copying: bool = False,
+    allow_annotations: bool = False,
+    allow_form_filling: bool = True,
+    use_128bit: bool = True,
+) -> Dict[str, Any]:
+    """Encrypt (password-protect) a PDF using pypdf."""
+    return pdf_tools.encrypt_pdf(
+        input_path=input_path,
+        output_path=output_path,
+        user_password=user_password,
+        owner_password=owner_password,
+        allow_printing=allow_printing,
+        allow_modifying=allow_modifying,
+        allow_copying=allow_copying,
+        allow_annotations=allow_annotations,
+        allow_form_filling=allow_form_filling,
+        use_128bit=use_128bit,
+    )
+
+
+@mcp.tool()
+@_handle_errors
 def merge_pdfs(pdf_list: List[str], output_path: str) -> Dict[str, Any]:
     """Merge multiple PDFs into a single file."""
     return pdf_tools.merge_pdfs(pdf_list, output_path)

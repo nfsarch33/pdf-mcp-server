@@ -118,6 +118,37 @@ def test_fill_updates_real_form_field(tmp_path: Path):
     assert str(fields["Name"].get("/V")) == "Test User"
 
 
+def test_clear_pdf_form_fields(tmp_path: Path):
+    src = _make_form_pdf(tmp_path / "real_form.pdf")
+    out = tmp_path / "filled_real.pdf"
+    pdf_tools.fill_pdf_form(str(src), str(out), {"Name": "X"}, flatten=False)
+
+    cleared = tmp_path / "cleared.pdf"
+    res = pdf_tools.clear_pdf_form_fields(str(out), str(cleared), fields=["Name"])
+    assert Path(res["output_path"]).exists()
+
+    from pypdf import PdfReader
+
+    r = PdfReader(str(cleared))
+    fields = r.get_fields() or {}
+    assert str(fields["Name"].get("/V")) == ""
+
+
+def test_encrypt_pdf_roundtrip(tmp_path: Path):
+    src = _make_pdf(tmp_path / "plain.pdf", pages=1)
+    enc = tmp_path / "enc.pdf"
+    res = pdf_tools.encrypt_pdf(str(src), str(enc), user_password="userpw")
+    assert Path(res["output_path"]).exists()
+
+    from pypdf import PdfReader
+
+    r = PdfReader(str(enc))
+    assert r.is_encrypted is True
+    assert r.decrypt("wrong") == 0
+    assert r.decrypt("userpw") in (1, 2)
+    assert len(r.pages) == 1
+
+
 def test_mcp_layer_can_call_all_tools(tmp_path: Path):
     """
     Smoke test the MCP layer in-process (closest to Cursor invocation) by calling
@@ -160,6 +191,32 @@ def test_mcp_layer_can_call_all_tools(tmp_path: Path):
     assert Path(res["output_path"]).exists()
     fields = (PdfReader(str(filled)).get_fields() or {})
     assert str(fields["Name"].get("/V")) == "MCP User"
+
+    # clear_pdf_form_fields
+    cleared = tmp_path / "mcp_cleared.pdf"
+    res = asyncio.run(
+        call(
+            "clear_pdf_form_fields",
+            {"input_path": str(filled), "output_path": str(cleared), "fields": ["Name"]},
+        )
+    )
+    assert Path(res["output_path"]).exists()
+    fields2 = (PdfReader(str(cleared)).get_fields() or {})
+    assert str(fields2["Name"].get("/V")) == ""
+
+    # encrypt_pdf
+    encrypted = tmp_path / "mcp_encrypted.pdf"
+    res = asyncio.run(
+        call(
+            "encrypt_pdf",
+            {"input_path": str(cleared), "output_path": str(encrypted), "user_password": "pw"},
+        )
+    )
+    assert Path(res["output_path"]).exists()
+    rr = PdfReader(str(encrypted))
+    assert rr.is_encrypted is True
+    assert rr.decrypt("pw") in (1, 2)
+    assert len(rr.pages) >= 1
 
     # flatten_pdf
     flat = tmp_path / "mcp_flat.pdf"

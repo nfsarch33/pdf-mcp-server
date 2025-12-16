@@ -6,7 +6,16 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Any
 
 from pypdf import PdfReader, PdfWriter
-from pypdf.generic import ArrayObject, DictionaryObject, NameObject, NumberObject, TextStringObject
+from pypdf.constants import UserAccessPermissions
+from pypdf.generic import (
+    ArrayObject,
+    BooleanObject,
+    ByteStringObject,
+    DictionaryObject,
+    NameObject,
+    NumberObject,
+    TextStringObject,
+)
 import pymupdf
 
 try:
@@ -75,7 +84,71 @@ def _flatten_writer(writer: PdfWriter) -> None:
     acro_form = writer._root_object.get("/AcroForm")  # type: ignore[attr-defined]
     if acro_form:
         acro_form.pop("/Fields", None)
-        acro_form.update({"/NeedAppearances": False})
+        acro_form[NameObject("/NeedAppearances")] = BooleanObject(False)
+
+
+def _apply_form_field_values(writer: PdfWriter, data: Dict[str, str]) -> int:
+    """
+    Best-effort form filling that handles both typical AcroForm structures and
+    less standard PDFs where widgets are missing /Subtype or are merged into fields.
+    """
+
+    def _apply_to_obj(obj) -> int:
+        updated_local = 0
+        try:
+            field_name = obj.get("/T")
+        except Exception:
+            field_name = None
+
+        if field_name is not None:
+            key = str(field_name)
+            if key in data:
+                obj[NameObject("/V")] = TextStringObject(str(data[key]))
+                updated_local += 1
+
+        kids = obj.get("/Kids")
+        if kids:
+            kids_obj = kids.get_object() if hasattr(kids, "get_object") else kids
+            for kid in list(kids_obj):
+                kobj = kid.get_object() if hasattr(kid, "get_object") else kid
+                updated_local += _apply_to_obj(kobj)
+        return updated_local
+
+    updated = 0
+
+    # Update AcroForm fields array if present.
+    acro_form = writer._root_object.get("/AcroForm")  # type: ignore[attr-defined]
+    if acro_form:
+        try:
+            acro_form[NameObject("/NeedAppearances")] = BooleanObject(True)
+        except Exception:
+            pass
+        fields_arr = acro_form.get("/Fields")
+        if fields_arr:
+            fields_obj = fields_arr.get_object() if hasattr(fields_arr, "get_object") else fields_arr
+            for ref in list(fields_obj):
+                obj = ref.get_object() if hasattr(ref, "get_object") else ref
+                updated += _apply_to_obj(obj)
+
+    # Update page annotations (widgets), even if they're not well-formed.
+    for page in writer.pages:
+        annots = page.get("/Annots")
+        if not annots:
+            continue
+        annots_obj = annots.get_object() if hasattr(annots, "get_object") else annots
+        for ref in list(annots_obj):
+            obj = ref.get_object() if hasattr(ref, "get_object") else ref
+            if not hasattr(obj, "get"):
+                continue
+            t = obj.get("/T")
+            if t is None:
+                continue
+            key = str(t)
+            if key in data:
+                obj[NameObject("/V")] = TextStringObject(str(data[key]))
+                updated += 1
+
+    return updated
 
 
 def get_pdf_form_fields(pdf_path: str) -> Dict:
@@ -102,7 +175,31 @@ def fill_pdf_form(
         fillpdfs.write_fillable_pdf(str(src), str(dst), data)
         if flatten:
             fillpdfs.flatten_pdf(str(dst), str(dst))
-        return {"output_path": str(dst), "flattened": flatten, "filled_with": "fillpdf"}
+        # Some real-world PDFs get their appearances updated but don't persist /V values.
+        # Verify and fall back to pypdf if needed so that filled contents are durable.
+        if not flatten:
+            try:
+                verify_reader = PdfReader(str(dst))
+                verify_fields = verify_reader.get_fields() or {}
+                mismatched = []
+                for k, v in data.items():
+                    if k not in verify_fields:
+                        continue
+                    actual = _safe_value(verify_fields[k].get("/V"))
+                    if actual != str(v):
+                        mismatched.append(k)
+                if mismatched:
+                    raise PdfToolError(
+                        "fillpdf did not persist field values for: " + ", ".join(mismatched)
+                    )
+            except PdfToolError:
+                # Fall back to pypdf path below.
+                pass
+            except Exception:
+                # Defensive: don't fail the operation just due to verification issues.
+                pass
+            else:
+                return {"output_path": str(dst), "flattened": flatten, "filled_with": "fillpdf"}
 
     writer = PdfWriter()
     # Important: When updating form fields with pypdf, the PdfWriter must have
@@ -111,6 +208,7 @@ def fill_pdf_form(
     if has_fields:
         for page in writer.pages:
             writer.update_page_form_field_values(page, data)
+        _apply_form_field_values(writer, data)
 
     if flatten:
         _flatten_writer(writer)
@@ -119,6 +217,109 @@ def fill_pdf_form(
         writer.write(output_file)
 
     return {"output_path": str(dst), "flattened": flatten, "filled_with": "pypdf"}
+
+
+def clear_pdf_form_fields(
+    input_path: str,
+    output_path: str,
+    fields: Optional[List[str]] = None,
+) -> Dict:
+    """
+    Clear (delete) values for form fields by setting them to an empty string.
+
+    This keeps the AcroForm structure intact (fields remain fillable). To remove
+    fields entirely, use flattening (which removes editability).
+    """
+    src = _ensure_file(input_path)
+    dst = _prepare_output(output_path)
+
+    reader = PdfReader(str(src))
+    available = list((reader.get_fields() or {}).keys())
+    if not available:
+        raise PdfToolError("No form fields found in PDF")
+
+    target = available if fields is None else fields
+    missing = [f for f in target if f not in available]
+    if missing:
+        raise PdfToolError(f"Unknown form fields: {', '.join(missing)}")
+
+    # Delegate to the existing fill logic for maximum reuse.
+    data = {name: "" for name in target}
+    result = fill_pdf_form(str(src), str(dst), data, flatten=False)
+    result.update({"cleared": len(target), "fields": target})
+    return result
+
+
+def encrypt_pdf(
+    input_path: str,
+    output_path: str,
+    user_password: str,
+    owner_password: Optional[str] = None,
+    allow_printing: bool = True,
+    allow_modifying: bool = False,
+    allow_copying: bool = False,
+    allow_annotations: bool = False,
+    allow_form_filling: bool = True,
+    use_128bit: bool = True,
+) -> Dict:
+    """
+    Encrypt (password-protect) a PDF using pypdf.
+
+    Note: This is PDF encryption (access control). It is not a cryptographic
+    digital signature. Use add_signature_image for a visual signature, then
+    encrypt_pdf to protect the signed PDF.
+    """
+    if not user_password:
+        raise PdfToolError("user_password must be non-empty")
+
+    src = _ensure_file(input_path)
+    dst = _prepare_output(output_path)
+
+    reader = PdfReader(str(src))
+    writer = PdfWriter()
+    writer.clone_document_from_reader(reader)
+    # Some PDFs carry a trailer /ID as TextStringObject(s). pypdf encryption expects bytes-like IDs.
+    # Normalize by generating a fresh byte-string ID pair.
+    try:
+        writer._ID = [  # type: ignore[attr-defined]
+            ByteStringObject(secrets.token_bytes(16)),
+            ByteStringObject(secrets.token_bytes(16)),
+        ]
+    except Exception:
+        pass
+
+    perms = UserAccessPermissions(0)
+    if allow_printing:
+        perms |= UserAccessPermissions.PRINT
+        perms |= UserAccessPermissions.PRINT_TO_REPRESENTATION
+    if allow_modifying:
+        perms |= UserAccessPermissions.MODIFY
+        perms |= UserAccessPermissions.ASSEMBLE_DOC
+    if allow_copying:
+        perms |= UserAccessPermissions.EXTRACT
+        perms |= UserAccessPermissions.EXTRACT_TEXT_AND_GRAPHICS
+    if allow_annotations:
+        perms |= UserAccessPermissions.ADD_OR_MODIFY
+    if allow_form_filling:
+        perms |= UserAccessPermissions.FILL_FORM_FIELDS
+
+    writer.encrypt(
+        user_password=user_password,
+        owner_password=owner_password,
+        use_128bit=use_128bit,
+        permissions_flag=perms,
+    )
+
+    with dst.open("wb") as output_file:
+        writer.write(output_file)
+
+    return {
+        "output_path": str(dst),
+        "encrypted": True,
+        "use_128bit": use_128bit,
+        "permissions": int(perms),
+        "owner_password_provided": owner_password is not None,
+    }
 
 
 def flatten_pdf(input_path: str, output_path: str) -> Dict:

@@ -1,0 +1,22 @@
+---
+description: "Global Memory System (KISS)"
+globs: ["**/*"]
+alwaysApply: true
+---
+
+# Memory routing SOP (auto)
+# - If the user says "add to rules": only put short, universal, stable rules here.
+# - If the user says "add to memory": put procedures/checklists in Pepper (~/memo/global-memories).
+# - If it is historical/RCA/old versions: put it in global-kb (~/Code/global-kb) or OS KB (kb CLI).
+#
+# Secrets policy (local dev):
+# - For local development on this machine, it is acceptable to keep MCP credentials as static values in ~/.cursor/mcp.json.
+# - Never commit secrets to open source repos or store them inside repo rules files.
+#
+# Pepper (git) canonical files:
+# - memory_bank_read("global-memories", "memory-sop.md")
+# - memory_bank_read("global-memories", "coding-standards-v9-1.md")
+# - memory_bank_read("global-memories", "quick-reference-card.md")
+#
+# Quality gates before calling work "done": tests pass; errors handled; docs updated.
+
