@@ -200,6 +200,75 @@ def test_mcp_layer_can_call_all_tools(tmp_path: Path):
     rr = PdfReader(str(rotated))
     assert rr.pages[0].get("/Rotate") in (90, 450)  # depending on normalization
 
+    # annotations and managed text
+    annotated = tmp_path / "mcp_annotated.pdf"
+    res = asyncio.run(
+        call(
+            "add_text_annotation",
+            {
+                "input_path": str(blank_a),
+                "page": 1,
+                "text": "Hello",
+                "output_path": str(annotated),
+                "annotation_id": "test-annot-1",
+            },
+        )
+    )
+    assert Path(res["output_path"]).exists()
+
+    edited = tmp_path / "mcp_annotated_edited.pdf"
+    res = asyncio.run(
+        call(
+            "update_text_annotation",
+            {
+                "input_path": str(annotated),
+                "output_path": str(edited),
+                "annotation_id": "test-annot-1",
+                "text": "Hello Edited",
+            },
+        )
+    )
+    assert Path(res["output_path"]).exists()
+
+    removed = tmp_path / "mcp_annotated_removed.pdf"
+    res = asyncio.run(
+        call(
+            "remove_text_annotation",
+            {
+                "input_path": str(edited),
+                "output_path": str(removed),
+                "annotation_id": "test-annot-1",
+            },
+        )
+    )
+    assert Path(res["output_path"]).exists()
+
+    # pages insert/remove
+    inserted = tmp_path / "mcp_pages_inserted.pdf"
+    res = asyncio.run(
+        call(
+            "insert_pages",
+            {
+                "input_path": str(blank_a),
+                "insert_from_path": str(blank_b),
+                "at_page": 2,
+                "output_path": str(inserted),
+            },
+        )
+    )
+    assert Path(res["output_path"]).exists()
+    assert PdfReader(str(inserted)).get_num_pages() == 3
+
+    removed_pages = tmp_path / "mcp_pages_removed.pdf"
+    res = asyncio.run(
+        call(
+            "remove_pages",
+            {"input_path": str(inserted), "pages": [2], "output_path": str(removed_pages)},
+        )
+    )
+    assert Path(res["output_path"]).exists()
+    assert PdfReader(str(removed_pages)).get_num_pages() == 2
+
 
 def test_merge_extract_rotate(tmp_path: Path):
     src1 = _make_pdf(tmp_path / "a.pdf", pages=2)
@@ -220,6 +289,82 @@ def test_merge_extract_rotate(tmp_path: Path):
     assert rotate_result["rotated"] == 1
     assert Path(rotate_result["output_path"]).exists()
 
+
+def test_annotations_and_text_tools(tmp_path: Path):
+    src = _make_pdf(tmp_path / "base.pdf", pages=1)
+
+    annotated = tmp_path / "annotated.pdf"
+    res = pdf_tools.add_text_annotation(
+        str(src), page=1, text="Hello", output_path=str(annotated), annotation_id="a1"
+    )
+    assert Path(res["output_path"]).exists()
+
+    from pypdf import PdfReader
+
+    r = PdfReader(str(annotated))
+    annots = r.pages[0].get("/Annots")
+    assert annots is not None
+    annots_obj = annots.get_object() if hasattr(annots, "get_object") else annots
+    assert len(list(annots_obj)) == 1
+    obj = list(annots_obj)[0].get_object()
+    assert str(obj.get("/Subtype")) == "/FreeText"
+    assert str(obj.get("/Contents")) == "Hello"
+    assert str(obj.get("/NM")) == "a1"
+
+    edited = tmp_path / "annotated_edited.pdf"
+    res = pdf_tools.update_text_annotation(str(annotated), str(edited), "a1", "Hello Edited")
+    assert Path(res["output_path"]).exists()
+    r2 = PdfReader(str(edited))
+    annots2 = r2.pages[0].get("/Annots").get_object()
+    obj2 = list(annots2)[0].get_object()
+    assert str(obj2.get("/Contents")) == "Hello Edited"
+
+    removed = tmp_path / "annotated_removed.pdf"
+    res = pdf_tools.remove_text_annotation(str(edited), str(removed), "a1")
+    assert Path(res["output_path"]).exists()
+    r3 = PdfReader(str(removed))
+    annots3 = r3.pages[0].get("/Annots")
+    if annots3 is not None:
+        assert len(list(annots3.get_object())) == 0
+
+    # managed text wrappers
+    inserted = tmp_path / "text_inserted.pdf"
+    res = pdf_tools.insert_text(str(src), page=1, text="T", output_path=str(inserted), text_id="t1")
+    assert Path(res["output_path"]).exists()
+    edited2 = tmp_path / "text_edited.pdf"
+    res = pdf_tools.edit_text(str(inserted), str(edited2), "t1", "T2")
+    assert Path(res["output_path"]).exists()
+    removed2 = tmp_path / "text_removed.pdf"
+    res = pdf_tools.remove_text(str(edited2), str(removed2), "t1")
+    assert Path(res["output_path"]).exists()
+
+
+def test_page_insert_remove(tmp_path: Path):
+    base = _make_pdf(tmp_path / "base2.pdf", pages=2)
+    ins = _make_pdf(tmp_path / "ins.pdf", pages=1)
+
+    out = tmp_path / "inserted.pdf"
+    res = pdf_tools.insert_pages(str(base), str(ins), at_page=2, output_path=str(out))
+    assert Path(res["output_path"]).exists()
+
+    from pypdf import PdfReader
+
+    assert PdfReader(str(out)).get_num_pages() == 3
+
+    out2 = tmp_path / "removed.pdf"
+    res = pdf_tools.remove_pages(str(out), [2], str(out2))
+    assert Path(res["output_path"]).exists()
+    assert PdfReader(str(out2)).get_num_pages() == 2
+
+
+def test_remove_pages_refuse_all(tmp_path: Path):
+    base = _make_pdf(tmp_path / "one.pdf", pages=1)
+    out = tmp_path / "x.pdf"
+    try:
+        pdf_tools.remove_pages(str(base), [1], str(out))
+        assert False, "Expected PdfToolError"
+    except PdfToolError as exc:
+        assert "remove all pages" in str(exc)
 
 def test_rotate_invalid_degrees(tmp_path: Path):
     src = _make_pdf(tmp_path / "c.pdf", pages=1)
