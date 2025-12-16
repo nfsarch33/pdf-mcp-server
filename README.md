@@ -100,6 +100,7 @@ make test
 - Use feature branches off `main` and open a PR for review.
 - Keep each PR focused on a single tool or capability with tests.
 - For larger features, split into small PRs (tool surface, core implementation, tests, docs).
+- After merging a PR, delete the feature branch and run `git fetch --prune` locally to keep branch state clean.
 
 ## License
 MIT, see `LICENSE`.
