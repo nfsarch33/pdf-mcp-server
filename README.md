@@ -1,6 +1,7 @@
 # PDF MCP Server
 
 MCP server for PDF form filling and basic editing (merge, extract, rotate, flatten). Built with Python, `pypdf`, and `fillpdf`.
+Includes `pymupdf` (AGPL) for robust comments and signature image support.
 
 ## Status
 [![CI](https://github.com/nfsarch33/pdf-mcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/nfsarch33/pdf-mcp-server/actions/workflows/ci.yml)
@@ -73,6 +74,12 @@ Restart Cursor after saving.
 - `get_pdf_metadata(pdf_path)`: return basic PDF document metadata.
 - `set_pdf_metadata(input_path, output_path, title=None, author=None, subject=None, keywords=None)`: set basic metadata fields.
 - `add_text_watermark(input_path, output_path, text, pages=None, rect=None, annotation_id=None)`: add a simple text watermark or stamp via FreeText annotations.
+- `add_comment(input_path, output_path, page, text, pos, comment_id=None)`: add a PDF comment (Text annotation, sticky note).
+- `update_comment(input_path, output_path, comment_id, text, pages=None)`: update a PDF comment by id.
+- `remove_comment(input_path, output_path, comment_id, pages=None)`: remove a PDF comment by id.
+- `add_signature_image(input_path, output_path, page, image_path, rect)`: add a signature image to a page (returns `signature_xref`).
+- `update_signature_image(input_path, output_path, page, signature_xref, image_path=None, rect=None)`: update or resize a signature image.
+- `remove_signature_image(input_path, output_path, page, signature_xref)`: remove a signature image.
 
 ## Conventions
 - Paths should be absolute; outputs are created with parent directories if missing.
@@ -104,7 +111,7 @@ make test
 - After merging a PR, delete the feature branch and run `git fetch --prune` locally to keep branch state clean.
 
 ## License
-MIT, see `LICENSE`.
+GNU AGPL-3.0, see `LICENSE`.
 
 ## Changelog
 See `CHANGELOG.md`.

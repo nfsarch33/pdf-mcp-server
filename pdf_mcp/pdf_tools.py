@@ -7,6 +7,7 @@ from typing import Dict, Iterable, List, Optional, Sequence, Any
 
 from pypdf import PdfReader, PdfWriter
 from pypdf.generic import ArrayObject, DictionaryObject, NameObject, NumberObject, TextStringObject
+import pymupdf
 
 try:
     from fillpdf import fillpdfs
@@ -643,4 +644,211 @@ def add_text_watermark(
         writer.write(output_file)
 
     return {"output_path": str(dst), "annotation_id": annotation_id, "added": added}
+
+
+def add_comment(
+    input_path: str,
+    output_path: str,
+    page: int,
+    text: str,
+    pos: Sequence[float],
+    comment_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Add a PDF comment (Subtype /Text) using PyMuPDF."""
+    src = _ensure_file(input_path)
+    dst = _prepare_output(output_path)
+    if page < 1:
+        raise PdfToolError("page must be >= 1")
+    if len(pos) != 2:
+        raise PdfToolError("pos must be [x, y]")
+
+    if not comment_id:
+        comment_id = f"pdf-mcp-comment-{secrets.token_hex(6)}"
+
+    doc = pymupdf.open(str(src))
+    try:
+        if page > doc.page_count:
+            raise PdfToolError(f"page out of range: {page}")
+        p = doc.load_page(page - 1)
+        annot = p.add_text_annot(pymupdf.Point(pos[0], pos[1]), text)
+        annot.set_name(comment_id)
+        annot.update()
+        doc.save(str(dst), garbage=4, deflate=True)
+    finally:
+        doc.close()
+
+    return {"output_path": str(dst), "comment_id": comment_id, "page": page}
+
+
+def update_comment(
+    input_path: str,
+    output_path: str,
+    comment_id: str,
+    text: str,
+    pages: Optional[List[int]] = None,
+) -> Dict[str, Any]:
+    """Update a PDF comment by id using PyMuPDF."""
+    src = _ensure_file(input_path)
+    dst = _prepare_output(output_path)
+    if not comment_id:
+        raise PdfToolError("comment_id is required")
+
+    doc = pymupdf.open(str(src))
+    try:
+        page_indices = _to_zero_based_pages(pages, doc.page_count) if pages else list(range(doc.page_count))
+        updated = 0
+        for idx in page_indices:
+            p = doc.load_page(idx)
+            for annot in p.annots() or []:
+                if annot.info.get("name") == comment_id:
+                    annot.set_info(content=text)
+                    annot.update()
+                    updated += 1
+        doc.save(str(dst), garbage=4, deflate=True)
+    finally:
+        doc.close()
+
+    if updated == 0:
+        raise PdfToolError(f"comment not found: {comment_id}")
+    return {"output_path": str(dst), "updated": updated}
+
+
+def remove_comment(
+    input_path: str,
+    output_path: str,
+    comment_id: str,
+    pages: Optional[List[int]] = None,
+) -> Dict[str, Any]:
+    """Remove a PDF comment by id using PyMuPDF."""
+    src = _ensure_file(input_path)
+    dst = _prepare_output(output_path)
+    if not comment_id:
+        raise PdfToolError("comment_id is required")
+
+    doc = pymupdf.open(str(src))
+    try:
+        page_indices = _to_zero_based_pages(pages, doc.page_count) if pages else list(range(doc.page_count))
+        removed = 0
+        for idx in page_indices:
+            p = doc.load_page(idx)
+            for annot in list(p.annots() or []):
+                if annot.info.get("name") == comment_id:
+                    p.delete_annot(annot)
+                    removed += 1
+        doc.save(str(dst), garbage=4, deflate=True)
+    finally:
+        doc.close()
+
+    if removed == 0:
+        raise PdfToolError(f"comment not found: {comment_id}")
+    return {"output_path": str(dst), "removed": removed}
+
+
+def add_signature_image(
+    input_path: str,
+    output_path: str,
+    page: int,
+    image_path: str,
+    rect: Sequence[float],
+) -> Dict[str, Any]:
+    """Add a signature image by inserting an image onto a page (returns xref)."""
+    src = _ensure_file(input_path)
+    dst = _prepare_output(output_path)
+    img = _ensure_file(image_path)
+    if page < 1:
+        raise PdfToolError("page must be >= 1")
+    if len(rect) != 4:
+        raise PdfToolError("rect must be [x0, y0, x1, y1]")
+
+    doc = pymupdf.open(str(src))
+    try:
+        if page > doc.page_count:
+            raise PdfToolError(f"page out of range: {page}")
+        p = doc.load_page(page - 1)
+        xref = p.insert_image(pymupdf.Rect(rect[0], rect[1], rect[2], rect[3]), filename=str(img))
+        # Keep xref stable for downstream update/remove by saving without garbage collection.
+        doc.save(str(dst), deflate=True)
+    finally:
+        doc.close()
+
+    return {"output_path": str(dst), "signature_xref": int(xref), "page": page}
+
+
+def update_signature_image(
+    input_path: str,
+    output_path: str,
+    page: int,
+    signature_xref: int,
+    image_path: Optional[str] = None,
+    rect: Optional[Sequence[float]] = None,
+) -> Dict[str, Any]:
+    """Update or resize a signature image. If rect is provided, the image is reinserted and may get a new xref."""
+    src = _ensure_file(input_path)
+    dst = _prepare_output(output_path)
+    if page < 1:
+        raise PdfToolError("page must be >= 1")
+    if signature_xref <= 0:
+        raise PdfToolError("signature_xref must be > 0")
+    img_path = _ensure_file(image_path) if image_path else None
+    if rect is not None and len(rect) != 4:
+        raise PdfToolError("rect must be [x0, y0, x1, y1]")
+
+    doc = pymupdf.open(str(src))
+    try:
+        if page > doc.page_count:
+            raise PdfToolError(f"page out of range: {page}")
+        p = doc.load_page(page - 1)
+
+        new_xref = int(signature_xref)
+        if rect is None:
+            if img_path is None:
+                raise PdfToolError("Either image_path or rect must be provided")
+            p.replace_image(signature_xref, filename=str(img_path))
+        else:
+            # We need to reinsert at a new rectangle. If no new image is provided, reuse existing image bytes.
+            if img_path is None:
+                extracted = doc.extract_image(signature_xref)
+                stream = extracted.get("image")
+                if not stream:
+                    raise PdfToolError(f"Could not extract existing image for xref: {signature_xref}")
+                p.delete_image(signature_xref)
+                new_xref = p.insert_image(pymupdf.Rect(rect[0], rect[1], rect[2], rect[3]), stream=stream)
+            else:
+                p.delete_image(signature_xref)
+                new_xref = p.insert_image(pymupdf.Rect(rect[0], rect[1], rect[2], rect[3]), filename=str(img_path))
+
+        # Keep xref stable for downstream update/remove by saving without garbage collection.
+        doc.save(str(dst), deflate=True)
+    finally:
+        doc.close()
+
+    return {"output_path": str(dst), "signature_xref": int(new_xref), "page": page}
+
+
+def remove_signature_image(
+    input_path: str,
+    output_path: str,
+    page: int,
+    signature_xref: int,
+) -> Dict[str, Any]:
+    """Remove a signature image by xref."""
+    src = _ensure_file(input_path)
+    dst = _prepare_output(output_path)
+    if page < 1:
+        raise PdfToolError("page must be >= 1")
+    if signature_xref <= 0:
+        raise PdfToolError("signature_xref must be > 0")
+
+    doc = pymupdf.open(str(src))
+    try:
+        if page > doc.page_count:
+            raise PdfToolError(f"page out of range: {page}")
+        p = doc.load_page(page - 1)
+        p.delete_image(signature_xref)
+        # For removals, run garbage collection to drop now-unused objects when possible.
+        doc.save(str(dst), garbage=4, deflate=True)
+    finally:
+        doc.close()
+
+    return {"output_path": str(dst), "removed": 1, "page": page}
 

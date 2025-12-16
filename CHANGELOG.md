@@ -8,6 +8,8 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ### Added
 - Text watermark or stamp tool implemented as FreeText annotations.
+- PyMuPDF-powered tools: comments (Text annotations) and signature image add, update, resize, remove.
+- Repository license switched to GNU AGPL-3.0.
 
 ## 0.1.0
 
