@@ -7,7 +7,7 @@ This project follows Keep a Changelog and Semantic Versioning.
 ## Unreleased
 
 ### Added
-- Placeholder for upcoming PDF editing capabilities like watermark and redaction.
+- Text watermark or stamp tool implemented as FreeText annotations.
 
 ## 0.1.0
 

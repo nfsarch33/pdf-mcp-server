@@ -581,3 +581,66 @@ def set_pdf_metadata(
 
     return {"output_path": str(dst), "updated": {k: v for k, v in {"title": title, "author": author, "subject": subject, "keywords": keywords}.items() if v is not None}}
 
+
+def add_text_watermark(
+    input_path: str,
+    output_path: str,
+    text: str,
+    pages: Optional[List[int]] = None,
+    rect: Optional[Sequence[float]] = None,
+    annotation_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Add a simple text watermark or stamp using FreeText annotations.
+
+    This is intentionally implemented as annotations (KISS, deterministic, testable),
+    not by rewriting content streams.
+    """
+    src = _ensure_file(input_path)
+    dst = _prepare_output(output_path)
+    reader = PdfReader(str(src))
+    total = len(reader.pages)
+
+    page_indices = _to_zero_based_pages(pages, total) if pages else list(range(total))
+    if not page_indices:
+        raise PdfToolError("No pages selected for watermark")
+
+    writer = PdfWriter()
+    writer.clone_document_from_reader(reader)
+
+    if not annotation_id:
+        annotation_id = f"pdf-mcp-watermark-{secrets.token_hex(6)}"
+
+    rect_obj = _ensure_rect(rect)
+
+    annot = DictionaryObject(
+        {
+            NameObject("/Type"): NameObject("/Annot"),
+            NameObject("/Subtype"): NameObject("/FreeText"),
+            NameObject("/Rect"): rect_obj,
+            NameObject("/Contents"): TextStringObject(text),
+            NameObject("/NM"): TextStringObject(annotation_id),
+            NameObject("/DA"): TextStringObject("/Helv 12 Tf 0 g"),
+            NameObject("/F"): NumberObject(4),
+        }
+    )
+    annot_ref = writer._add_object(annot)  # type: ignore[attr-defined]
+
+    added = 0
+    for idx in page_indices:
+        page_obj = writer.pages[idx]
+        existing = page_obj.get("/Annots")
+        if existing is None:
+            annots = ArrayObject()
+        else:
+            existing_obj = existing.get_object() if hasattr(existing, "get_object") else existing
+            annots = ArrayObject(list(existing_obj))
+        annots.append(annot_ref)
+        page_obj[NameObject("/Annots")] = annots
+        added += 1
+
+    with dst.open("wb") as output_file:
+        writer.write(output_file)
+
+    return {"output_path": str(dst), "annotation_id": annotation_id, "added": added}
+

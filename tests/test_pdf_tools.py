@@ -289,6 +289,23 @@ def test_mcp_layer_can_call_all_tools(tmp_path: Path):
     assert md.get("Title") == "T"
     assert md.get("Author") == "A"
 
+    # watermark
+    wm_out = tmp_path / "mcp_wm.pdf"
+    res = asyncio.run(
+        call(
+            "add_text_watermark",
+            {
+                "input_path": str(blank_a),
+                "output_path": str(wm_out),
+                "text": "WM",
+                "pages": [1, 2],
+                "annotation_id": "wm-mcp-1",
+            },
+        )
+    )
+    assert Path(res["output_path"]).exists()
+    assert res["added"] == 2
+
 
 def test_merge_extract_rotate(tmp_path: Path):
     src1 = _make_pdf(tmp_path / "a.pdf", pages=2)
@@ -406,6 +423,38 @@ def test_pdf_metadata_roundtrip(tmp_path: Path):
     assert got.get("Author") == "My Author"
     assert got.get("Subject") == "My Subject"
     assert got.get("Keywords") == "k1,k2"
+
+
+def test_text_watermark_adds_annotations(tmp_path: Path):
+    src = _make_pdf(tmp_path / "wm.pdf", pages=2)
+    out = tmp_path / "wm_out.pdf"
+
+    res = pdf_tools.add_text_watermark(
+        str(src),
+        str(out),
+        text="WATERMARK",
+        pages=[1, 2],
+        annotation_id="wm-1",
+    )
+    assert Path(res["output_path"]).exists()
+    assert res["added"] == 2
+
+    from pypdf import PdfReader
+
+    r = PdfReader(str(out))
+    for p in r.pages:
+        annots = p.get("/Annots")
+        assert annots is not None
+        annots_obj = annots.get_object() if hasattr(annots, "get_object") else annots
+        # Find our watermark annotation by NM
+        found = False
+        for ref in list(annots_obj):
+            obj = ref.get_object()
+            if str(obj.get("/NM")) == "wm-1":
+                assert str(obj.get("/Subtype")) == "/FreeText"
+                assert str(obj.get("/Contents")) == "WATERMARK"
+                found = True
+        assert found
 
 def test_rotate_invalid_degrees(tmp_path: Path):
     src = _make_pdf(tmp_path / "c.pdf", pages=1)
