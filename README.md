@@ -70,6 +70,8 @@ Restart Cursor after saving.
 - `insert_text(input_path, page, text, output_path, rect=None, text_id=None)`: insert text via a managed FreeText annotation.
 - `edit_text(input_path, output_path, text_id, text, pages=None)`: edit managed inserted text.
 - `remove_text(input_path, output_path, text_id, pages=None)`: remove managed inserted text.
+- `get_pdf_metadata(pdf_path)`: return basic PDF document metadata.
+- `set_pdf_metadata(input_path, output_path, title=None, author=None, subject=None, keywords=None)`: set basic metadata fields.
 
 ## Conventions
 - Paths should be absolute; outputs are created with parent directories if missing.
