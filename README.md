@@ -111,6 +111,7 @@ make test
 - Keep each PR focused on a single tool or capability with tests.
 - For larger features, split into small PRs (tool surface, core implementation, tests, docs).
 - After merging a PR, delete the feature branch and run `git fetch --prune` locally to keep branch state clean.
+- Portability/migration notes: see `PROJECT_MEMO/`.
 
 ## License
 GNU AGPL-3.0, see `LICENSE`.
