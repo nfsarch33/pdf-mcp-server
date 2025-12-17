@@ -709,6 +709,324 @@ def test_mcp_layer_real_world_1006_regression(tmp_path: Path):
     assert len(rr.pages) >= 1
 
 
+def test_mcp_layer_1006_all_tools_scenario_a(tmp_path: Path):
+    """
+    Scenario A: Run every MCP tool using tests/1006.pdf as the primary input (or as
+    the insert/merge source) and validate basic invariants.
+    """
+    import asyncio
+
+    import pymupdf
+    from pdf_mcp import server
+    from pypdf import PdfReader
+
+    src = Path(__file__).parent / "1006.pdf"
+    assert src.exists(), "Missing fixture tests/1006.pdf"
+
+    async def call(name: str, args: dict):
+        _content, meta = await server.mcp.call_tool(name, args)
+        result = meta["result"]
+        assert "error" not in result, result.get("error")
+        return result
+
+    def pick_text_fields(pdf_path: Path) -> list[str]:
+        res = asyncio.run(call("get_pdf_form_fields", {"pdf_path": str(pdf_path)}))
+        fields = res.get("fields") or {}
+        txt = [k for (k, v) in fields.items() if (v or {}).get("type") == "/Tx"]
+        assert txt, "Expected at least one /Tx field"
+        return txt
+
+    # form fill/update/clear
+    f1, *rest = pick_text_fields(src)
+    f2 = rest[0] if rest else None
+
+    filled = tmp_path / "a_filled.pdf"
+    data = {f1: "A1"} if f2 is None else {f1: "A1", f2: "A2"}
+    asyncio.run(call("fill_pdf_form", {"input_path": str(src), "output_path": str(filled), "data": data, "flatten": False}))
+    r = PdfReader(str(filled))
+    ff = r.get_fields() or {}
+    assert str(ff[f1].get("/V")) == "A1"
+    if f2 is not None:
+        assert str(ff[f2].get("/V")) == "A2"
+
+    updated = tmp_path / "a_updated.pdf"
+    asyncio.run(call("fill_pdf_form", {"input_path": str(filled), "output_path": str(updated), "data": {f1: "A1b"}, "flatten": False}))
+    r2 = PdfReader(str(updated))
+    ff2 = r2.get_fields() or {}
+    assert str(ff2[f1].get("/V")) == "A1b"
+
+    cleared = tmp_path / "a_cleared.pdf"
+    asyncio.run(call("clear_pdf_form_fields", {"input_path": str(updated), "output_path": str(cleared), "fields": [f1]}))
+    r3 = PdfReader(str(cleared))
+    ff3 = r3.get_fields() or {}
+    assert str(ff3[f1].get("/V")) == ""
+
+    # metadata get/set
+    meta0 = asyncio.run(call("get_pdf_metadata", {"pdf_path": str(cleared)}))
+    assert "metadata" in meta0
+    meta1 = tmp_path / "a_meta.pdf"
+    asyncio.run(call("set_pdf_metadata", {"input_path": str(cleared), "output_path": str(meta1), "title": "T-A", "author": "Author-A"}))
+    meta_after = asyncio.run(call("get_pdf_metadata", {"pdf_path": str(meta1)}))["metadata"]
+    assert meta_after.get("Title") == "T-A"
+    assert meta_after.get("Author") == "Author-A"
+
+    # watermark
+    wm = tmp_path / "a_wm.pdf"
+    asyncio.run(call("add_text_watermark", {"input_path": str(meta1), "output_path": str(wm), "text": "WM-A", "pages": [1], "annotation_id": "wm-a"}))
+    rwm = PdfReader(str(wm))
+    annots = rwm.pages[0].get("/Annots")
+    assert annots is not None
+
+    # text annotation add/update/remove
+    a1 = tmp_path / "a_annot1.pdf"
+    asyncio.run(call("add_text_annotation", {"input_path": str(wm), "output_path": str(a1), "page": 1, "text": "HelloA", "annotation_id": "ann-a"}))
+    a2 = tmp_path / "a_annot2.pdf"
+    asyncio.run(call("update_text_annotation", {"input_path": str(a1), "output_path": str(a2), "annotation_id": "ann-a", "text": "HelloA2"}))
+    a3 = tmp_path / "a_annot3.pdf"
+    asyncio.run(call("remove_text_annotation", {"input_path": str(a2), "output_path": str(a3), "annotation_id": "ann-a"}))
+
+    # managed text insert/edit/remove
+    t1 = tmp_path / "a_t1.pdf"
+    asyncio.run(call("insert_text", {"input_path": str(a3), "output_path": str(t1), "page": 1, "text": "T", "text_id": "t-a"}))
+    t2 = tmp_path / "a_t2.pdf"
+    asyncio.run(call("edit_text", {"input_path": str(t1), "output_path": str(t2), "text_id": "t-a", "text": "T2"}))
+    t3 = tmp_path / "a_t3.pdf"
+    asyncio.run(call("remove_text", {"input_path": str(t2), "output_path": str(t3), "text_id": "t-a"}))
+
+    # remove_annotations (FreeText only so we don't remove /Widget form fields)
+    ra = tmp_path / "a_ra.pdf"
+    res = asyncio.run(call("remove_annotations", {"input_path": str(t3), "output_path": str(ra), "pages": [1], "subtype": "FreeText"}))
+    assert Path(res["output_path"]).exists()
+
+    # comments CRUD
+    c1 = tmp_path / "a_c1.pdf"
+    c2 = tmp_path / "a_c2.pdf"
+    c3 = tmp_path / "a_c3.pdf"
+    asyncio.run(call("add_comment", {"input_path": str(ra), "output_path": str(c1), "page": 1, "text": "hello", "pos": [72, 72], "comment_id": "c-a"}))
+    asyncio.run(call("update_comment", {"input_path": str(c1), "output_path": str(c2), "comment_id": "c-a", "text": "updated"}))
+    asyncio.run(call("remove_comment", {"input_path": str(c2), "output_path": str(c3), "comment_id": "c-a"}))
+    doc = pymupdf.open(str(c3))
+    try:
+        p = doc.load_page(0)
+        assert all((a.info.get("name") != "c-a") for a in (p.annots() or []))
+    finally:
+        doc.close()
+
+    # signature add/update/remove + xref handling
+    img1 = _write_test_png(tmp_path / "a_sig1.png")
+    img2 = _write_test_png(tmp_path / "a_sig2.png")
+    s1 = tmp_path / "a_s1.pdf"
+    res = asyncio.run(call("add_signature_image", {"input_path": str(c3), "output_path": str(s1), "page": 1, "image_path": str(img1), "rect": [50, 50, 150, 100]}))
+    xref = int(res["signature_xref"])
+    s2 = tmp_path / "a_s2.pdf"
+    asyncio.run(call("update_signature_image", {"input_path": str(s1), "output_path": str(s2), "page": 1, "signature_xref": xref, "image_path": str(img2)}))
+    s3 = tmp_path / "a_s3.pdf"
+    res = asyncio.run(call("update_signature_image", {"input_path": str(s2), "output_path": str(s3), "page": 1, "signature_xref": xref, "rect": [60, 60, 200, 140]}))
+    xref2 = int(res["signature_xref"])
+    s4 = tmp_path / "a_s4.pdf"
+    asyncio.run(call("remove_signature_image", {"input_path": str(s3), "output_path": str(s4), "page": 1, "signature_xref": xref2}))
+
+    # merge/extract/rotate/insert/remove pages using 1006 as the source
+    merged = tmp_path / "a_merged.pdf"
+    asyncio.run(call("merge_pdfs", {"pdf_list": [str(src), str(src)], "output_path": str(merged)}))
+    assert PdfReader(str(merged)).get_num_pages() == PdfReader(str(src)).get_num_pages() * 2
+
+    extracted = tmp_path / "a_extracted.pdf"
+    asyncio.run(call("extract_pages", {"input_path": str(merged), "pages": [1, -1], "output_path": str(extracted)}))
+    assert PdfReader(str(extracted)).get_num_pages() == 2
+
+    rotated = tmp_path / "a_rotated.pdf"
+    asyncio.run(call("rotate_pages", {"input_path": str(extracted), "pages": [1], "degrees": 90, "output_path": str(rotated)}))
+    rr = PdfReader(str(rotated))
+    assert rr.pages[0].get("/Rotate") in (90, 450)
+
+    inserted = tmp_path / "a_inserted.pdf"
+    asyncio.run(call("insert_pages", {"input_path": str(rotated), "insert_from_path": str(src), "at_page": 2, "output_path": str(inserted)}))
+    assert PdfReader(str(inserted)).get_num_pages() == PdfReader(str(rotated)).get_num_pages() + PdfReader(str(src)).get_num_pages()
+
+    removed = tmp_path / "a_removed.pdf"
+    asyncio.run(call("remove_pages", {"input_path": str(inserted), "pages": [2], "output_path": str(removed)}))
+    assert PdfReader(str(removed)).get_num_pages() == PdfReader(str(inserted)).get_num_pages() - 1
+
+    # flatten then encrypt (encryption last, no decrypt tool available)
+    flat = tmp_path / "a_flat.pdf"
+    asyncio.run(call("flatten_pdf", {"input_path": str(removed), "output_path": str(flat)}))
+    assert (PdfReader(str(flat)).get_fields() or {}) == {}
+
+    enc = tmp_path / "a_enc.pdf"
+    asyncio.run(call("encrypt_pdf", {"input_path": str(flat), "output_path": str(enc), "user_password": "pw-a"}))
+    er = PdfReader(str(enc))
+    assert er.is_encrypted is True
+    assert er.decrypt("pw-a") in (1, 2)
+
+
+def test_mcp_layer_1006_all_tools_scenario_b(tmp_path: Path):
+    """
+    Scenario B: Second regression pass for every tool on 1006.pdf with different
+    inputs/flags so each tool has 2+ real-world cases.
+    """
+    import asyncio
+
+    from pdf_mcp import server
+    from pypdf import PdfReader
+
+    src = Path(__file__).parent / "1006.pdf"
+    assert src.exists(), "Missing fixture tests/1006.pdf"
+
+    async def call(name: str, args: dict):
+        _content, meta = await server.mcp.call_tool(name, args)
+        result = meta["result"]
+        assert "error" not in result, result.get("error")
+        return result
+
+    # get fields again (case 2)
+    res = asyncio.run(call("get_pdf_form_fields", {"pdf_path": str(src)}))
+    assert res["count"] >= 1
+    fields = res.get("fields") or {}
+    txt = [k for (k, v) in fields.items() if (v or {}).get("type") == "/Tx"]
+    assert txt
+    f1 = txt[0]
+
+    # fill + clear (2nd case for both tools, keep unflattened so fields exist)
+    filled = tmp_path / "b_filled.pdf"
+    asyncio.run(
+        call(
+            "fill_pdf_form",
+            {"input_path": str(src), "output_path": str(filled), "data": {f1: "B1"}, "flatten": False},
+        )
+    )
+    r = PdfReader(str(filled))
+    ff = r.get_fields() or {}
+    assert str(ff[f1].get("/V")) == "B1"
+
+    cleared = tmp_path / "b_cleared.pdf"
+    asyncio.run(
+        call(
+            "clear_pdf_form_fields",
+            {"input_path": str(filled), "output_path": str(cleared), "fields": [f1]},
+        )
+    )
+    rc = PdfReader(str(cleared))
+    ffc = rc.get_fields() or {}
+    assert str(ffc[f1].get("/V")) == ""
+
+    # fill with flatten=True (forces pypdf path on this file if fillpdf can't parse)
+    filled_flat = tmp_path / "b_filled_flat.pdf"
+    asyncio.run(
+        call(
+            "fill_pdf_form",
+            {"input_path": str(src), "output_path": str(filled_flat), "data": {f1: "B1-flat"}, "flatten": True},
+        )
+    )
+    # flattened: form fields should be gone
+    assert (PdfReader(str(filled_flat)).get_fields() or {}) == {}
+
+    # metadata second case
+    meta2 = tmp_path / "b_meta.pdf"
+    asyncio.run(call("set_pdf_metadata", {"input_path": str(src), "output_path": str(meta2), "title": "T-B", "keywords": "k1,k2"}))
+    got = asyncio.run(call("get_pdf_metadata", {"pdf_path": str(meta2)}))["metadata"]
+    assert got.get("Title") == "T-B"
+    assert got.get("Keywords") == "k1,k2"
+
+    # watermark second case (two pages)
+    wm2 = tmp_path / "b_wm.pdf"
+    asyncio.run(call("add_text_watermark", {"input_path": str(meta2), "output_path": str(wm2), "text": "WM-B", "pages": [1, 2], "annotation_id": "wm-b"}))
+    r = PdfReader(str(wm2))
+    assert r.get_num_pages() >= 2
+
+    # text annotation second case: add/update/remove by id, then remove_annotations filter
+    ann1 = tmp_path / "b_ann1.pdf"
+    asyncio.run(call("add_text_annotation", {"input_path": str(wm2), "output_path": str(ann1), "page": 1, "text": "HelloB", "annotation_id": "ann-b"}))
+    ann_upd = tmp_path / "b_ann_upd.pdf"
+    asyncio.run(call("update_text_annotation", {"input_path": str(ann1), "output_path": str(ann_upd), "annotation_id": "ann-b", "text": "HelloB2"}))
+    ann2 = tmp_path / "b_ann2.pdf"
+    asyncio.run(call("remove_text_annotation", {"input_path": str(ann_upd), "output_path": str(ann2), "annotation_id": "ann-b"}))
+
+    ann3 = tmp_path / "b_ann3.pdf"
+    asyncio.run(call("remove_annotations", {"input_path": str(ann2), "output_path": str(ann3), "pages": [1], "subtype": "FreeText"}))
+
+    # managed text second case (different id)
+    t1 = tmp_path / "b_t1.pdf"
+    asyncio.run(call("insert_text", {"input_path": str(ann3), "output_path": str(t1), "page": 1, "text": "TB", "text_id": "t-b"}))
+    t2 = tmp_path / "b_t2.pdf"
+    asyncio.run(call("edit_text", {"input_path": str(t1), "output_path": str(t2), "text_id": "t-b", "text": "TB2"}))
+    t3 = tmp_path / "b_t3.pdf"
+    asyncio.run(call("remove_text", {"input_path": str(t2), "output_path": str(t3), "text_id": "t-b"}))
+
+    # pages second case (different selections)
+    ext = tmp_path / "b_ext.pdf"
+    asyncio.run(call("extract_pages", {"input_path": str(src), "pages": [1, 2], "output_path": str(ext)}))
+    assert PdfReader(str(ext)).get_num_pages() == 2
+
+    rot = tmp_path / "b_rot.pdf"
+    asyncio.run(call("rotate_pages", {"input_path": str(ext), "pages": [2], "degrees": -90, "output_path": str(rot)}))
+    rr = PdfReader(str(rot))
+    assert rr.pages[1].get("/Rotate") in (-90, 270, 630)
+
+    merged = tmp_path / "b_merge.pdf"
+    asyncio.run(call("merge_pdfs", {"pdf_list": [str(ext), str(ext)], "output_path": str(merged)}))
+    assert PdfReader(str(merged)).get_num_pages() == 4
+
+    ins = tmp_path / "b_ins.pdf"
+    asyncio.run(call("insert_pages", {"input_path": str(ext), "insert_from_path": str(ext), "at_page": 1, "output_path": str(ins)}))
+    assert PdfReader(str(ins)).get_num_pages() == 4
+
+    rem = tmp_path / "b_rem.pdf"
+    asyncio.run(call("remove_pages", {"input_path": str(ins), "pages": [1, 3], "output_path": str(rem)}))
+    assert PdfReader(str(rem)).get_num_pages() == 2
+
+    flat = tmp_path / "b_flat.pdf"
+    asyncio.run(call("flatten_pdf", {"input_path": str(src), "output_path": str(flat)}))
+    assert (PdfReader(str(flat)).get_fields() or {}) == {}
+
+    # encrypt second case (different flags)
+    enc = tmp_path / "b_enc.pdf"
+    asyncio.run(
+        call(
+            "encrypt_pdf",
+            {
+                "input_path": str(flat),
+                "output_path": str(enc),
+                "user_password": "pw-b",
+                "allow_printing": False,
+                "allow_copying": False,
+                "allow_modifying": False,
+                "allow_annotations": False,
+                "allow_form_filling": False,
+            },
+        )
+    )
+    er = PdfReader(str(enc))
+    assert er.is_encrypted is True
+    assert er.decrypt("pw-b") in (1, 2)
+
+    # comments CRUD (2nd case)
+    import pymupdf
+
+    c1 = tmp_path / "b_c1.pdf"
+    c2 = tmp_path / "b_c2.pdf"
+    c3 = tmp_path / "b_c3.pdf"
+    asyncio.run(call("add_comment", {"input_path": str(src), "output_path": str(c1), "page": 1, "text": "hello2", "pos": [80, 80], "comment_id": "c-b"}))
+    asyncio.run(call("update_comment", {"input_path": str(c1), "output_path": str(c2), "comment_id": "c-b", "text": "updated2"}))
+    asyncio.run(call("remove_comment", {"input_path": str(c2), "output_path": str(c3), "comment_id": "c-b"}))
+    doc = pymupdf.open(str(c3))
+    try:
+        p = doc.load_page(0)
+        assert all((a.info.get("name") != "c-b") for a in (p.annots() or []))
+    finally:
+        doc.close()
+
+    # signature add/update/remove (2nd case)
+    img1 = _write_test_png(tmp_path / "b_sig1.png")
+    img2 = _write_test_png(tmp_path / "b_sig2.png")
+    s1 = tmp_path / "b_s1.pdf"
+    res = asyncio.run(call("add_signature_image", {"input_path": str(src), "output_path": str(s1), "page": 1, "image_path": str(img1), "rect": [40, 40, 140, 90]}))
+    xref = int(res["signature_xref"])
+    s2 = tmp_path / "b_s2.pdf"
+    asyncio.run(call("update_signature_image", {"input_path": str(s1), "output_path": str(s2), "page": 1, "signature_xref": xref, "image_path": str(img2)}))
+    s3 = tmp_path / "b_s3.pdf"
+    asyncio.run(call("remove_signature_image", {"input_path": str(s2), "output_path": str(s3), "page": 1, "signature_xref": xref}))
+
 def test_merge_extract_rotate(tmp_path: Path):
     src1 = _make_pdf(tmp_path / "a.pdf", pages=2)
     src2 = _make_pdf(tmp_path / "b.pdf", pages=1)
