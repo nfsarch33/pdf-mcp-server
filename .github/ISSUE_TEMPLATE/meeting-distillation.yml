@@ -1,0 +1,80 @@
+name: Meeting distillation (to feature plan)
+description: Turn meeting output into actionable issues and a feature project decision.
+title: "meeting: <topic>"
+labels: ["meeting-notes"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Goal: capture the distilled outcomes of a meeting and convert into:
+        - 1+ Feature issues (label: feature)
+        - (Optional) a GitHub Project once we commit to build the feature
+
+  - type: textarea
+    id: attendees
+    attributes:
+      label: Attendees + date
+      placeholder: "YYYY-MM-DD — attendees"
+    validations:
+      required: true
+
+  - type: textarea
+    id: decisions
+    attributes:
+      label: Decisions (final)
+      placeholder: |
+        - Decision 1:
+        - Decision 2:
+    validations:
+      required: true
+
+  - type: textarea
+    id: open_questions
+    attributes:
+      label: Open questions
+      placeholder: |
+        - Q1:
+        - Q2:
+    validations:
+      required: false
+
+  - type: textarea
+    id: followups
+    attributes:
+      label: Follow-ups / next actions
+      placeholder: |
+        - [ ] Action, owner, due
+    validations:
+      required: true
+
+  - type: textarea
+    id: issue_links
+    attributes:
+      label: Created/linked issues
+      placeholder: |
+        - Feature issue:
+        - Bug issue:
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: project_decision
+    attributes:
+      label: Create a GitHub Project?
+      description: If we decided to proceed, create a Project and link the issues.
+      options:
+        - label: Yes — we are proceeding and should create a GitHub Project for this feature
+          required: false
+
+  - type: textarea
+    id: archives
+    attributes:
+      label: Archive locations (optional)
+      description: Where the raw transcript/notes were stored (Pepper/global-kb/private repo).
+      placeholder: |
+        - global-kb path:
+        - Pepper SOP update (if any):
+    validations:
+      required: false
+
+
