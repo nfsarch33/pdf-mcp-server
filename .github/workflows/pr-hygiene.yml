@@ -22,7 +22,12 @@ jobs:
           import json, os
           event = json.load(open(os.environ['GITHUB_EVENT_PATH'], 'r'))
           labels = [l['name'] for l in event.get('pull_request', {}).get('labels', [])]
-          print('labels=' + ','.join(labels))
+          out = os.environ.get("GITHUB_OUTPUT")
+          if out:
+            with open(out, "a", encoding="utf-8") as f:
+              f.write("labels=" + ",".join(labels) + "\\n")
+          else:
+            print('labels=' + ','.join(labels))
           PY
 
       - name: Enforce changelog when implementation changes

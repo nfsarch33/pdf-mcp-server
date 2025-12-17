@@ -1,0 +1,23 @@
+name: Bootstrap repo labels
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 3 * * 1" # weekly (Mon) to keep labels consistent
+
+permissions:
+  issues: write
+
+jobs:
+  ensure:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ensure standard labels exist
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          python scripts/ensure_labels.py
+
+
