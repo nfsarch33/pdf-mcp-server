@@ -1,0 +1,27 @@
+name: Feature-approved → create GitHub Project
+
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  contents: read
+  issues: write
+  repository-projects: write
+
+jobs:
+  create_project:
+    if: github.event.label.name == 'feature-approved'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Create Project + link issue (idempotent)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python scripts/auto_create_project_on_feature_approved.py
+
+
