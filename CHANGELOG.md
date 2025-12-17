@@ -6,6 +6,16 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 0.1.2 - 2025-12-17
+
+### Fixed
+- `fill_pdf_form`: if `fillpdf/pdfrw` cannot parse PDFs with compressed object streams (common in some Adobe InDesign exports), we fall back to the `pypdf` fill path so the operation succeeds.
+- `flatten_pdf`: same robustness as above; falls back to `pypdf` when `fillpdf/pdfrw` cannot parse the input.
+- `flatten_pdf` internal behavior: handle PDFs where `/AcroForm` is an indirect object and ensure `/Annots` updates use proper PDF object keys.
+
+### Added
+- Real-world regression coverage using `tests/1006.pdf` (InDesign-style form PDF) that runs every MCP tool end-to-end with two scenarios.
+
 ## 0.1.1 - 2025-12-16
 
 ### Added
