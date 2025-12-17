@@ -116,12 +116,12 @@ When asked to "add to memory" or "add to rules":
 ```
 
 **Configuration**:
-- `~/memo/tools/repos-to-sync.txt` (one repo `memories-and-kb/` path per line)
+- `~/memo/tools/repos-to-sync.txt` (one repo `PROJECT_MEMO/PEPPER_SYNC/memories-and-kb/` path per line)
 
 **Manual refresh** (if needed):
 ```bash
 ~/memo/tools/refresh_mcp_index.py
-~/memo/tools/sync_repo_memories_to_pepper.py --src-dir /path/to/repo/memories-and-kb
+~/memo/tools/sync_repo_memories_to_pepper.py --src-dir /path/to/repo/PROJECT_MEMO/PEPPER_SYNC/memories-and-kb
 ```
 
 ---
@@ -203,7 +203,7 @@ If `systemctl --user` fails ("Failed to connect to bus"), use cron-based install
 - Keep personal/academic notes untracked
 
 ### Repo hygiene
-- `memories-and-kb/` folder for portable KB items
+- `PROJECT_MEMO/PEPPER_SYNC/memories-and-kb/` folder for portable KB items
 - `PROJECT_MEMO/` for repo-specific runbooks
 - `.cursor/rules/` for always-injected rules
 
@@ -247,7 +247,7 @@ pdf-mcp-server/
 ├── .cursor/rules/           # Always-injected Cursor rules
 ├── .github/workflows/       # CI, CodeQL, dependency review
 ├── docs/                    # CURSOR_SMOKE_TEST.md
-├── memories-and-kb/         # Portable KB items (synced to Pepper)
+├── PROJECT_MEMO/PEPPER_SYNC/memories-and-kb/         # Portable KB items (synced to Pepper)
 ├── pdf_mcp/                 # Main Python package
 │   ├── pdf_tools.py         # Core PDF manipulation functions
 │   └── server.py            # FastMCP server

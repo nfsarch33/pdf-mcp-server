@@ -18,3 +18,9 @@ dev = ["pytest"]
 requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools.packages.find]
+# Avoid setuptools flat-layout auto-discovery picking up repo-doc folders (e.g. PROJECT_MEMO).
+where = ["."]
+include = ["pdf_mcp*"]
+exclude = ["PROJECT_MEMO*", "memories-and-kb*", "docs*", "scripts*", "tests*"]
+
