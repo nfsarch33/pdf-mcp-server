@@ -1,0 +1,6 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Documentation / onboarding
+    url: https://github.com/nfsarch33/pdf-mcp-server/tree/main/PROJECT_MEMO
+    about: Start here for migration, release, and troubleshooting runbooks.
+

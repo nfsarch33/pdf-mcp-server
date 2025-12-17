@@ -1,0 +1,101 @@
+name: Feature request (pdf-handler)
+description: Propose a new pdf-handler capability with acceptance criteria and test plan.
+title: "feat: <short description>"
+labels: ["feature"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this when proposing a new pdf-handler feature/tool or a significant enhancement.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / goal
+      description: What user problem are we solving? What outcome do we want?
+      placeholder: "As a user, I want to … so that …"
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed approach (KISS)
+      description: High-level plan; avoid over-engineering.
+      placeholder: |
+        - Approach:
+        - Key libraries/tech:
+        - Non-goals:
+    validations:
+      required: true
+
+  - type: textarea
+    id: mcp_surface
+    attributes:
+      label: MCP tool surface (if applicable)
+      description: New/changed MCP tool names, params, outputs, errors.
+      placeholder: |
+        - Tool name:
+        - Arguments:
+        - Return shape:
+        - Error cases:
+    validations:
+      required: false
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Bullet list of “done” checks.
+      placeholder: |
+        - [ ] Works on at least 2 sample PDFs
+        - [ ] Deterministic edit/remove identifiers (ids/xrefs)
+        - [ ] Non-breaking default behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: test_plan
+    attributes:
+      label: Test plan
+      description: Unit + E2E (Cursor-style) expectations.
+      placeholder: |
+        - Unit tests: tests/test_pdf_tools.py
+        - MCP layer test: test_mcp_layer_can_call_all_tools
+        - Smoke: scripts/cursor_smoke.py (extend if needed)
+        - Manual: docs/CURSOR_SMOKE_TEST.md (add checklist item)
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: breaking
+    attributes:
+      label: Breaking change?
+      options:
+        - label: This change is breaking (requires explicit permission before merge)
+          required: false
+
+  - type: textarea
+    id: docs
+    attributes:
+      label: Docs to update
+      placeholder: |
+        - README.md
+        - CHANGELOG.md (Unreleased)
+        - PROJECT_MEMO/ (if workflow/runbook changes)
+    validations:
+      required: true
+
+  - type: textarea
+    id: links
+    attributes:
+      label: Links / references
+      description: Meeting notes, examples, related issues/PRs, PDFs.
+      placeholder: |
+        - Meeting summary location (Pepper/global-kb):
+        - Related issues:
+        - Sample PDFs (private repo path, if any):
+    validations:
+      required: false
+
+

@@ -1,0 +1,58 @@
+name: Bug report (pdf-handler)
+description: Report a pdf-handler bug with repro steps and expected behavior.
+title: "bug: <short description>"
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please include absolute paths in examples and redact any secrets.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      placeholder: "What is broken?"
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction steps
+      placeholder: |
+        1) Tool called:
+        2) Inputs (paths):
+        3) Params:
+        4) Observed output/error:
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: |
+        - OS:
+        - Python version:
+        - pdf-mcp version/tag:
+        - Cursor version (optional):
+    validations:
+      required: true
+
+  - type: textarea
+    id: artifacts
+    attributes:
+      label: Artifacts / logs
+      description: Attach redacted logs or paste key stack traces.
+    validations:
+      required: false
+
+
