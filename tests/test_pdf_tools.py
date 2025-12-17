@@ -532,6 +532,183 @@ def test_mcp_layer_can_call_all_tools(tmp_path: Path):
     assert Path(res["output_path"]).exists()
 
 
+def test_mcp_layer_real_world_1006_regression(tmp_path: Path):
+    """
+    Real-world regression suite using tests/1006.pdf (InDesign-style object streams).
+
+    Covers hard requirements end-to-end via the MCP layer:
+    - fill, update, clear form values
+    - comments CRUD
+    - managed text insert/edit/remove
+    - sign (visual signature) then encrypt and validate it can be opened with password
+    """
+    import asyncio
+
+    import pymupdf
+    from pdf_mcp import server
+    from pypdf import PdfReader
+
+    src = Path(__file__).parent / "1006.pdf"
+    assert src.exists(), "Missing fixture tests/1006.pdf"
+
+    async def call(name: str, args: dict):
+        _content, meta = await server.mcp.call_tool(name, args)
+        assert isinstance(meta, dict)
+        assert "result" in meta and isinstance(meta["result"], dict)
+        result = meta["result"]
+        assert "error" not in result, result.get("error")
+        return result
+
+    def assert_field_value(pdf_path: Path, field_name: str, expected: str):
+        r = PdfReader(str(pdf_path))
+        f = r.get_fields() or {}
+        assert field_name in f
+        assert str(f[field_name].get("/V")) == expected
+
+    def assert_has_nm_annotation(pdf_path: Path, page_idx: int, nm: str, expected_present: bool):
+        r = PdfReader(str(pdf_path))
+        page = r.pages[page_idx]
+        annots = page.get("/Annots")
+        if annots is None:
+            assert expected_present is False
+            return
+        annots_obj = annots.get_object() if hasattr(annots, "get_object") else annots
+        found = False
+        for ref in list(annots_obj):
+            obj = ref.get_object() if hasattr(ref, "get_object") else ref
+            try:
+                if str(obj.get("/NM")) == nm:
+                    found = True
+                    break
+            except Exception:
+                continue
+        assert found is expected_present
+
+    # Pick one or two text fields from get_pdf_form_fields output.
+    res = asyncio.run(call("get_pdf_form_fields", {"pdf_path": str(src)}))
+    assert res["count"] >= 1
+    fields = res["fields"] or {}
+    text_fields = [k for (k, v) in fields.items() if (v or {}).get("type") == "/Tx"]
+    assert text_fields, "Expected at least one text field in tests/1006.pdf"
+    f1 = text_fields[0]
+    f2 = next((x for x in text_fields[1:] if x != f1), None)
+
+    filled1 = tmp_path / "1006_filled1.pdf"
+    data = {f1: "Alice"} if f2 is None else {f1: "Alice", f2: "Bob"}
+    asyncio.run(
+        call(
+            "fill_pdf_form",
+            {"input_path": str(src), "output_path": str(filled1), "data": data, "flatten": False},
+        )
+    )
+    assert filled1.exists()
+    assert_field_value(filled1, f1, "Alice")
+    if f2 is not None:
+        assert_field_value(filled1, f2, "Bob")
+
+    # Update a value (fill again)
+    filled2 = tmp_path / "1006_filled2.pdf"
+    asyncio.run(
+        call(
+            "fill_pdf_form",
+            {
+                "input_path": str(filled1),
+                "output_path": str(filled2),
+                "data": {f1: "Alice2"},
+                "flatten": False,
+            },
+        )
+    )
+    assert filled2.exists()
+    assert_field_value(filled2, f1, "Alice2")
+
+    # Clear a value
+    cleared = tmp_path / "1006_cleared.pdf"
+    asyncio.run(
+        call(
+            "clear_pdf_form_fields",
+            {"input_path": str(filled2), "output_path": str(cleared), "fields": [f1]},
+        )
+    )
+    assert cleared.exists()
+    assert_field_value(cleared, f1, "")
+
+    # Comments CRUD (PyMuPDF annotation)
+    c1 = tmp_path / "1006_c1.pdf"
+    c2 = tmp_path / "1006_c2.pdf"
+    c3 = tmp_path / "1006_c3.pdf"
+    asyncio.run(
+        call(
+            "add_comment",
+            {
+                "input_path": str(cleared),
+                "output_path": str(c1),
+                "page": 1,
+                "text": "hello",
+                "pos": [72, 72],
+                "comment_id": "c-1006",
+            },
+        )
+    )
+    asyncio.run(
+        call(
+            "update_comment",
+            {"input_path": str(c1), "output_path": str(c2), "comment_id": "c-1006", "text": "updated"},
+        )
+    )
+    asyncio.run(
+        call(
+            "remove_comment",
+            {"input_path": str(c2), "output_path": str(c3), "comment_id": "c-1006"},
+        )
+    )
+
+    # Verify comment got removed by name
+    doc = pymupdf.open(str(c3))
+    try:
+        p = doc.load_page(0)
+        assert all((a.info.get("name") != "c-1006") for a in (p.annots() or []))
+    finally:
+        doc.close()
+
+    # Managed text insert/edit/remove (FreeText annotations with stable NM)
+    t1 = tmp_path / "1006_t1.pdf"
+    t2 = tmp_path / "1006_t2.pdf"
+    t3 = tmp_path / "1006_t3.pdf"
+    asyncio.run(
+        call(
+            "insert_text",
+            {"input_path": str(c3), "page": 1, "text": "T", "output_path": str(t1), "text_id": "t-1006"},
+        )
+    )
+    assert_has_nm_annotation(t1, page_idx=0, nm="t-1006", expected_present=True)
+    asyncio.run(call("edit_text", {"input_path": str(t1), "output_path": str(t2), "text_id": "t-1006", "text": "T2"}))
+    assert_has_nm_annotation(t2, page_idx=0, nm="t-1006", expected_present=True)
+    asyncio.run(call("remove_text", {"input_path": str(t2), "output_path": str(t3), "text_id": "t-1006"}))
+    assert_has_nm_annotation(t3, page_idx=0, nm="t-1006", expected_present=False)
+
+    # Signature image then encrypt (visual signature, not cryptographic)
+    sig_png = _write_test_png(tmp_path / "sig1006.png")
+    signed = tmp_path / "1006_signed.pdf"
+    res = asyncio.run(
+        call(
+            "add_signature_image",
+            {"input_path": str(t3), "output_path": str(signed), "page": 1, "image_path": str(sig_png), "rect": [50, 50, 150, 100]},
+        )
+    )
+    assert signed.exists()
+    sig_xref = int(res["signature_xref"])
+    assert sig_xref > 0
+
+    encrypted = tmp_path / "1006_encrypted.pdf"
+    asyncio.run(call("encrypt_pdf", {"input_path": str(signed), "output_path": str(encrypted), "user_password": "pw"}))
+    assert encrypted.exists()
+    rr = PdfReader(str(encrypted))
+    assert rr.is_encrypted is True
+    assert rr.decrypt("pw") in (1, 2)
+    assert len(rr.pages) >= 1
+
+
 def test_merge_extract_rotate(tmp_path: Path):
     src1 = _make_pdf(tmp_path / "a.pdf", pages=2)
     src2 = _make_pdf(tmp_path / "b.pdf", pages=1)
