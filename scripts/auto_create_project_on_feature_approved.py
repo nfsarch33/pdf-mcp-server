@@ -15,7 +15,7 @@ import os
 import sys
 import urllib.request
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 
 GQL_URL = "https://api.github.com/graphql"
@@ -29,6 +29,9 @@ class Ctx:
     issue_node_id: str
     issue_number: int
     issue_title: str
+
+
+PROJECT_MARKER_PREFIX = "<!-- project-url:"
 
 
 def _gql(token: str, query: str, variables: Dict[str, Any]) -> Dict[str, Any]:
@@ -92,8 +95,7 @@ def _update_issue_body(ctx: Ctx, body: str) -> None:
     _gql(ctx.token, m, {"id": ctx.issue_node_id, "body": body})
 
 
-def _ensure_project(ctx: Ctx) -> str:
-    """Create a ProjectV2 under the repo owner and return its URL."""
+def _resolve_owner_id(ctx: Ctx) -> str:
     # Get owner node id
     q_owner = """
     query($login: String!) {
@@ -105,6 +107,11 @@ def _ensure_project(ctx: Ctx) -> str:
     owner_id = (d.get("organization") or d.get("user") or {}).get("id")
     if not owner_id:
         raise RuntimeError("Unable to resolve owner id (org/user)")
+    return owner_id
+
+
+def _create_project(ctx: Ctx, owner_id: str) -> Tuple[str, str]:
+    """Create a ProjectV2 under the repo owner and return (project_id, project_url)."""
 
     title = f"{ctx.issue_title} (feature)"
     m_create = """
@@ -116,45 +123,10 @@ def _ensure_project(ctx: Ctx) -> str:
     """
     d2 = _gql(ctx.token, m_create, {"ownerId": owner_id, "title": title})
     proj = d2["createProjectV2"]["projectV2"]
-    return proj["url"]
+    return proj["id"], proj["url"]
 
 
-def _add_issue_to_project(ctx: Ctx, project_url: str) -> None:
-    """Add issue to project by resolving project node id via URL."""
-    # Resolve project id from URL (ProjectsV2 doesn't have direct lookup by URL; use repository projects query and match url).
-    q = """
-    query($owner: String!, $name: String!) {
-      repository(owner: $owner, name: $name) {
-        projectsV2(first: 50) { nodes { id url title } }
-      }
-    }
-    """
-    d = _gql(ctx.token, q, {"owner": ctx.repo_owner, "name": ctx.repo_name})
-    nodes = ((d.get("repository") or {}).get("projectsV2") or {}).get("nodes") or []
-    proj_id: Optional[str] = None
-    for n in nodes:
-        if n and n.get("url") == project_url:
-            proj_id = n.get("id")
-            break
-    if not proj_id:
-        # Project might be created at org/user scope; fetch owner projects as fallback.
-        q2 = """
-        query($login: String!) {
-          organization(login: $login) { projectsV2(first: 50) { nodes { id url } } }
-          user(login: $login) { projectsV2(first: 50) { nodes { id url } } }
-        }
-        """
-        d2 = _gql(ctx.token, q2, {"login": ctx.repo_owner})
-        nodes2 = ((d2.get("organization") or {}).get("projectsV2") or {}).get("nodes") or []
-        if not nodes2:
-            nodes2 = ((d2.get("user") or {}).get("projectsV2") or {}).get("nodes") or []
-        for n in nodes2:
-            if n and n.get("url") == project_url:
-                proj_id = n.get("id")
-                break
-    if not proj_id:
-        raise RuntimeError("Could not resolve ProjectV2 id to add issue")
-
+def _add_issue_to_project(ctx: Ctx, project_id: str) -> str:
     m = """
     mutation($projectId: ID!, $contentId: ID!) {
       addProjectV2ItemById(input: {projectId: $projectId, contentId: $contentId}) {
@@ -162,7 +134,130 @@ def _add_issue_to_project(ctx: Ctx, project_url: str) -> None:
       }
     }
     """
-    _gql(ctx.token, m, {"projectId": proj_id, "contentId": ctx.issue_node_id})
+    d = _gql(ctx.token, m, {"projectId": project_id, "contentId": ctx.issue_node_id})
+    return d["addProjectV2ItemById"]["item"]["id"]
+
+
+def _get_project_fields(ctx: Ctx, project_id: str) -> Dict[str, Any]:
+    q = """
+    query($projectId: ID!) {
+      node(id: $projectId) {
+        ... on ProjectV2 {
+          fields(first: 50) {
+            nodes {
+              ... on ProjectV2FieldCommon {
+                id
+                name
+                dataType
+              }
+              ... on ProjectV2SingleSelectField {
+                id
+                name
+                dataType
+                options { id name }
+              }
+            }
+          }
+        }
+      }
+    }
+    """
+    return _gql(ctx.token, q, {"projectId": project_id})
+
+
+def _find_field(fields_data: Dict[str, Any], name: str) -> Optional[Dict[str, Any]]:
+    nodes = (((fields_data.get("node") or {}).get("fields") or {}).get("nodes") or [])
+    for n in nodes:
+        if n and n.get("name") == name:
+            return n
+    return None
+
+
+def _create_single_select_field(ctx: Ctx, project_id: str, name: str, options: list[str]) -> None:
+    # Best-effort: API supports providing options; if it fails, we skip and keep project creation functional.
+    m = """
+    mutation($projectId: ID!, $name: String!, $options: [ProjectV2SingleSelectFieldOptionInput!]) {
+      createProjectV2Field(input: {projectId: $projectId, name: $name, dataType: SINGLE_SELECT, singleSelectOptions: $options}) {
+        projectV2Field { ... on ProjectV2SingleSelectField { id name } }
+      }
+    }
+    """
+    colors = ["GRAY", "BLUE", "YELLOW", "ORANGE", "GREEN", "RED", "PURPLE", "PINK"]
+    opt_payload = [{"name": o, "color": colors[i % len(colors)]} for i, o in enumerate(options)]
+    _gql(ctx.token, m, {"projectId": project_id, "name": name, "options": opt_payload})
+
+
+def _create_text_field(ctx: Ctx, project_id: str, name: str) -> None:
+    m = """
+    mutation($projectId: ID!, $name: String!) {
+      createProjectV2Field(input: {projectId: $projectId, name: $name, dataType: TEXT}) {
+        projectV2Field { ... on ProjectV2FieldCommon { id name } }
+      }
+    }
+    """
+    _gql(ctx.token, m, {"projectId": project_id, "name": name})
+
+
+def _set_single_select(ctx: Ctx, project_id: str, item_id: str, field_id: str, option_id: str) -> None:
+    m = """
+    mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+      updateProjectV2ItemFieldValue(
+        input: {projectId: $projectId, itemId: $itemId, fieldId: $fieldId, value: { singleSelectOptionId: $optionId }}
+      ) {
+        projectV2Item { id }
+      }
+    }
+    """
+    _gql(ctx.token, m, {"projectId": project_id, "itemId": item_id, "fieldId": field_id, "optionId": option_id})
+
+
+def _set_text(ctx: Ctx, project_id: str, item_id: str, field_id: str, value: str) -> None:
+    m = """
+    mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $text: String!) {
+      updateProjectV2ItemFieldValue(
+        input: {projectId: $projectId, itemId: $itemId, fieldId: $fieldId, value: { text: $text }}
+      ) {
+        projectV2Item { id }
+      }
+    }
+    """
+    _gql(ctx.token, m, {"projectId": project_id, "itemId": item_id, "fieldId": field_id, "text": value})
+
+
+def _ensure_project_fields_and_defaults(ctx: Ctx, project_id: str, item_id: str) -> None:
+    """
+    Best-effort automation:
+    - Ensure Status (single-select), Risk (single-select), Target version (text) fields exist
+    - Set defaults for the created item (Status=Backlog, Risk=Medium)
+    """
+    try:
+        fields_data = _get_project_fields(ctx, project_id)
+        if _find_field(fields_data, "Status") is None:
+            _create_single_select_field(ctx, project_id, "Status", ["Backlog", "Ready", "In progress", "In review", "Done"])
+        if _find_field(fields_data, "Risk") is None:
+            _create_single_select_field(ctx, project_id, "Risk", ["Low", "Medium", "High"])
+        if _find_field(fields_data, "Target version") is None:
+            _create_text_field(ctx, project_id, "Target version")
+
+        # Re-fetch fields to get ids/options
+        fields_data = _get_project_fields(ctx, project_id)
+        status = _find_field(fields_data, "Status")
+        risk = _find_field(fields_data, "Risk")
+        target = _find_field(fields_data, "Target version")
+
+        if status and status.get("options"):
+            opt = next((o for o in status["options"] if o.get("name") == "Backlog"), None)
+            if opt:
+                _set_single_select(ctx, project_id, item_id, status["id"], opt["id"])
+        if risk and risk.get("options"):
+            opt = next((o for o in risk["options"] if o.get("name") == "Medium"), None)
+            if opt:
+                _set_single_select(ctx, project_id, item_id, risk["id"], opt["id"])
+        if target and target.get("id"):
+            _set_text(ctx, project_id, item_id, target["id"], "")
+    except Exception as e:
+        # Keep core behavior (project creation + linking) working even if Projects API evolves.
+        print(f"WARN: project fields/defaults setup skipped due to error: {e}")
 
 
 def main() -> int:
@@ -175,12 +270,14 @@ def main() -> int:
     ctx = _extract_ctx(event)
 
     body = _get_issue_body(ctx)
-    if "<!-- project-url:" in body:
+    if PROJECT_MARKER_PREFIX in body:
         print("Project already recorded in issue body; skipping.")
         return 0
 
-    project_url = _ensure_project(ctx)
-    _add_issue_to_project(ctx, project_url)
+    owner_id = _resolve_owner_id(ctx)
+    project_id, project_url = _create_project(ctx, owner_id)
+    item_id = _add_issue_to_project(ctx, project_id)
+    _ensure_project_fields_and_defaults(ctx, project_id, item_id)
 
     marker = f"\\n\\n<!-- project-url: {project_url} -->\\n\\nProject created: {project_url}\\n"
     _update_issue_body(ctx, body + marker)
