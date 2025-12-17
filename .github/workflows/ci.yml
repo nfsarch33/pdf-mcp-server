@@ -33,3 +33,25 @@ jobs:
       - name: Run tests
         run: make test
 
+  smoke:
+    name: Smoke (hard requirements)
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Run Cursor smoke script
+        run: |
+          make install
+          . .venv/bin/activate && python scripts/cursor_smoke.py --out-dir /tmp/pdf-handler-ci-smoke
+
