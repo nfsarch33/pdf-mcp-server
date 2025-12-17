@@ -1,0 +1,38 @@
+name: pre-commit
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Install deps (incl. pre-commit)
+        run: make install
+
+      - name: Run pre-commit (PR diff only)
+        run: |
+          . .venv/bin/activate
+          # Only check changed files in the PR to avoid reformatting legacy docs.
+          git fetch origin "${{ github.base_ref }}":"refs/remotes/origin/${{ github.base_ref }}"
+          pre-commit run --from-ref "origin/${{ github.base_ref }}" --to-ref "${{ github.sha }}" --show-diff-on-failure
+
+
