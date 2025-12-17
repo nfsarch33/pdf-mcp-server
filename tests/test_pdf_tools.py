@@ -118,6 +118,63 @@ def test_fill_updates_real_form_field(tmp_path: Path):
     assert str(fields["Name"].get("/V")) == "Test User"
 
 
+def test_fill_pdf_form_falls_back_on_pdfrw_object_stream_failure(tmp_path: Path):
+    """
+    Regression: some PDFs (e.g. Adobe InDesign exports with compressed object streams)
+    cause fillpdf/pdfrw parsing errors. fill_pdf_form must fall back to pypdf and succeed.
+    """
+    src = Path(__file__).parent / "1006.pdf"
+    assert src.exists(), "Missing test fixture tests/1006.pdf"
+
+    from pypdf import PdfReader
+
+    reader = PdfReader(str(src))
+    fields = reader.get_fields() or {}
+    assert fields, "Expected form fields in tests/1006.pdf"
+
+    # Pick a text field if available, else any field.
+    key = None
+    for name, f in fields.items():
+        try:
+            if str(f.get("/FT")) == "/Tx":
+                key = name
+                break
+        except Exception:
+            continue
+    if key is None:
+        key = next(iter(fields.keys()))
+
+    out = tmp_path / "1006-filled.pdf"
+    result = pdf_tools.fill_pdf_form(str(src), str(out), {str(key): "Test"}, flatten=False)
+    assert Path(result["output_path"]).exists()
+    assert result["filled_with"] in ("fillpdf", "pypdf")
+
+    verify = PdfReader(str(out))
+    vf = verify.get_fields() or {}
+    assert str(vf[str(key)].get("/V")) == "Test"
+
+
+def test_fill_pdf_form_fallback_when_fillpdf_raises(tmp_path: Path, monkeypatch):
+    """
+    Unit-level: if fillpdf throws, we should still succeed via pypdf.
+    """
+    src = _make_form_pdf(tmp_path / "real_form2.pdf")
+    out = tmp_path / "filled_real2.pdf"
+
+    # Only meaningful if fillpdf is available; otherwise pypdf is already used.
+    if getattr(pdf_tools, "_HAS_FILLPDF", False) is True:
+        monkeypatch.setattr(pdf_tools.fillpdfs, "write_fillable_pdf", lambda *a, **k: (_ for _ in ()).throw(ValueError("pdfrw fail")))
+
+    result = pdf_tools.fill_pdf_form(str(src), str(out), {"Name": "X"}, flatten=False)
+    assert Path(result["output_path"]).exists()
+
+    from pypdf import PdfReader
+
+    r = PdfReader(str(out))
+    f = r.get_fields() or {}
+    assert str(f["Name"].get("/V")) == "X"
+
+
 def test_clear_pdf_form_fields(tmp_path: Path):
     src = _make_form_pdf(tmp_path / "real_form.pdf")
     out = tmp_path / "filled_real.pdf"

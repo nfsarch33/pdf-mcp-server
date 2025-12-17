@@ -172,9 +172,14 @@ def fill_pdf_form(
 
     if _HAS_FILLPDF and has_fields:
         # Prefer fillpdf when possible for robust form filling on real AcroForm PDFs.
-        fillpdfs.write_fillable_pdf(str(src), str(dst), data)
-        if flatten:
-            fillpdfs.flatten_pdf(str(dst), str(dst))
+        try:
+            fillpdfs.write_fillable_pdf(str(src), str(dst), data)
+            if flatten:
+                fillpdfs.flatten_pdf(str(dst), str(dst))
+        except Exception:
+            # fillpdf uses pdfrw which can fail on PDFs with compressed object streams
+            # (common in some Adobe InDesign exports). Fall back to pypdf path below.
+            pass
         # Some real-world PDFs get their appearances updated but don't persist /V values.
         # Verify and fall back to pypdf if needed so that filled contents are durable.
         if not flatten:
