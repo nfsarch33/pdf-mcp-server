@@ -5,6 +5,7 @@ Canonical changelog: `CHANGELOG.md` (Keep a Changelog + SemVer).
 ## What “release-ready” means here
 
 - `make test` passes
+- `make smoke` passes (hard requirements)
 - hard requirements verified (see `docs/CURSOR_SMOKE_TEST.md`)
 - `README.md` + `CHANGELOG.md` updated and consistent
 
@@ -16,6 +17,7 @@ Canonical changelog: `CHANGELOG.md` (Keep a Changelog + SemVer).
 git checkout main
 git pull --ff-only
 make test
+make smoke
 ```
 
 2. Update version (SemVer) in `pyproject.toml`.
@@ -38,6 +40,19 @@ git push origin main --tags
 6. GitHub Release:
 - Create a release for tag `vX.Y.Z`
 - Paste the `CHANGELOG.md` section for `X.Y.Z`
+
+## Pre-push automation (recommended)
+
+Install pre-commit hooks so you catch CI failures before pushing:
+
+```bash
+pre-commit install
+pre-commit install --hook-type pre-push
+```
+
+What it runs on `git push`:
+- `make test`
+- `make smoke`
 
 ## Canonical SOP (recommended)
 
