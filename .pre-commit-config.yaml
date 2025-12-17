@@ -10,6 +10,13 @@ repos:
 
   - repo: local
     hooks:
+      - id: py-compile-repo-scripts
+        name: python -m py_compile (repo scripts)
+        entry: bash -lc 'python3 -m py_compile "$@"'
+        language: system
+        types: [python]
+        files: ^(scripts|pdf_mcp)/.*\.py$
+        stages: [pre-commit]
       - id: pdf-mcp-prepush-gates
         name: pdf-mcp pre-push gates (tests + smoke)
         entry: bash -lc "make prepush"

@@ -1,0 +1,19 @@
+[extend]
+# Start from gitleaks defaults and add small repo-specific allowlists.
+
+[allowlist]
+description = "Allowlist common false positives"
+paths = [
+  # Academic/personal file is ignored; keep it out of scanning noise.
+  "cursor-memory-complete-setup-guide.md",
+]
+
+# Allowlisted patterns (avoid false positives on docs describing env var names)
+regexes = [
+  # Mentioning env var names in docs/templates is OK
+  "OPENAI_API_KEY",
+  "GITHUB_TOKEN",
+  "GITHUB_PERSONAL_ACCESS_TOKEN",
+]
+
+
