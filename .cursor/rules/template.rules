@@ -21,5 +21,11 @@ alwaysApply: true
 # - memory_bank_read("global-memories", "release-sop-tag-based.md")
 # - memory_bank_read("global-memories", "pdf-handler-troubleshooting.md")
 #
+# Repo doc layout (permanent)
+# - Canonical, portable onboarding/runbooks live under `PROJECT_MEMO/`.
+# - Root-level `GLOBAL_CURSOR_INSTRUCTIONS.md` and `MEMORY_AND_RULES.md` remain as short redirect stubs only
+#   (to avoid breaking links/bookmarks); do NOT reintroduce full copies at repo root.
+# - Portable KB items intended for Pepper sync live under `PROJECT_MEMO/PEPPER_SYNC/memories-and-kb/`.
+#
 # Quality gates before calling work "done": tests pass; errors handled; docs updated.
 
