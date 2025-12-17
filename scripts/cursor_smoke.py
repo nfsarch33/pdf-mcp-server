@@ -6,6 +6,16 @@ from pypdf import PdfReader, PdfWriter
 
 from pdf_mcp import pdf_tools
 
+try:
+    # PyMuPDF can emit noisy stderr warnings for some synthetic PDFs even when operations succeed.
+    # Silence these for a cleaner smoke-test signal.
+    import fitz  # type: ignore
+
+    fitz.TOOLS.mupdf_display_errors(False)
+    fitz.TOOLS.mupdf_display_warnings(False)
+except Exception:
+    pass
+
 
 def _make_blank_pdf(path: Path, pages: int) -> Path:
     w = PdfWriter()
