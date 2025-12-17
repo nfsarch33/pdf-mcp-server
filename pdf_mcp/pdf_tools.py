@@ -78,12 +78,22 @@ def _safe_value(value):
 
 def _flatten_writer(writer: PdfWriter) -> None:
     # Remove annotations and form field structures so the document is no longer editable.
+    annots_key = NameObject("/Annots")
     for page in writer.pages:
-        if "/Annots" in page:
-            page["/Annots"] = []
-    acro_form = writer._root_object.get("/AcroForm")  # type: ignore[attr-defined]
+        if annots_key in page:
+            page[annots_key] = ArrayObject()
+    acro_form = writer._root_object.get(NameObject("/AcroForm"))  # type: ignore[attr-defined]
+    if hasattr(acro_form, "get_object"):
+        try:
+            acro_form = acro_form.get_object()
+        except Exception:
+            pass
     if acro_form:
-        acro_form.pop("/Fields", None)
+        try:
+            acro_form.pop(NameObject("/Fields"), None)
+        except Exception:
+            # Defensive: some PDFs may store keys as plain strings.
+            acro_form.pop("/Fields", None)
         acro_form[NameObject("/NeedAppearances")] = BooleanObject(False)
 
 
@@ -332,8 +342,13 @@ def flatten_pdf(input_path: str, output_path: str) -> Dict:
     dst = _prepare_output(output_path)
 
     if _HAS_FILLPDF:
-        fillpdfs.flatten_pdf(str(src), str(dst))
-        return {"output_path": str(dst), "flattened_with": "fillpdf"}
+        try:
+            fillpdfs.flatten_pdf(str(src), str(dst))
+            return {"output_path": str(dst), "flattened_with": "fillpdf"}
+        except Exception:
+            # fillpdf uses pdfrw which can fail on PDFs with compressed object streams
+            # (common in some Adobe InDesign exports). Fall back to pypdf below.
+            pass
 
     reader = PdfReader(str(src))
     writer = PdfWriter()
