@@ -17,6 +17,9 @@ alwaysApply: true
 # - memory_bank_read("global-memories", "memory-sop.md")
 # - memory_bank_read("global-memories", "coding-standards-v9-1.md")
 # - memory_bank_read("global-memories", "quick-reference-card.md")
+# - memory_bank_read("global-memories", "mcp-index-and-selection-sop.md")
+# - memory_bank_read("global-memories", "release-sop-tag-based.md")
+# - memory_bank_read("global-memories", "pdf-handler-troubleshooting.md")
 #
 # Quality gates before calling work "done": tests pass; errors handled; docs updated.
 
