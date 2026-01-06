@@ -1,7 +1,8 @@
 # PDF MCP Server
 
-MCP server for PDF form filling and basic editing (merge, extract, rotate, flatten). Built with Python, `pypdf`, and `fillpdf`.
-Includes `pymupdf` (AGPL) for robust comments and signature image support.
+MCP server for PDF form filling, basic editing (merge, extract, rotate, flatten), and **OCR text extraction**. Built with Python, `pypdf`, `fillpdf`, and `pymupdf` (AGPL).
+
+**Goal**: Extract 99% of information from any PDF file, including scanned/image-based documents, and fill any PDF forms.
 
 ## Status
 [![CI](https://github.com/nfsarch33/pdf-mcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/nfsarch33/pdf-mcp-server/actions/workflows/ci.yml)
@@ -32,6 +33,27 @@ make install
 For best flatten support, install Poppler:
 ```bash
 sudo apt-get install poppler-utils
+```
+
+### OCR Support (Optional)
+
+For OCR capabilities on scanned/image-based PDFs, install Tesseract:
+
+**macOS:**
+```bash
+brew install tesseract
+pip install pytesseract pillow
+```
+
+**Linux (Ubuntu/Debian):**
+```bash
+sudo apt-get install tesseract-ocr
+pip install pytesseract pillow
+```
+
+Or install with the `ocr` extra:
+```bash
+pip install -e ".[ocr]"
 ```
 
 ## Run the MCP server
@@ -82,6 +104,12 @@ Restart Cursor after saving.
 - `update_signature_image(input_path, output_path, page, signature_xref, image_path=None, rect=None)`: update or resize a signature image.
 - `remove_signature_image(input_path, output_path, page, signature_xref)`: remove a signature image.
 - `encrypt_pdf(input_path, output_path, user_password, owner_password=None, ...)`: encrypt (password-protect) a PDF (use after `add_signature_image` to protect a signed PDF).
+
+### OCR and Text Extraction Tools
+- `detect_pdf_type(pdf_path)`: analyze PDF to classify as "searchable", "image_based", or "hybrid"; returns page-by-page metrics and OCR recommendation.
+- `extract_text_native(pdf_path, pages=None)`: extract text using native PDF text layer only (fast, no OCR).
+- `extract_text_ocr(pdf_path, pages=None, engine="auto", dpi=300, language="eng")`: extract text with OCR fallback; engine options: "auto" (native→OCR), "native", "tesseract", "force_ocr".
+- `get_pdf_text_blocks(pdf_path, pages=None)`: extract text blocks with bounding box positions (useful for form field detection).
 
 ## Conventions
 - Paths should be absolute; outputs are created with parent directories if missing.

@@ -400,6 +400,84 @@ def remove_signature_image(
     )
 
 
+# =============================================================================
+# OCR and Text Extraction Tools
+# =============================================================================
+
+
+@mcp.tool()
+@_handle_errors
+def detect_pdf_type(pdf_path: str) -> Dict[str, Any]:
+    """
+    Analyze a PDF to classify its content type.
+
+    Returns:
+    - classification: "searchable", "image_based", or "hybrid"
+    - needs_ocr: Whether OCR is recommended for full text extraction
+    - Detailed page-by-page analysis with text/image metrics
+    """
+    return pdf_tools.detect_pdf_type(pdf_path)
+
+
+@mcp.tool()
+@_handle_errors
+def extract_text_native(
+    pdf_path: str,
+    pages: Optional[List[int]] = None,
+) -> Dict[str, Any]:
+    """
+    Extract text from PDF using native text layer only (no OCR).
+
+    Fast extraction for PDFs with embedded text. Use detect_pdf_type first
+    to determine if the PDF has sufficient native text.
+    """
+    return pdf_tools.extract_text_native(pdf_path, pages=pages)
+
+
+@mcp.tool()
+@_handle_errors
+def extract_text_ocr(
+    pdf_path: str,
+    pages: Optional[List[int]] = None,
+    engine: str = "auto",
+    dpi: int = 300,
+    language: str = "eng",
+) -> Dict[str, Any]:
+    """
+    Extract text from PDF with OCR support.
+
+    Engine options:
+    - "auto": Try native extraction first; fall back to OCR if insufficient
+    - "native": Use only native text extraction (no OCR)
+    - "tesseract": Force OCR using Tesseract
+    - "force_ocr": Always use OCR even if native text exists
+
+    Requires tesseract-ocr to be installed for OCR functionality.
+    """
+    return pdf_tools.extract_text_ocr(
+        pdf_path,
+        pages=pages,
+        engine=engine,
+        dpi=dpi,
+        language=language,
+    )
+
+
+@mcp.tool()
+@_handle_errors
+def get_pdf_text_blocks(
+    pdf_path: str,
+    pages: Optional[List[int]] = None,
+) -> Dict[str, Any]:
+    """
+    Extract text blocks with position information from PDF.
+
+    Returns structured text blocks with bounding boxes, useful for
+    understanding document layout and identifying form field locations.
+    """
+    return pdf_tools.get_pdf_text_blocks(pdf_path, pages=pages)
+
+
 if __name__ == "__main__":
     mcp.run(transport="stdio")
 

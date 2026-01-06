@@ -25,6 +25,15 @@ try:
 except ImportError:
     _HAS_FILLPDF = False
 
+try:
+    import pytesseract
+    from PIL import Image
+    import io
+
+    _HAS_TESSERACT = True
+except ImportError:
+    _HAS_TESSERACT = False
+
 
 @dataclass
 class PdfToolError(Exception):
@@ -1072,4 +1081,364 @@ def remove_signature_image(
         doc.close()
 
     return {"output_path": str(dst), "removed": 1, "page": page}
+
+
+# =============================================================================
+# OCR and Text Extraction Tools
+# =============================================================================
+
+
+def detect_pdf_type(pdf_path: str) -> Dict[str, Any]:
+    """
+    Analyze a PDF to classify its content type.
+
+    Returns classification:
+    - "searchable": PDF has native text layer (text can be selected/copied)
+    - "image_based": PDF consists primarily of images with no/minimal text layer
+    - "hybrid": PDF has both native text and significant image content
+
+    Also returns detailed metrics for each page.
+    """
+    path = _ensure_file(pdf_path)
+    doc = pymupdf.open(str(path))
+
+    try:
+        total_pages = doc.page_count
+        page_analyses: List[Dict[str, Any]] = []
+        total_native_chars = 0
+        total_images = 0
+        pages_with_text = 0
+        pages_with_images = 0
+
+        for page_num in range(total_pages):
+            page = doc.load_page(page_num)
+
+            # Extract native text
+            native_text = page.get_text("text")
+            native_char_count = len(native_text.strip())
+
+            # Count images on page
+            images = page.get_images(full=True)
+            image_count = len(images)
+
+            # Calculate image coverage (approximate)
+            page_rect = page.rect
+            page_area = page_rect.width * page_rect.height
+            image_area = 0.0
+            for img in images:
+                try:
+                    xref = img[0]
+                    img_rects = page.get_image_rects(xref)
+                    for rect in img_rects:
+                        image_area += rect.width * rect.height
+                except Exception:
+                    pass
+            image_coverage = min(image_area / page_area, 1.0) if page_area > 0 else 0.0
+
+            page_analysis = {
+                "page": page_num + 1,
+                "native_char_count": native_char_count,
+                "image_count": image_count,
+                "image_coverage": round(image_coverage, 3),
+                "has_native_text": native_char_count > 50,  # threshold for meaningful text
+                "is_primarily_image": image_coverage > 0.5 and native_char_count < 100,
+            }
+            page_analyses.append(page_analysis)
+
+            total_native_chars += native_char_count
+            total_images += image_count
+            if native_char_count > 50:
+                pages_with_text += 1
+            if image_count > 0:
+                pages_with_images += 1
+
+        # Determine overall classification
+        text_ratio = pages_with_text / total_pages if total_pages > 0 else 0
+        image_ratio = pages_with_images / total_pages if total_pages > 0 else 0
+
+        if text_ratio >= 0.8:
+            classification = "searchable"
+        elif text_ratio <= 0.2 and image_ratio >= 0.5:
+            classification = "image_based"
+        else:
+            classification = "hybrid"
+
+        # Determine if OCR is recommended
+        needs_ocr = classification in ("image_based", "hybrid") and text_ratio < 0.9
+
+        return {
+            "pdf_path": str(path),
+            "classification": classification,
+            "total_pages": total_pages,
+            "pages_with_native_text": pages_with_text,
+            "pages_with_images": pages_with_images,
+            "total_native_chars": total_native_chars,
+            "total_images": total_images,
+            "text_coverage_ratio": round(text_ratio, 3),
+            "image_coverage_ratio": round(image_ratio, 3),
+            "needs_ocr": needs_ocr,
+            "tesseract_available": _HAS_TESSERACT,
+            "page_details": page_analyses,
+        }
+    finally:
+        doc.close()
+
+
+def extract_text_native(pdf_path: str, pages: Optional[List[int]] = None) -> Dict[str, Any]:
+    """
+    Extract text from PDF using native text layer only (no OCR).
+
+    Uses PyMuPDF for robust text extraction with layout preservation.
+    """
+    path = _ensure_file(pdf_path)
+    doc = pymupdf.open(str(path))
+
+    try:
+        total_pages = doc.page_count
+        if pages:
+            page_indices = _to_zero_based_pages(pages, total_pages)
+        else:
+            page_indices = list(range(total_pages))
+
+        extracted_pages: List[Dict[str, Any]] = []
+        total_chars = 0
+
+        for idx in page_indices:
+            page = doc.load_page(idx)
+            text = page.get_text("text")
+            char_count = len(text.strip())
+
+            extracted_pages.append({
+                "page": idx + 1,
+                "text": text,
+                "char_count": char_count,
+            })
+            total_chars += char_count
+
+        # Combine all text
+        full_text = "\n\n--- Page Break ---\n\n".join(
+            p["text"] for p in extracted_pages
+        )
+
+        return {
+            "pdf_path": str(path),
+            "method": "native",
+            "pages_extracted": len(extracted_pages),
+            "total_chars": total_chars,
+            "text": full_text,
+            "page_details": extracted_pages,
+        }
+    finally:
+        doc.close()
+
+
+def extract_text_ocr(
+    pdf_path: str,
+    pages: Optional[List[int]] = None,
+    engine: str = "auto",
+    dpi: int = 300,
+    language: str = "eng",
+) -> Dict[str, Any]:
+    """
+    Extract text from PDF with OCR support.
+
+    Engine options:
+    - "auto": Try native extraction first; fall back to OCR if insufficient text
+    - "native": Use only native text extraction (no OCR)
+    - "tesseract": Force OCR using Tesseract
+    - "force_ocr": Always use OCR even if native text exists
+
+    Args:
+        pdf_path: Path to PDF file
+        pages: Optional list of 1-based page numbers (default: all pages)
+        engine: OCR engine selection ("auto", "native", "tesseract", "force_ocr")
+        dpi: Resolution for rendering pages to images (default: 300)
+        language: Tesseract language code (default: "eng")
+
+    Returns:
+        Dict with extracted text and metadata
+    """
+    path = _ensure_file(pdf_path)
+
+    # Validate engine choice
+    valid_engines = ("auto", "native", "tesseract", "force_ocr")
+    if engine not in valid_engines:
+        raise PdfToolError(f"Invalid engine: {engine}. Must be one of {valid_engines}")
+
+    if engine in ("tesseract", "force_ocr") and not _HAS_TESSERACT:
+        raise PdfToolError(
+            "Tesseract OCR not available. Install pytesseract and tesseract-ocr: "
+            "pip install pytesseract pillow && brew install tesseract (macOS) "
+            "or apt-get install tesseract-ocr (Linux)"
+        )
+
+    doc = pymupdf.open(str(path))
+
+    try:
+        total_pages = doc.page_count
+        if pages:
+            page_indices = _to_zero_based_pages(pages, total_pages)
+        else:
+            page_indices = list(range(total_pages))
+
+        extracted_pages: List[Dict[str, Any]] = []
+        total_chars = 0
+        ocr_used = False
+        native_used = False
+
+        for idx in page_indices:
+            page = doc.load_page(idx)
+            page_result: Dict[str, Any] = {"page": idx + 1}
+
+            # Try native extraction first (unless force_ocr)
+            native_text = ""
+            if engine != "force_ocr":
+                native_text = page.get_text("text").strip()
+                page_result["native_chars"] = len(native_text)
+
+            # Determine if we should use OCR for this page
+            use_ocr_for_page = False
+            if engine == "tesseract" or engine == "force_ocr":
+                use_ocr_for_page = True
+            elif engine == "auto":
+                # Use OCR if native text is insufficient (less than 50 chars)
+                # and the page has images
+                has_images = len(page.get_images()) > 0
+                insufficient_text = len(native_text) < 50
+                use_ocr_for_page = has_images and insufficient_text
+
+            # Perform OCR if needed
+            ocr_text = ""
+            if use_ocr_for_page and _HAS_TESSERACT:
+                try:
+                    # Render page to image
+                    mat = pymupdf.Matrix(dpi / 72, dpi / 72)
+                    pix = page.get_pixmap(matrix=mat)
+                    img_data = pix.tobytes("png")
+
+                    # OCR with Tesseract
+                    img = Image.open(io.BytesIO(img_data))
+                    ocr_text = pytesseract.image_to_string(img, lang=language)
+                    ocr_text = ocr_text.strip()
+                    page_result["ocr_chars"] = len(ocr_text)
+                    ocr_used = True
+                except Exception as e:
+                    page_result["ocr_error"] = str(e)
+
+            # Choose best text for this page
+            if use_ocr_for_page and ocr_text:
+                final_text = ocr_text
+                page_result["method"] = "ocr"
+            else:
+                final_text = native_text
+                page_result["method"] = "native"
+                if native_text:
+                    native_used = True
+
+            page_result["text"] = final_text
+            page_result["char_count"] = len(final_text)
+            extracted_pages.append(page_result)
+            total_chars += len(final_text)
+
+        # Combine all text
+        full_text = "\n\n--- Page Break ---\n\n".join(
+            p["text"] for p in extracted_pages if p["text"]
+        )
+
+        # Determine overall method used
+        if ocr_used and native_used:
+            method = "hybrid"
+        elif ocr_used:
+            method = "ocr"
+        else:
+            method = "native"
+
+        return {
+            "pdf_path": str(path),
+            "engine_requested": engine,
+            "method_used": method,
+            "pages_extracted": len(extracted_pages),
+            "total_chars": total_chars,
+            "ocr_available": _HAS_TESSERACT,
+            "dpi": dpi if ocr_used else None,
+            "language": language if ocr_used else None,
+            "text": full_text,
+            "page_details": extracted_pages,
+        }
+    finally:
+        doc.close()
+
+
+def get_pdf_text_blocks(
+    pdf_path: str,
+    pages: Optional[List[int]] = None,
+) -> Dict[str, Any]:
+    """
+    Extract text blocks with position information from PDF.
+
+    Returns structured text blocks with bounding boxes, useful for
+    understanding document layout and identifying form field locations.
+    """
+    path = _ensure_file(pdf_path)
+    doc = pymupdf.open(str(path))
+
+    try:
+        total_pages = doc.page_count
+        if pages:
+            page_indices = _to_zero_based_pages(pages, total_pages)
+        else:
+            page_indices = list(range(total_pages))
+
+        page_blocks: List[Dict[str, Any]] = []
+
+        for idx in page_indices:
+            page = doc.load_page(idx)
+            blocks = page.get_text("dict", flags=pymupdf.TEXT_PRESERVE_WHITESPACE)
+
+            page_data = {
+                "page": idx + 1,
+                "width": page.rect.width,
+                "height": page.rect.height,
+                "blocks": [],
+            }
+
+            for block in blocks.get("blocks", []):
+                block_type = block.get("type", 0)
+
+                if block_type == 0:  # Text block
+                    block_info = {
+                        "type": "text",
+                        "bbox": block.get("bbox"),
+                        "lines": [],
+                    }
+                    for line in block.get("lines", []):
+                        line_text = ""
+                        for span in line.get("spans", []):
+                            line_text += span.get("text", "")
+                        if line_text.strip():
+                            block_info["lines"].append({
+                                "text": line_text,
+                                "bbox": line.get("bbox"),
+                            })
+                    if block_info["lines"]:
+                        page_data["blocks"].append(block_info)
+
+                elif block_type == 1:  # Image block
+                    page_data["blocks"].append({
+                        "type": "image",
+                        "bbox": block.get("bbox"),
+                        "width": block.get("width"),
+                        "height": block.get("height"),
+                    })
+
+            page_blocks.append(page_data)
+
+        return {
+            "pdf_path": str(path),
+            "total_pages": total_pages,
+            "pages_analyzed": len(page_blocks),
+            "page_blocks": page_blocks,
+        }
+    finally:
+        doc.close()
 

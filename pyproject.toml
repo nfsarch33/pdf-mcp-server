@@ -1,7 +1,7 @@
 [project]
 name = "pdf-mcp"
-version = "0.1.2"
-description = "Local MCP server for PDF form filling and basic editing"
+version = "0.1.3"
+description = "Local MCP server for PDF form filling, editing, and OCR text extraction"
 authors = [{ name = "Local User" }]
 requires-python = ">=3.10"
 dependencies = [
@@ -13,6 +13,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest", "pre-commit", "ruff"]
+ocr = ["pytesseract>=0.3.10", "pillow>=10.0.0"]
 
 [build-system]
 requires = ["setuptools>=61"]

@@ -6,6 +6,22 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 0.1.3 - 2026-01-06
+
+### Added
+- **OCR Support (Phase 1)**: New tools for text extraction from scanned/image-based PDFs.
+  - `detect_pdf_type`: Classify PDFs as "searchable", "image_based", or "hybrid" with detailed metrics.
+  - `extract_text_native`: Fast native text layer extraction (no OCR).
+  - `extract_text_ocr`: Text extraction with OCR fallback; supports auto/native/tesseract/force_ocr engines.
+  - `get_pdf_text_blocks`: Extract text blocks with bounding box positions for layout analysis.
+- Optional `[ocr]` dependency group: `pytesseract` and `pillow` for Tesseract integration.
+- Comprehensive OCR test suite (`tests/test_ocr.py`) covering 9 PDF fixtures with 33+ test methods.
+- New PDF test fixtures for OCR testing: scanned documents, image-based PDFs, hybrid documents.
+
+### Changed
+- Updated project description to reflect OCR capabilities.
+- README now includes OCR setup instructions and tool documentation.
+
 ## 0.1.2 - 2025-12-17
 
 ### Fixed
