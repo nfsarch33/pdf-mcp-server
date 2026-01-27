@@ -6,6 +6,19 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 0.4.0 - 2026-01-27
+
+### Added
+- `reorder_pages`: reorder PDF pages with an explicit 1-based page list.
+- `redact_text_regex`: redact text using a regex pattern.
+- `sanitize_pdf_metadata`: remove standard and custom metadata keys.
+- `export_to_markdown`: export PDF text to Markdown.
+- `export_to_json`: export PDF text and metadata to JSON.
+- `add_page_numbers`: add page numbers as annotations.
+- `add_bates_numbering`: add Bates numbering as annotations.
+- `verify_digital_signatures`: validate digital signatures in PDFs.
+- `get_full_metadata`: return full metadata and document info.
+
 ## 0.3.0 - 2026-01-27
 
 ### Added

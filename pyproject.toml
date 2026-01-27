@@ -1,6 +1,6 @@
 [project]
 name = "pdf-mcp"
-version = "0.3.0"
+version = "0.4.0"
 description = "Local MCP server for PDF form filling, editing, and OCR text extraction"
 authors = [{ name = "Local User" }]
 requires-python = ">=3.10"
@@ -9,6 +9,7 @@ dependencies = [
     "pypdf>=5.1.0",
     "fillpdf>=0.7.3",
     "pymupdf>=1.26.7",
+    "pyhanko>=0.32.0",
 ]
 
 [project.optional-dependencies]

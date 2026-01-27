@@ -1,6 +1,6 @@
 # PDF MCP Server
 
-**Version 0.3.0** | MCP server for PDF form filling, editing, OCR text extraction, table extraction, image extraction, link extraction, and batch processing.
+**Version 0.4.0** | MCP server for PDF form filling, editing, OCR text extraction, table extraction, image extraction, link extraction, and batch processing.
 
 Built with Python, `pypdf`, `fillpdf`, and `pymupdf` (AGPL).
 
@@ -101,8 +101,9 @@ Restart Cursor after saving.
 | Category | Tools | Description |
 |----------|-------|-------------|
 | **Form Handling** | 4 tools | Fill, clear, flatten PDF forms |
-| **Page Operations** | 5 tools | Merge, extract, rotate, insert, remove pages |
-| **Annotations** | 9 tools | Text, comments, watermarks, signatures |
+| **Page Operations** | 6 tools | Merge, extract, rotate, reorder, insert, remove pages |
+| **Annotations** | 12 tools | Text, comments, watermarks, signatures, redaction, numbering |
+| **Export** | 2 tools | Export PDF content to Markdown or JSON |
 | **OCR & Text** | 8 tools | Type detection, native/OCR extraction, confidence scores |
 | **Table Extraction** | 1 tool | Extract tables as structured data |
 | **Image Extraction** | 2 tools | Extract/analyze embedded images |
@@ -126,6 +127,7 @@ Restart Cursor after saving.
 - `merge_pdfs(pdf_list, output_path)`: merge multiple PDFs.
 - `extract_pages(input_path, pages, output_path)`: 1-based pages, supports negatives (e.g., -1 = last).
 - `rotate_pages(input_path, pages, degrees, output_path)`: degrees must be multiple of 90.
+- `reorder_pages(input_path, pages, output_path)`: reorder pages using a 1-based page list.
 - `insert_pages(input_path, insert_from_path, at_page, output_path)`: insert pages from another PDF.
 - `remove_pages(input_path, pages, output_path)`: remove specific pages.
 
@@ -135,7 +137,10 @@ Restart Cursor after saving.
 - `remove_text_annotation(input_path, output_path, annotation_id, pages=None)`: remove annotation by id.
 - `remove_annotations(input_path, output_path, pages, subtype=None)`: remove annotations, optionally by subtype.
 - `insert_text` / `edit_text` / `remove_text`: managed text via FreeText annotations.
+- `redact_text_regex(input_path, output_path, pattern, ...)`: redact text using a regex pattern.
 - `add_text_watermark(input_path, output_path, text, ...)`: add text watermark/stamp.
+- `add_page_numbers(input_path, output_path, ...)`: add page numbers as annotations.
+- `add_bates_numbering(input_path, output_path, ...)`: add Bates numbering as annotations.
 - `add_comment` / `update_comment` / `remove_comment`: PDF comments (sticky notes).
 
 ### Signatures & Security
@@ -143,10 +148,17 @@ Restart Cursor after saving.
 - `update_signature_image(...)`: update or resize signature.
 - `remove_signature_image(...)`: remove signature image.
 - `encrypt_pdf(input_path, output_path, user_password, ...)`: password-protect PDF.
+- `verify_digital_signatures(pdf_path)`: verify digital signatures.
 
 ### Metadata
 - `get_pdf_metadata(pdf_path)`: return document metadata.
 - `set_pdf_metadata(input_path, output_path, title=None, author=None, ...)`: set metadata fields.
+- `sanitize_pdf_metadata(input_path, output_path, ...)`: remove metadata keys.
+- `get_full_metadata(pdf_path)`: return full metadata + document info.
+
+### Export
+- `export_to_markdown(pdf_path, output_path, ...)`: export text to Markdown.
+- `export_to_json(pdf_path, output_path, ...)`: export text and metadata to JSON.
 
 ### OCR and Text Extraction (Phase 1)
 - `detect_pdf_type(pdf_path)`: analyze PDF to classify as "searchable", "image_based", or "hybrid"; returns page-by-page metrics and OCR recommendation.
@@ -230,7 +242,7 @@ make prepush
 ```
 
 ### Test Coverage
-- **149 tests** total (56 base + 52 Phase 2 + 41 Phase 3 tests)
+- **159 tests** total (includes Tier 1/2 coverage)
 - All tests pass with Tesseract installed
 - 3 tests skip when optional dependencies (Tesseract/pyzbar) are not available
 

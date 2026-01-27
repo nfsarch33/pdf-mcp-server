@@ -1,5 +1,8 @@
+import json
 from pathlib import Path
 
+import pymupdf
+import pytest
 from pdf_mcp import pdf_tools
 from pdf_mcp.pdf_tools import PdfToolError
 from pypdf import PdfWriter
@@ -81,6 +84,17 @@ def _make_form_pdf(path: Path) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("wb") as f:
         writer.write(f)
+    return path
+
+
+def _make_text_pdf(path: Path, lines: list[str]) -> Path:
+    doc = pymupdf.open()
+    for line in lines:
+        page = doc.new_page()
+        page.insert_text((72, 72), line, fontsize=12)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    doc.save(str(path))
+    doc.close()
     return path
 
 
@@ -206,6 +220,164 @@ def test_encrypt_pdf_roundtrip(tmp_path: Path):
     assert len(r.pages) == 1
 
 
+def test_reorder_pages_basic(tmp_path: Path):
+    src = _make_text_pdf(tmp_path / "ordered.pdf", ["Page 1", "Page 2", "Page 3"])
+    out = tmp_path / "reordered.pdf"
+
+    res = pdf_tools.reorder_pages(str(src), [3, 1, 2], str(out))
+    assert Path(res["output_path"]).exists()
+
+    from pypdf import PdfReader
+
+    reader = PdfReader(str(out))
+    texts = [(page.extract_text() or "") for page in reader.pages]
+    assert "Page 3" in texts[0]
+    assert "Page 1" in texts[1]
+    assert "Page 2" in texts[2]
+
+
+def test_reorder_pages_rejects_invalid_input(tmp_path: Path):
+    src = _make_text_pdf(tmp_path / "ordered.pdf", ["Page 1", "Page 2", "Page 3"])
+    out = tmp_path / "reordered.pdf"
+
+    with pytest.raises(PdfToolError):
+        pdf_tools.reorder_pages(str(src), [1, 1, 2], str(out))
+
+    with pytest.raises(PdfToolError):
+        pdf_tools.reorder_pages(str(src), [1, 2], str(out))
+
+    with pytest.raises(PdfToolError):
+        pdf_tools.reorder_pages(str(src), [0, 1, 2], str(out))
+
+
+def test_redact_text_regex_basic(tmp_path: Path):
+    src = _make_text_pdf(tmp_path / "text.pdf", ["Secret 123", "Public info"])
+    out = tmp_path / "redacted.pdf"
+
+    res = pdf_tools.redact_text_regex(
+        input_path=str(src),
+        output_path=str(out),
+        pattern=r"Secret\s+\d+",
+    )
+    assert Path(res["output_path"]).exists()
+    assert res["redacted"] >= 1
+
+    from pypdf import PdfReader
+
+    reader = PdfReader(str(out))
+    text = "".join((page.extract_text() or "") for page in reader.pages)
+    assert "Secret" not in text
+    assert "Public" in text
+
+
+def test_sanitize_pdf_metadata_removes_keys(tmp_path: Path):
+    src = _make_pdf(tmp_path / "plain.pdf", pages=1)
+    meta = tmp_path / "meta.pdf"
+    pdf_tools.set_pdf_metadata(
+        str(src),
+        str(meta),
+        title="Title",
+        author="Author",
+        subject="Subject",
+        keywords="Keywords",
+    )
+
+    sanitized = tmp_path / "sanitized.pdf"
+    res = pdf_tools.sanitize_pdf_metadata(str(meta), str(sanitized))
+    assert Path(res["output_path"]).exists()
+    assert "Title" in res["removed"]
+    assert "Author" in res["removed"]
+
+    md = pdf_tools.get_pdf_metadata(str(sanitized))["metadata"]
+    assert "Title" not in md
+    assert "Author" not in md
+    assert "Subject" not in md
+    assert "Keywords" not in md
+
+
+def test_export_to_json_basic(tmp_path: Path):
+    src = _make_text_pdf(tmp_path / "export.pdf", ["Hello world", "Second page"])
+    out = tmp_path / "export.json"
+
+    res = pdf_tools.export_to_json(str(src), str(out))
+    assert Path(res["output_path"]).exists()
+
+    data = json.loads(Path(res["output_path"]).read_text())
+    assert data["page_count"] == 2
+    assert data["engine"] in ("auto", "native", "ocr")
+    assert "pages" in data and len(data["pages"]) == 2
+    assert "Hello world" in data["pages"][0]["text"]
+
+
+def test_export_to_markdown_basic(tmp_path: Path):
+    src = _make_text_pdf(tmp_path / "export.md.pdf", ["Hello world", "Second page"])
+    out = tmp_path / "export.md"
+
+    res = pdf_tools.export_to_markdown(str(src), str(out))
+    assert Path(res["output_path"]).exists()
+
+    content = Path(res["output_path"]).read_text()
+    assert "Hello world" in content
+    assert "Second page" in content
+
+
+def test_add_page_numbers_writes_annotations(tmp_path: Path):
+    src = _make_pdf(tmp_path / "pages.pdf", pages=2)
+    out = tmp_path / "pages_numbered.pdf"
+
+    res = pdf_tools.add_page_numbers(str(src), str(out))
+    assert Path(res["output_path"]).exists()
+    assert res["added"] == 2
+
+    from pypdf import PdfReader
+
+    reader = PdfReader(str(out))
+    annots = reader.pages[0].get("/Annots")
+    assert annots is not None
+    ann = annots[0].get_object()
+    assert "1" in str(ann.get("/Contents"))
+
+
+def test_add_bates_numbering_writes_annotations(tmp_path: Path):
+    src = _make_pdf(tmp_path / "bates.pdf", pages=2)
+    out = tmp_path / "bates_numbered.pdf"
+
+    res = pdf_tools.add_bates_numbering(str(src), str(out), prefix="DOC-", start=10)
+    assert Path(res["output_path"]).exists()
+    assert res["added"] == 2
+
+    from pypdf import PdfReader
+
+    reader = PdfReader(str(out))
+    annots = reader.pages[0].get("/Annots")
+    assert annots is not None
+    ann = annots[0].get_object()
+    assert "DOC-000010" in str(ann.get("/Contents"))
+
+
+def test_verify_digital_signatures_empty(tmp_path: Path):
+    src = _make_pdf(tmp_path / "unsigned.pdf", pages=1)
+    res = pdf_tools.verify_digital_signatures(str(src))
+    assert res["signatures"] == []
+    assert res["verified"] == 0
+
+
+def test_get_full_metadata_includes_document_info(tmp_path: Path):
+    src = _make_pdf(tmp_path / "meta.pdf", pages=2)
+    meta = tmp_path / "meta_out.pdf"
+    pdf_tools.set_pdf_metadata(
+        str(src),
+        str(meta),
+        title="Title",
+        author="Author",
+    )
+
+    res = pdf_tools.get_full_metadata(str(meta))
+    assert res["metadata"]["Title"] == "Title"
+    assert res["document"]["page_count"] == 2
+    assert isinstance(res["document"]["file_size_bytes"], int)
+
+
 def test_mcp_layer_can_call_all_tools(tmp_path: Path):
     """
     Smoke test the MCP layer in-process (closest to Cursor invocation) by calling
@@ -314,6 +486,58 @@ def test_mcp_layer_can_call_all_tools(tmp_path: Path):
     rr = PdfReader(str(rotated))
     assert rr.pages[0].get("/Rotate") in (90, 450)  # depending on normalization
 
+    # reorder_pages
+    reordered = tmp_path / "mcp_reordered.pdf"
+    res = asyncio.run(
+        call(
+            "reorder_pages",
+            {"input_path": str(merged), "pages": [3, 1, 2], "output_path": str(reordered)},
+        )
+    )
+    assert Path(res["output_path"]).exists()
+    assert PdfReader(str(reordered)).get_num_pages() == 3
+
+    # redact_text_regex
+    text_src = _make_text_pdf(tmp_path / "mcp_text.pdf", ["Secret 123", "Public info"])
+    redacted = tmp_path / "mcp_redacted.pdf"
+    res = asyncio.run(
+        call(
+            "redact_text_regex",
+            {
+                "input_path": str(text_src),
+                "output_path": str(redacted),
+                "pattern": r"Secret\s+\d+",
+            },
+        )
+    )
+    assert Path(res["output_path"]).exists()
+    assert res["redacted"] >= 1
+    redacted_text = "".join((page.extract_text() or "") for page in PdfReader(str(redacted)).pages)
+    assert "Secret" not in redacted_text
+    assert "Public" in redacted_text
+
+    # export_to_json
+    export_json = tmp_path / "mcp_export.json"
+    res = asyncio.run(
+        call(
+            "export_to_json",
+            {"pdf_path": str(text_src), "output_path": str(export_json)},
+        )
+    )
+    assert Path(res["output_path"]).exists()
+    export_data = json.loads(Path(res["output_path"]).read_text())
+    assert export_data["page_count"] == 2
+
+    # export_to_markdown
+    export_md = tmp_path / "mcp_export.md"
+    res = asyncio.run(
+        call(
+            "export_to_markdown",
+            {"pdf_path": str(text_src), "output_path": str(export_md)},
+        )
+    )
+    assert Path(res["output_path"]).exists()
+
     # annotations and managed text
     annotated = tmp_path / "mcp_annotated.pdf"
     res = asyncio.run(
@@ -402,6 +626,55 @@ def test_mcp_layer_can_call_all_tools(tmp_path: Path):
     md = res["metadata"]
     assert md.get("Title") == "T"
     assert md.get("Author") == "A"
+
+    # sanitize_pdf_metadata
+    sanitized = tmp_path / "mcp_meta_sanitized.pdf"
+    res = asyncio.run(
+        call(
+            "sanitize_pdf_metadata",
+            {"input_path": str(meta_out), "output_path": str(sanitized)},
+        )
+    )
+    assert Path(res["output_path"]).exists()
+    res = asyncio.run(call("get_pdf_metadata", {"pdf_path": str(sanitized)}))
+    md = res["metadata"]
+    assert "Title" not in md
+    assert "Author" not in md
+
+    # get_full_metadata
+    res = asyncio.run(call("get_full_metadata", {"pdf_path": str(meta_out)}))
+    assert res["document"]["page_count"] >= 1
+
+    # add_page_numbers
+    page_numbers = tmp_path / "mcp_page_numbers.pdf"
+    res = asyncio.run(
+        call(
+            "add_page_numbers",
+            {"input_path": str(blank_a), "output_path": str(page_numbers)},
+        )
+    )
+    assert Path(res["output_path"]).exists()
+    assert res["added"] == 2
+
+    # add_bates_numbering
+    bates = tmp_path / "mcp_bates.pdf"
+    res = asyncio.run(
+        call(
+            "add_bates_numbering",
+            {
+                "input_path": str(blank_a),
+                "output_path": str(bates),
+                "prefix": "DOC-",
+                "start": 1,
+            },
+        )
+    )
+    assert Path(res["output_path"]).exists()
+    assert res["added"] == 2
+
+    # verify_digital_signatures
+    res = asyncio.run(call("verify_digital_signatures", {"pdf_path": str(blank_a)}))
+    assert res["signatures"] == []
 
     # watermark
     wm_out = tmp_path / "mcp_wm.pdf"

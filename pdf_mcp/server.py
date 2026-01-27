@@ -6,15 +6,16 @@ Run with: python -m pdf_mcp.server
 
 Available tool categories:
 - Form handling (4 tools)
-- Page operations (5 tools)
-- Annotations & text (9 tools)
-- Signatures & security (4 tools)
-- Metadata (2 tools)
+- Page operations (6 tools)
+- Annotations & text (12 tools)
+- Signatures & security (5 tools)
+- Metadata (4 tools)
+- Export (2 tools)
 - OCR & text extraction (8 tools)
 - Table/image extraction (3 tools)
 - Form detection (1 tool)
 
-Version: 0.3.0
+Version: 0.4.0
 License: AGPL-3.0
 """
 from __future__ import annotations
@@ -145,6 +146,13 @@ def rotate_pages(
 
 @mcp.tool()
 @_handle_errors
+def reorder_pages(input_path: str, pages: List[int], output_path: str) -> Dict[str, Any]:
+    """Reorder pages in a PDF using a 1-based page list."""
+    return pdf_tools.reorder_pages(input_path, pages, output_path)
+
+
+@mcp.tool()
+@_handle_errors
 def add_text_annotation(
     input_path: str,
     page: int,
@@ -219,6 +227,71 @@ def remove_pages(input_path: str, pages: List[int], output_path: str) -> Dict[st
 
 @mcp.tool()
 @_handle_errors
+def redact_text_regex(
+    input_path: str,
+    output_path: str,
+    pattern: str,
+    pages: Optional[List[int]] = None,
+    case_insensitive: bool = False,
+    whole_words: bool = False,
+    fill: Optional[Sequence[float]] = None,
+) -> Dict[str, Any]:
+    """Redact text using a regex pattern."""
+    return pdf_tools.redact_text_regex(
+        input_path=input_path,
+        output_path=output_path,
+        pattern=pattern,
+        pages=pages,
+        case_insensitive=case_insensitive,
+        whole_words=whole_words,
+        fill=fill,
+    )
+
+
+@mcp.tool()
+@_handle_errors
+def export_to_json(
+    pdf_path: str,
+    output_path: str,
+    pages: Optional[List[int]] = None,
+    engine: str = "auto",
+    dpi: int = 300,
+    language: str = "eng",
+) -> Dict[str, Any]:
+    """Export PDF text and metadata to JSON."""
+    return pdf_tools.export_to_json(
+        pdf_path=pdf_path,
+        output_path=output_path,
+        pages=pages,
+        engine=engine,
+        dpi=dpi,
+        language=language,
+    )
+
+
+@mcp.tool()
+@_handle_errors
+def export_to_markdown(
+    pdf_path: str,
+    output_path: str,
+    pages: Optional[List[int]] = None,
+    engine: str = "auto",
+    dpi: int = 300,
+    language: str = "eng",
+) -> Dict[str, Any]:
+    """Export PDF text to Markdown."""
+    return pdf_tools.export_to_markdown(
+        pdf_path=pdf_path,
+        output_path=output_path,
+        pages=pages,
+        engine=engine,
+        dpi=dpi,
+        language=language,
+    )
+
+
+@mcp.tool()
+@_handle_errors
 def insert_text(
     input_path: str,
     page: int,
@@ -282,6 +355,91 @@ def set_pdf_metadata(
         subject=subject,
         keywords=keywords,
     )
+
+
+@mcp.tool()
+@_handle_errors
+def get_full_metadata(pdf_path: str) -> Dict[str, Any]:
+    """Get full PDF metadata and document info."""
+    return pdf_tools.get_full_metadata(pdf_path)
+
+
+@mcp.tool()
+@_handle_errors
+def sanitize_pdf_metadata(
+    input_path: str,
+    output_path: str,
+    remove_custom: bool = True,
+    remove_xmp: bool = True,
+) -> Dict[str, Any]:
+    """Remove metadata keys from a PDF."""
+    return pdf_tools.sanitize_pdf_metadata(
+        input_path=input_path,
+        output_path=output_path,
+        remove_custom=remove_custom,
+        remove_xmp=remove_xmp,
+    )
+
+
+@mcp.tool()
+@_handle_errors
+def add_page_numbers(
+    input_path: str,
+    output_path: str,
+    pages: Optional[List[int]] = None,
+    start: int = 1,
+    position: str = "bottom-right",
+    width: float = 120,
+    height: float = 20,
+    margin: float = 20,
+) -> Dict[str, Any]:
+    """Add page numbers as FreeText annotations."""
+    return pdf_tools.add_page_numbers(
+        input_path=input_path,
+        output_path=output_path,
+        pages=pages,
+        start=start,
+        position=position,
+        width=width,
+        height=height,
+        margin=margin,
+    )
+
+
+@mcp.tool()
+@_handle_errors
+def add_bates_numbering(
+    input_path: str,
+    output_path: str,
+    prefix: str = "",
+    start: int = 1,
+    width: int = 6,
+    pages: Optional[List[int]] = None,
+    position: str = "bottom-right",
+    margin: float = 20,
+    box_width: float = 160,
+    box_height: float = 20,
+) -> Dict[str, Any]:
+    """Add Bates numbering as FreeText annotations."""
+    return pdf_tools.add_bates_numbering(
+        input_path=input_path,
+        output_path=output_path,
+        prefix=prefix,
+        start=start,
+        width=width,
+        pages=pages,
+        position=position,
+        margin=margin,
+        box_width=box_width,
+        box_height=box_height,
+    )
+
+
+@mcp.tool()
+@_handle_errors
+def verify_digital_signatures(pdf_path: str) -> Dict[str, Any]:
+    """Verify digital signatures in a PDF."""
+    return pdf_tools.verify_digital_signatures(pdf_path)
 
 
 @mcp.tool()
