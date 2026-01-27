@@ -1,12 +1,31 @@
 # PDF MCP Server
 
-MCP server for PDF form filling, basic editing (merge, extract, rotate, flatten), and **OCR text extraction**. Built with Python, `pypdf`, `fillpdf`, and `pymupdf` (AGPL).
+**Version 0.2.0** | MCP server for PDF form filling, editing, OCR text extraction, table extraction, and image extraction.
+
+Built with Python, `pypdf`, `fillpdf`, and `pymupdf` (AGPL).
 
 **Goal**: Extract 99% of information from any PDF file, including scanned/image-based documents, and fill any PDF forms.
 
 ## Status
 [![CI](https://github.com/nfsarch33/pdf-mcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/nfsarch33/pdf-mcp-server/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/nfsarch33/pdf-mcp-server/actions/workflows/codeql.yml/badge.svg)](https://github.com/nfsarch33/pdf-mcp-server/actions/workflows/codeql.yml)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL%203.0-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
+
+## Quick Start
+
+```bash
+# Clone and setup
+git clone https://github.com/nfsarch33/pdf-mcp-server.git
+cd pdf-mcp-server
+uv pip install -r requirements.txt
+
+# Run tests
+make test
+
+# Start the MCP server
+python -m pdf_mcp.server
+```
 
 ## CI notes
 - Dependency Review requires GitHub Dependency Graph to be enabled in the repository settings.
@@ -77,7 +96,21 @@ Edit `~/.cursor/mcp.json`:
 ```
 Restart Cursor after saving.
 
-## Available tools (initial)
+## Features Overview
+
+| Category | Tools | Description |
+|----------|-------|-------------|
+| **Form Handling** | 4 tools | Fill, clear, flatten PDF forms |
+| **Page Operations** | 5 tools | Merge, extract, rotate, insert, remove pages |
+| **Annotations** | 9 tools | Text, comments, watermarks, signatures |
+| **OCR & Text** | 8 tools | Type detection, native/OCR extraction, confidence scores |
+| **Table Extraction** | 1 tool | Extract tables as structured data |
+| **Image Extraction** | 2 tools | Extract/analyze embedded images |
+| **Form Detection** | 1 tool | Auto-detect form fields in non-AcroForm PDFs |
+
+## Available Tools
+
+### Form Operations
 - `get_pdf_form_fields(pdf_path)`: list fields and count.
 - `fill_pdf_form(input_path, output_path, data, flatten=False)`: fill fields; optional flatten (uses fillpdf if available, else pypdf fallback).
 - `clear_pdf_form_fields(input_path, output_path, fields=None)`: clear (delete) values for selected form fields while keeping fields fillable.
