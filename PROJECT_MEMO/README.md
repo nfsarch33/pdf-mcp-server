@@ -27,6 +27,7 @@ Read in order:
 These are maintained here:
 - `GLOBAL_CURSOR_INSTRUCTIONS.md`
 - `MEMORY_AND_RULES.md`
+- `PROJECT_STATUS_PROMPT.md`
 
 Repo root keeps short “moved to …” stubs for backward compatibility.
 
