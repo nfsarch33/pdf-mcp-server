@@ -6,6 +6,43 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 0.2.0 - 2026-01-26
+
+### Added
+- **OCR Phase 2: Enhanced OCR with Multi-language Support**
+  - `get_ocr_languages`: Get available OCR languages and Tesseract status
+  - `extract_text_with_confidence`: OCR with word-level confidence scores (0-100)
+  - Multi-language support using Tesseract language codes (e.g., "eng+fra")
+  - Confidence filtering with `min_confidence` parameter
+
+- **Table Extraction**
+  - `extract_tables`: Extract tables from PDF pages as structured data
+  - Output formats: "list" (list of lists) or "dict" (list of dicts with headers)
+  - Table bounding box and cell data extraction
+
+- **Image Extraction**
+  - `extract_images`: Extract embedded images to files (png/jpeg/ppm)
+  - `get_image_info`: Get image metadata without extracting
+  - Configurable minimum dimensions filter
+  - Image position and format information
+
+- **Smart/Hybrid Text Extraction**
+  - `extract_text_smart`: Per-page method selection (native vs OCR)
+  - Configurable native text threshold for OCR fallback
+  - Optimal handling of hybrid documents with mixed page types
+
+- **Form Auto-Detection**
+  - `detect_form_fields`: Detect potential form fields using text analysis
+  - Label pattern detection (Name:, Date:, Address:, etc.)
+  - Checkbox/selection pattern detection
+  - Suggestions for non-AcroForm PDF forms
+  - Field type guessing based on label text
+
+- Comprehensive integration tests for all Phase 2 features (38 new test cases)
+
+### Changed
+- Project goal clarified: "Extract 99% of information from any PDF file"
+
 ## 0.1.3 - 2026-01-06
 
 ### Added

@@ -478,6 +478,171 @@ def get_pdf_text_blocks(
     return pdf_tools.get_pdf_text_blocks(pdf_path, pages=pages)
 
 
+# =============================================================================
+# OCR Phase 2: Enhanced OCR Tools
+# =============================================================================
+
+
+@mcp.tool()
+@_handle_errors
+def get_ocr_languages() -> Dict[str, Any]:
+    """
+    Get available OCR languages and Tesseract installation status.
+
+    Returns list of installed language codes and common language mappings.
+    """
+    return pdf_tools.get_ocr_languages()
+
+
+@mcp.tool()
+@_handle_errors
+def extract_text_with_confidence(
+    pdf_path: str,
+    pages: Optional[List[int]] = None,
+    language: str = "eng",
+    dpi: int = 300,
+    min_confidence: int = 0,
+) -> Dict[str, Any]:
+    """
+    Extract text from PDF with OCR confidence scores.
+
+    Returns word-level confidence scores (0-100), allowing filtering of
+    low-confidence text. Useful for quality assessment and post-processing.
+
+    Supports multi-language with '+' separator (e.g., "eng+fra").
+    """
+    return pdf_tools.extract_text_with_confidence(
+        pdf_path,
+        pages=pages,
+        language=language,
+        dpi=dpi,
+        min_confidence=min_confidence,
+    )
+
+
+# =============================================================================
+# Table Extraction Tools
+# =============================================================================
+
+
+@mcp.tool()
+@_handle_errors
+def extract_tables(
+    pdf_path: str,
+    pages: Optional[List[int]] = None,
+    output_format: str = "list",
+) -> Dict[str, Any]:
+    """
+    Extract tables from PDF pages.
+
+    Uses table detection to find and extract tabular data.
+
+    Args:
+        output_format: "list" for list of lists, "dict" for list of dicts with headers
+    """
+    return pdf_tools.extract_tables(pdf_path, pages=pages, output_format=output_format)
+
+
+# =============================================================================
+# Image Extraction Tools
+# =============================================================================
+
+
+@mcp.tool()
+@_handle_errors
+def extract_images(
+    pdf_path: str,
+    output_dir: str,
+    pages: Optional[List[int]] = None,
+    min_width: int = 50,
+    min_height: int = 50,
+    image_format: str = "png",
+) -> Dict[str, Any]:
+    """
+    Extract embedded images from PDF pages.
+
+    Saves images to output_dir with format: page{N}_img{M}.{ext}
+    """
+    return pdf_tools.extract_images(
+        pdf_path,
+        output_dir,
+        pages=pages,
+        min_width=min_width,
+        min_height=min_height,
+        image_format=image_format,
+    )
+
+
+@mcp.tool()
+@_handle_errors
+def get_image_info(
+    pdf_path: str,
+    pages: Optional[List[int]] = None,
+) -> Dict[str, Any]:
+    """
+    Get information about images in a PDF without extracting them.
+
+    Returns image metadata: dimensions, format, position, etc.
+    """
+    return pdf_tools.get_image_info(pdf_path, pages=pages)
+
+
+# =============================================================================
+# Smart/Hybrid Text Extraction
+# =============================================================================
+
+
+@mcp.tool()
+@_handle_errors
+def extract_text_smart(
+    pdf_path: str,
+    pages: Optional[List[int]] = None,
+    native_threshold: int = 100,
+    ocr_dpi: int = 300,
+    language: str = "eng",
+) -> Dict[str, Any]:
+    """
+    Smart text extraction with per-page method selection.
+
+    For each page, decides whether to use native extraction or OCR based on
+    the native text content. Optimal for hybrid documents with mixed pages.
+
+    Args:
+        native_threshold: Min chars to prefer native extraction (default: 100)
+    """
+    return pdf_tools.extract_text_smart(
+        pdf_path,
+        pages=pages,
+        native_threshold=native_threshold,
+        ocr_dpi=ocr_dpi,
+        language=language,
+    )
+
+
+# =============================================================================
+# Form Auto-Detection
+# =============================================================================
+
+
+@mcp.tool()
+@_handle_errors
+def detect_form_fields(
+    pdf_path: str,
+    pages: Optional[List[int]] = None,
+) -> Dict[str, Any]:
+    """
+    Detect potential form fields in a PDF using text analysis.
+
+    Analyzes text blocks to find patterns suggesting fillable fields:
+    - Labels like "Name:", "Date:", "Address:"
+    - Checkbox indicators
+    - Underlines for text entry
+
+    Useful for PDFs that appear to be forms but don't have AcroForm fields.
+    """
+    return pdf_tools.detect_form_fields(pdf_path, pages=pages)
+
+
 if __name__ == "__main__":
     mcp.run(transport="stdio")
 

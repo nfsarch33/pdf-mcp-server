@@ -34,6 +34,25 @@ try:
 except ImportError:
     _HAS_TESSERACT = False
 
+# Common Tesseract language codes
+TESSERACT_LANGUAGES = {
+    "eng": "English",
+    "chi_sim": "Chinese (Simplified)",
+    "chi_tra": "Chinese (Traditional)",
+    "jpn": "Japanese",
+    "kor": "Korean",
+    "fra": "French",
+    "deu": "German",
+    "spa": "Spanish",
+    "ita": "Italian",
+    "por": "Portuguese",
+    "rus": "Russian",
+    "ara": "Arabic",
+    "hin": "Hindi",
+    "vie": "Vietnamese",
+    "tha": "Thai",
+}
+
 
 @dataclass
 class PdfToolError(Exception):
@@ -1441,4 +1460,768 @@ def get_pdf_text_blocks(
         }
     finally:
         doc.close()
+
+
+# =============================================================================
+# OCR Phase 2: Enhanced OCR with multi-language and confidence scores
+# =============================================================================
+
+
+def get_ocr_languages() -> Dict[str, Any]:
+    """
+    Get available OCR languages and Tesseract installation status.
+
+    Returns list of common language codes and whether Tesseract is available.
+    """
+    installed_languages: List[str] = []
+    if _HAS_TESSERACT:
+        try:
+            # Get installed languages from tesseract
+            langs = pytesseract.get_languages()
+            installed_languages = [l for l in langs if l != "osd"]
+        except Exception:
+            pass
+
+    return {
+        "tesseract_available": _HAS_TESSERACT,
+        "installed_languages": installed_languages,
+        "common_language_codes": TESSERACT_LANGUAGES,
+    }
+
+
+def extract_text_with_confidence(
+    pdf_path: str,
+    pages: Optional[List[int]] = None,
+    language: str = "eng",
+    dpi: int = 300,
+    min_confidence: int = 0,
+) -> Dict[str, Any]:
+    """
+    Extract text from PDF with OCR confidence scores.
+
+    This function performs OCR and returns word-level confidence scores,
+    allowing filtering of low-confidence text.
+
+    Args:
+        pdf_path: Path to PDF file
+        pages: Optional list of 1-based page numbers (default: all pages)
+        language: Tesseract language code (default: "eng"). Use "+" for multiple: "eng+fra"
+        dpi: Resolution for rendering pages (default: 300)
+        min_confidence: Minimum confidence threshold 0-100 (default: 0 = all text)
+
+    Returns:
+        Dict with text, confidence scores, and word-level details
+    """
+    if not _HAS_TESSERACT:
+        raise PdfToolError(
+            "Tesseract OCR not available. Install pytesseract and tesseract-ocr."
+        )
+
+    path = _ensure_file(pdf_path)
+    doc = pymupdf.open(str(path))
+
+    try:
+        total_pages = doc.page_count
+        if pages:
+            page_indices = _to_zero_based_pages(pages, total_pages)
+        else:
+            page_indices = list(range(total_pages))
+
+        extracted_pages: List[Dict[str, Any]] = []
+        total_words = 0
+        total_confidence_sum = 0.0
+        all_text_parts: List[str] = []
+
+        for idx in page_indices:
+            page = doc.load_page(idx)
+            page_result: Dict[str, Any] = {"page": idx + 1, "words": []}
+
+            # Render page to image
+            mat = pymupdf.Matrix(dpi / 72, dpi / 72)
+            pix = page.get_pixmap(matrix=mat)
+            img_data = pix.tobytes("png")
+            img = Image.open(io.BytesIO(img_data))
+
+            # Get word-level OCR data with confidence
+            try:
+                ocr_data = pytesseract.image_to_data(
+                    img, lang=language, output_type=pytesseract.Output.DICT
+                )
+
+                page_text_parts: List[str] = []
+                page_words: List[Dict[str, Any]] = []
+                page_confidence_sum = 0.0
+                page_word_count = 0
+
+                for i, word in enumerate(ocr_data["text"]):
+                    conf = int(ocr_data["conf"][i])
+                    if word.strip() and conf >= min_confidence:
+                        word_info = {
+                            "text": word,
+                            "confidence": conf,
+                            "bbox": [
+                                ocr_data["left"][i],
+                                ocr_data["top"][i],
+                                ocr_data["left"][i] + ocr_data["width"][i],
+                                ocr_data["top"][i] + ocr_data["height"][i],
+                            ],
+                            "line_num": ocr_data["line_num"][i],
+                            "block_num": ocr_data["block_num"][i],
+                        }
+                        page_words.append(word_info)
+                        page_text_parts.append(word)
+                        if conf >= 0:  # Tesseract returns -1 for non-text
+                            page_confidence_sum += conf
+                            page_word_count += 1
+
+                page_text = " ".join(page_text_parts)
+                page_avg_confidence = (
+                    page_confidence_sum / page_word_count if page_word_count > 0 else 0
+                )
+
+                page_result["text"] = page_text
+                page_result["words"] = page_words
+                page_result["word_count"] = page_word_count
+                page_result["average_confidence"] = round(page_avg_confidence, 1)
+
+                all_text_parts.append(page_text)
+                total_words += page_word_count
+                total_confidence_sum += page_confidence_sum
+
+            except Exception as e:
+                page_result["error"] = str(e)
+                page_result["text"] = ""
+                page_result["words"] = []
+                page_result["word_count"] = 0
+                page_result["average_confidence"] = 0
+
+            extracted_pages.append(page_result)
+
+        overall_avg_confidence = (
+            total_confidence_sum / total_words if total_words > 0 else 0
+        )
+
+        return {
+            "pdf_path": str(path),
+            "language": language,
+            "dpi": dpi,
+            "min_confidence": min_confidence,
+            "pages_extracted": len(extracted_pages),
+            "total_words": total_words,
+            "overall_average_confidence": round(overall_avg_confidence, 1),
+            "text": "\n\n--- Page Break ---\n\n".join(all_text_parts),
+            "page_details": extracted_pages,
+        }
+    finally:
+        doc.close()
+
+
+# =============================================================================
+# Table Extraction
+# =============================================================================
+
+
+def extract_tables(
+    pdf_path: str,
+    pages: Optional[List[int]] = None,
+    output_format: str = "list",
+) -> Dict[str, Any]:
+    """
+    Extract tables from PDF pages.
+
+    Uses PyMuPDF's table detection to find and extract tabular data.
+
+    Args:
+        pdf_path: Path to PDF file
+        pages: Optional list of 1-based page numbers (default: all pages)
+        output_format: "list" for list of lists, "dict" for list of dicts with headers
+
+    Returns:
+        Dict with extracted tables per page
+    """
+    if output_format not in ("list", "dict"):
+        raise PdfToolError("output_format must be 'list' or 'dict'")
+
+    path = _ensure_file(pdf_path)
+    doc = pymupdf.open(str(path))
+
+    try:
+        total_pages = doc.page_count
+        if pages:
+            page_indices = _to_zero_based_pages(pages, total_pages)
+        else:
+            page_indices = list(range(total_pages))
+
+        page_tables: List[Dict[str, Any]] = []
+        total_tables = 0
+
+        for idx in page_indices:
+            page = doc.load_page(idx)
+            page_result: Dict[str, Any] = {
+                "page": idx + 1,
+                "tables": [],
+            }
+
+            # Use PyMuPDF's table finder
+            try:
+                tabs = page.find_tables()
+
+                for table_idx, table in enumerate(tabs):
+                    # Extract table data
+                    raw_data = table.extract()
+
+                    if not raw_data:
+                        continue
+
+                    table_info: Dict[str, Any] = {
+                        "table_index": table_idx,
+                        "bbox": list(table.bbox),
+                        "rows": len(raw_data),
+                        "cols": len(raw_data[0]) if raw_data else 0,
+                    }
+
+                    if output_format == "dict" and len(raw_data) > 1:
+                        # Use first row as headers
+                        headers = [str(h) if h else f"col_{i}" for i, h in enumerate(raw_data[0])]
+                        table_info["headers"] = headers
+                        table_info["data"] = [
+                            {headers[i]: cell for i, cell in enumerate(row)}
+                            for row in raw_data[1:]
+                        ]
+                    else:
+                        table_info["data"] = raw_data
+
+                    page_result["tables"].append(table_info)
+                    total_tables += 1
+
+            except Exception as e:
+                page_result["error"] = str(e)
+
+            page_tables.append(page_result)
+
+        return {
+            "pdf_path": str(path),
+            "total_pages": total_pages,
+            "pages_analyzed": len(page_tables),
+            "total_tables": total_tables,
+            "output_format": output_format,
+            "page_tables": page_tables,
+        }
+    finally:
+        doc.close()
+
+
+# =============================================================================
+# Image Extraction
+# =============================================================================
+
+
+def extract_images(
+    pdf_path: str,
+    output_dir: str,
+    pages: Optional[List[int]] = None,
+    min_width: int = 50,
+    min_height: int = 50,
+    image_format: str = "png",
+) -> Dict[str, Any]:
+    """
+    Extract embedded images from PDF pages.
+
+    Args:
+        pdf_path: Path to PDF file
+        output_dir: Directory to save extracted images
+        pages: Optional list of 1-based page numbers (default: all pages)
+        min_width: Minimum image width to extract (default: 50)
+        min_height: Minimum image height to extract (default: 50)
+        image_format: Output format: "png", "jpeg", "ppm" (default: "png")
+
+    Returns:
+        Dict with list of extracted image paths and metadata
+    """
+    if image_format not in ("png", "jpeg", "ppm"):
+        raise PdfToolError("image_format must be 'png', 'jpeg', or 'ppm'")
+
+    path = _ensure_file(pdf_path)
+    out_dir = Path(output_dir).expanduser()
+    if not out_dir.is_absolute():
+        out_dir = out_dir.resolve()
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    doc = pymupdf.open(str(path))
+
+    try:
+        total_pages = doc.page_count
+        if pages:
+            page_indices = _to_zero_based_pages(pages, total_pages)
+        else:
+            page_indices = list(range(total_pages))
+
+        extracted_images: List[Dict[str, Any]] = []
+        skipped_count = 0
+
+        for idx in page_indices:
+            page = doc.load_page(idx)
+            images = page.get_images(full=True)
+
+            for img_idx, img_info in enumerate(images):
+                xref = img_info[0]
+
+                try:
+                    # Extract image data
+                    base_image = doc.extract_image(xref)
+                    if not base_image:
+                        continue
+
+                    img_bytes = base_image.get("image")
+                    img_ext = base_image.get("ext", "png")
+                    width = base_image.get("width", 0)
+                    height = base_image.get("height", 0)
+
+                    # Skip small images
+                    if width < min_width or height < min_height:
+                        skipped_count += 1
+                        continue
+
+                    # Determine output filename
+                    output_ext = "jpg" if image_format == "jpeg" else image_format
+                    filename = f"page{idx + 1}_img{img_idx + 1}.{output_ext}"
+                    output_path = out_dir / filename
+
+                    # Convert format if needed
+                    if image_format != img_ext:
+                        try:
+                            pil_img = Image.open(io.BytesIO(img_bytes))
+                            # PIL uses "JPEG" not "jpeg"
+                            pil_format = "JPEG" if image_format == "jpeg" else image_format.upper()
+                            with output_path.open("wb") as f:
+                                pil_img.save(f, format=pil_format)
+                        except Exception:
+                            # Fall back to original format
+                            fallback_path = out_dir / f"page{idx + 1}_img{img_idx + 1}.{img_ext}"
+                            with fallback_path.open("wb") as f:
+                                f.write(img_bytes)
+                            output_path = fallback_path
+                    else:
+                        with output_path.open("wb") as f:
+                            f.write(img_bytes)
+
+                    extracted_images.append({
+                        "page": idx + 1,
+                        "image_index": img_idx,
+                        "xref": xref,
+                        "width": width,
+                        "height": height,
+                        "original_format": img_ext,
+                        "output_path": str(output_path),
+                    })
+
+                except Exception as e:
+                    extracted_images.append({
+                        "page": idx + 1,
+                        "image_index": img_idx,
+                        "xref": xref,
+                        "error": str(e),
+                    })
+
+        return {
+            "pdf_path": str(path),
+            "output_dir": str(out_dir),
+            "total_pages": total_pages,
+            "pages_processed": len(page_indices),
+            "images_extracted": len([i for i in extracted_images if "output_path" in i]),
+            "images_skipped": skipped_count,
+            "min_dimensions": {"width": min_width, "height": min_height},
+            "images": extracted_images,
+        }
+    finally:
+        doc.close()
+
+
+def get_image_info(pdf_path: str, pages: Optional[List[int]] = None) -> Dict[str, Any]:
+    """
+    Get information about images in a PDF without extracting them.
+
+    Args:
+        pdf_path: Path to PDF file
+        pages: Optional list of 1-based page numbers (default: all pages)
+
+    Returns:
+        Dict with image metadata per page
+    """
+    path = _ensure_file(pdf_path)
+    doc = pymupdf.open(str(path))
+
+    try:
+        total_pages = doc.page_count
+        if pages:
+            page_indices = _to_zero_based_pages(pages, total_pages)
+        else:
+            page_indices = list(range(total_pages))
+
+        page_images: List[Dict[str, Any]] = []
+        total_images = 0
+
+        for idx in page_indices:
+            page = doc.load_page(idx)
+            images = page.get_images(full=True)
+
+            page_info: Dict[str, Any] = {
+                "page": idx + 1,
+                "image_count": len(images),
+                "images": [],
+            }
+
+            for img_idx, img_info in enumerate(images):
+                xref = img_info[0]
+                try:
+                    base_image = doc.extract_image(xref)
+                    width = base_image.get("width", 0)
+                    height = base_image.get("height", 0)
+                    colorspace = base_image.get("colorspace", 0)
+                    bpc = base_image.get("bpc", 0)
+                    img_ext = base_image.get("ext", "unknown")
+
+                    # Get image position on page
+                    img_rects = page.get_image_rects(xref)
+                    positions = [list(r) for r in img_rects] if img_rects else []
+
+                    page_info["images"].append({
+                        "index": img_idx,
+                        "xref": xref,
+                        "width": width,
+                        "height": height,
+                        "format": img_ext,
+                        "colorspace": colorspace,
+                        "bits_per_component": bpc,
+                        "positions": positions,
+                    })
+                except Exception as e:
+                    page_info["images"].append({
+                        "index": img_idx,
+                        "xref": xref,
+                        "error": str(e),
+                    })
+
+            total_images += len(images)
+            page_images.append(page_info)
+
+        return {
+            "pdf_path": str(path),
+            "total_pages": total_pages,
+            "pages_analyzed": len(page_images),
+            "total_images": total_images,
+            "page_images": page_images,
+        }
+    finally:
+        doc.close()
+
+
+# =============================================================================
+# Hybrid Document Processing (Enhanced)
+# =============================================================================
+
+
+def extract_text_smart(
+    pdf_path: str,
+    pages: Optional[List[int]] = None,
+    native_threshold: int = 100,
+    ocr_dpi: int = 300,
+    language: str = "eng",
+) -> Dict[str, Any]:
+    """
+    Smart text extraction with per-page method selection.
+
+    For each page, decides whether to use native extraction or OCR based on
+    the native text content. This provides optimal results for hybrid documents.
+
+    Args:
+        pdf_path: Path to PDF file
+        pages: Optional list of 1-based page numbers (default: all pages)
+        native_threshold: Minimum chars to prefer native extraction (default: 100)
+        ocr_dpi: DPI for OCR rendering (default: 300)
+        language: Tesseract language code (default: "eng")
+
+    Returns:
+        Dict with extracted text and per-page method details
+    """
+    path = _ensure_file(pdf_path)
+    doc = pymupdf.open(str(path))
+
+    try:
+        total_pages = doc.page_count
+        if pages:
+            page_indices = _to_zero_based_pages(pages, total_pages)
+        else:
+            page_indices = list(range(total_pages))
+
+        extracted_pages: List[Dict[str, Any]] = []
+        all_text_parts: List[str] = []
+        total_chars = 0
+        native_pages = 0
+        ocr_pages = 0
+
+        for idx in page_indices:
+            page = doc.load_page(idx)
+            page_result: Dict[str, Any] = {"page": idx + 1}
+
+            # Try native extraction first
+            native_text = page.get_text("text").strip()
+            native_chars = len(native_text)
+            page_result["native_chars"] = native_chars
+
+            # Check if page has images
+            images = page.get_images()
+            has_images = len(images) > 0
+            page_result["has_images"] = has_images
+
+            # Decide method for this page
+            use_native = native_chars >= native_threshold
+
+            if use_native:
+                page_result["method"] = "native"
+                page_result["text"] = native_text
+                page_result["char_count"] = native_chars
+                all_text_parts.append(native_text)
+                total_chars += native_chars
+                native_pages += 1
+            else:
+                # Try OCR if Tesseract is available and page has images
+                if _HAS_TESSERACT and has_images:
+                    try:
+                        mat = pymupdf.Matrix(ocr_dpi / 72, ocr_dpi / 72)
+                        pix = page.get_pixmap(matrix=mat)
+                        img_data = pix.tobytes("png")
+                        img = Image.open(io.BytesIO(img_data))
+                        ocr_text = pytesseract.image_to_string(img, lang=language).strip()
+
+                        page_result["method"] = "ocr"
+                        page_result["text"] = ocr_text
+                        page_result["char_count"] = len(ocr_text)
+                        all_text_parts.append(ocr_text)
+                        total_chars += len(ocr_text)
+                        ocr_pages += 1
+                    except Exception as e:
+                        # Fall back to native on OCR error
+                        page_result["method"] = "native"
+                        page_result["text"] = native_text
+                        page_result["char_count"] = native_chars
+                        page_result["ocr_error"] = str(e)
+                        all_text_parts.append(native_text)
+                        total_chars += native_chars
+                        native_pages += 1
+                else:
+                    # No OCR available, use native
+                    page_result["method"] = "native"
+                    page_result["text"] = native_text
+                    page_result["char_count"] = native_chars
+                    page_result["ocr_unavailable"] = not _HAS_TESSERACT
+                    all_text_parts.append(native_text)
+                    total_chars += native_chars
+                    native_pages += 1
+
+            extracted_pages.append(page_result)
+
+        return {
+            "pdf_path": str(path),
+            "total_pages": total_pages,
+            "pages_extracted": len(extracted_pages),
+            "total_chars": total_chars,
+            "native_threshold": native_threshold,
+            "pages_using_native": native_pages,
+            "pages_using_ocr": ocr_pages,
+            "tesseract_available": _HAS_TESSERACT,
+            "text": "\n\n--- Page Break ---\n\n".join(all_text_parts),
+            "page_details": extracted_pages,
+        }
+    finally:
+        doc.close()
+
+
+# =============================================================================
+# Form Auto-Detection
+# =============================================================================
+
+
+def detect_form_fields(
+    pdf_path: str,
+    pages: Optional[List[int]] = None,
+) -> Dict[str, Any]:
+    """
+    Detect potential form fields in a PDF using text analysis.
+
+    Analyzes text blocks to find patterns that suggest fillable fields:
+    - Text followed by underlines or boxes
+    - Label patterns (e.g., "Name:", "Date:", "Address:")
+    - Checkbox indicators
+    - Empty rectangular regions near labels
+
+    This is useful for PDFs that don't have AcroForm fields but appear
+    to be forms visually.
+
+    Args:
+        pdf_path: Path to PDF file
+        pages: Optional list of 1-based page numbers (default: all pages)
+
+    Returns:
+        Dict with detected potential form fields
+    """
+    path = _ensure_file(pdf_path)
+    doc = pymupdf.open(str(path))
+
+    # Common form field label patterns
+    import re
+    label_patterns = [
+        re.compile(r"^(name|full name|first name|last name)\s*:?\s*$", re.I),
+        re.compile(r"^(date|dob|date of birth)\s*:?\s*$", re.I),
+        re.compile(r"^(address|street|city|state|zip|postal)\s*:?\s*$", re.I),
+        re.compile(r"^(phone|telephone|mobile|cell|fax)\s*:?\s*$", re.I),
+        re.compile(r"^(email|e-mail)\s*:?\s*$", re.I),
+        re.compile(r"^(signature)\s*:?\s*$", re.I),
+        re.compile(r"^(company|organization|employer)\s*:?\s*$", re.I),
+        re.compile(r"^(title|position|job title)\s*:?\s*$", re.I),
+        re.compile(r"^(ssn|social security|tax id|ein)\s*:?\s*$", re.I),
+        re.compile(r"^(amount|total|subtotal|price)\s*:?\s*$", re.I),
+        re.compile(r"^(comments?|notes?|remarks?)\s*:?\s*$", re.I),
+    ]
+
+    # Checkbox/selection patterns
+    checkbox_patterns = [
+        re.compile(r"^\s*[\[\(\{\<]\s*[\]\)\}\>]\s*", re.I),  # [ ] or ( ) etc.
+        re.compile(r"^\s*[\u2610\u2611\u2612\u25A1\u25A0]\s*", re.I),  # Unicode checkboxes
+        re.compile(r"^(yes|no)\s*[\[\(\{]?\s*[\]\)\}]?\s*$", re.I),
+    ]
+
+    try:
+        total_pages = doc.page_count
+        if pages:
+            page_indices = _to_zero_based_pages(pages, total_pages)
+        else:
+            page_indices = list(range(total_pages))
+
+        # Check if PDF already has AcroForm fields
+        reader = PdfReader(str(path))
+        existing_fields = reader.get_fields() or {}
+        has_acroform = len(existing_fields) > 0
+
+        detected_fields: List[Dict[str, Any]] = []
+        page_analyses: List[Dict[str, Any]] = []
+
+        for idx in page_indices:
+            page = doc.load_page(idx)
+            page_result: Dict[str, Any] = {
+                "page": idx + 1,
+                "detected_labels": [],
+                "detected_checkboxes": [],
+                "detected_underlines": [],
+            }
+
+            # Get text blocks with positions
+            blocks = page.get_text("dict", flags=pymupdf.TEXT_PRESERVE_WHITESPACE)
+
+            for block in blocks.get("blocks", []):
+                if block.get("type", 0) != 0:  # Skip non-text blocks
+                    continue
+
+                for line in block.get("lines", []):
+                    line_text = ""
+                    line_bbox = line.get("bbox", [])
+                    for span in line.get("spans", []):
+                        line_text += span.get("text", "")
+
+                    line_text_clean = line_text.strip()
+                    if not line_text_clean:
+                        continue
+
+                    # Check for label patterns
+                    for pattern in label_patterns:
+                        if pattern.match(line_text_clean):
+                            field_info = {
+                                "type": "label",
+                                "text": line_text_clean,
+                                "bbox": list(line_bbox) if line_bbox else None,
+                                "page": idx + 1,
+                                "suggested_field_type": _guess_field_type(line_text_clean),
+                            }
+                            page_result["detected_labels"].append(field_info)
+                            detected_fields.append(field_info)
+                            break
+
+                    # Check for checkbox patterns
+                    for pattern in checkbox_patterns:
+                        if pattern.match(line_text_clean):
+                            field_info = {
+                                "type": "checkbox",
+                                "text": line_text_clean,
+                                "bbox": list(line_bbox) if line_bbox else None,
+                                "page": idx + 1,
+                            }
+                            page_result["detected_checkboxes"].append(field_info)
+                            detected_fields.append(field_info)
+                            break
+
+            # Detect drawings that might be form fields (lines, rectangles)
+            try:
+                drawings = page.get_drawings()
+                for drawing in drawings:
+                    if drawing.get("type") == "l":  # Line
+                        rect = drawing.get("rect", [])
+                        if rect:
+                            # Horizontal lines might be underlines for text fields
+                            if abs(rect[3] - rect[1]) < 5:  # Nearly horizontal
+                                width = abs(rect[2] - rect[0])
+                                if width > 50:  # Minimum width
+                                    page_result["detected_underlines"].append({
+                                        "bbox": list(rect),
+                                        "width": width,
+                                    })
+            except Exception:
+                pass  # get_drawings might not be available in all PyMuPDF versions
+
+            page_analyses.append(page_result)
+
+        return {
+            "pdf_path": str(path),
+            "total_pages": total_pages,
+            "pages_analyzed": len(page_analyses),
+            "has_existing_acroform": has_acroform,
+            "existing_field_count": len(existing_fields),
+            "detected_potential_fields": len(detected_fields),
+            "detected_fields": detected_fields,
+            "page_analysis": page_analyses,
+            "recommendation": _form_recommendation(has_acroform, len(detected_fields)),
+        }
+    finally:
+        doc.close()
+
+
+def _guess_field_type(label_text: str) -> str:
+    """Guess the appropriate form field type based on label text."""
+    label_lower = label_text.lower()
+    if any(x in label_lower for x in ["date", "dob"]):
+        return "date"
+    if any(x in label_lower for x in ["email", "e-mail"]):
+        return "email"
+    if any(x in label_lower for x in ["phone", "telephone", "mobile", "cell", "fax"]):
+        return "phone"
+    if any(x in label_lower for x in ["signature"]):
+        return "signature"
+    if any(x in label_lower for x in ["address", "street", "city"]):
+        return "address"
+    if any(x in label_lower for x in ["amount", "total", "price"]):
+        return "number"
+    if any(x in label_lower for x in ["comments", "notes", "remarks"]):
+        return "textarea"
+    return "text"
+
+
+def _form_recommendation(has_acroform: bool, detected_count: int) -> str:
+    """Generate recommendation based on form analysis."""
+    if has_acroform:
+        return "PDF has existing AcroForm fields. Use get_pdf_form_fields and fill_pdf_form."
+    if detected_count > 0:
+        return (
+            f"Detected {detected_count} potential form fields. "
+            "Consider using add_text_annotation to fill fields at detected positions."
+        )
+    return "No form fields detected. PDF may not be a form."
 

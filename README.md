@@ -111,6 +111,21 @@ Restart Cursor after saving.
 - `extract_text_ocr(pdf_path, pages=None, engine="auto", dpi=300, language="eng")`: extract text with OCR fallback; engine options: "auto" (native→OCR), "native", "tesseract", "force_ocr".
 - `get_pdf_text_blocks(pdf_path, pages=None)`: extract text blocks with bounding box positions (useful for form field detection).
 
+### OCR Phase 2: Enhanced OCR Tools
+- `get_ocr_languages()`: get available Tesseract languages and installation status.
+- `extract_text_with_confidence(pdf_path, pages=None, language="eng", dpi=300, min_confidence=0)`: OCR with word-level confidence scores; supports multi-language (e.g., "eng+fra").
+- `extract_text_smart(pdf_path, pages=None, native_threshold=100, ocr_dpi=300, language="eng")`: smart per-page method selection (native vs OCR) for hybrid documents.
+
+### Table Extraction
+- `extract_tables(pdf_path, pages=None, output_format="list")`: extract tables as structured data; format "list" or "dict" (with headers).
+
+### Image Extraction
+- `extract_images(pdf_path, output_dir, pages=None, min_width=50, min_height=50, image_format="png")`: extract embedded images to files.
+- `get_image_info(pdf_path, pages=None)`: get image metadata (dimensions, format, positions) without extracting.
+
+### Form Auto-Detection
+- `detect_form_fields(pdf_path, pages=None)`: detect potential form fields in non-AcroForm PDFs using text pattern analysis (labels, checkboxes, underlines).
+
 ## Conventions
 - Paths should be absolute; outputs are created with parent directories if missing.
 - Inputs must exist and be files; errors return `{ "error": "..." }`.
