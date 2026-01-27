@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pymupdf
+import pytest
 from pdf_mcp import pdf_tools
 from pdf_mcp.pdf_tools import PdfToolError
 from pypdf import PdfWriter
@@ -81,6 +83,17 @@ def _make_form_pdf(path: Path) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("wb") as f:
         writer.write(f)
+    return path
+
+
+def _make_text_pdf(path: Path, lines: list[str]) -> Path:
+    doc = pymupdf.open()
+    for line in lines:
+        page = doc.new_page()
+        page.insert_text((72, 72), line, fontsize=12)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    doc.save(str(path))
+    doc.close()
     return path
 
 
@@ -206,6 +219,81 @@ def test_encrypt_pdf_roundtrip(tmp_path: Path):
     assert len(r.pages) == 1
 
 
+def test_reorder_pages_basic(tmp_path: Path):
+    src = _make_text_pdf(tmp_path / "ordered.pdf", ["Page 1", "Page 2", "Page 3"])
+    out = tmp_path / "reordered.pdf"
+
+    res = pdf_tools.reorder_pages(str(src), [3, 1, 2], str(out))
+    assert Path(res["output_path"]).exists()
+
+    from pypdf import PdfReader
+
+    reader = PdfReader(str(out))
+    texts = [(page.extract_text() or "") for page in reader.pages]
+    assert "Page 3" in texts[0]
+    assert "Page 1" in texts[1]
+    assert "Page 2" in texts[2]
+
+
+def test_reorder_pages_rejects_invalid_input(tmp_path: Path):
+    src = _make_text_pdf(tmp_path / "ordered.pdf", ["Page 1", "Page 2", "Page 3"])
+    out = tmp_path / "reordered.pdf"
+
+    with pytest.raises(PdfToolError):
+        pdf_tools.reorder_pages(str(src), [1, 1, 2], str(out))
+
+    with pytest.raises(PdfToolError):
+        pdf_tools.reorder_pages(str(src), [1, 2], str(out))
+
+    with pytest.raises(PdfToolError):
+        pdf_tools.reorder_pages(str(src), [0, 1, 2], str(out))
+
+
+def test_redact_text_regex_basic(tmp_path: Path):
+    src = _make_text_pdf(tmp_path / "text.pdf", ["Secret 123", "Public info"])
+    out = tmp_path / "redacted.pdf"
+
+    res = pdf_tools.redact_text_regex(
+        input_path=str(src),
+        output_path=str(out),
+        pattern=r"Secret\s+\d+",
+    )
+    assert Path(res["output_path"]).exists()
+    assert res["redacted"] >= 1
+
+    from pypdf import PdfReader
+
+    reader = PdfReader(str(out))
+    text = "".join((page.extract_text() or "") for page in reader.pages)
+    assert "Secret" not in text
+    assert "Public" in text
+
+
+def test_sanitize_pdf_metadata_removes_keys(tmp_path: Path):
+    src = _make_pdf(tmp_path / "plain.pdf", pages=1)
+    meta = tmp_path / "meta.pdf"
+    pdf_tools.set_pdf_metadata(
+        str(src),
+        str(meta),
+        title="Title",
+        author="Author",
+        subject="Subject",
+        keywords="Keywords",
+    )
+
+    sanitized = tmp_path / "sanitized.pdf"
+    res = pdf_tools.sanitize_pdf_metadata(str(meta), str(sanitized))
+    assert Path(res["output_path"]).exists()
+    assert "Title" in res["removed"]
+    assert "Author" in res["removed"]
+
+    md = pdf_tools.get_pdf_metadata(str(sanitized))["metadata"]
+    assert "Title" not in md
+    assert "Author" not in md
+    assert "Subject" not in md
+    assert "Keywords" not in md
+
+
 def test_mcp_layer_can_call_all_tools(tmp_path: Path):
     """
     Smoke test the MCP layer in-process (closest to Cursor invocation) by calling
@@ -314,6 +402,36 @@ def test_mcp_layer_can_call_all_tools(tmp_path: Path):
     rr = PdfReader(str(rotated))
     assert rr.pages[0].get("/Rotate") in (90, 450)  # depending on normalization
 
+    # reorder_pages
+    reordered = tmp_path / "mcp_reordered.pdf"
+    res = asyncio.run(
+        call(
+            "reorder_pages",
+            {"input_path": str(merged), "pages": [3, 1, 2], "output_path": str(reordered)},
+        )
+    )
+    assert Path(res["output_path"]).exists()
+    assert PdfReader(str(reordered)).get_num_pages() == 3
+
+    # redact_text_regex
+    text_src = _make_text_pdf(tmp_path / "mcp_text.pdf", ["Secret 123", "Public info"])
+    redacted = tmp_path / "mcp_redacted.pdf"
+    res = asyncio.run(
+        call(
+            "redact_text_regex",
+            {
+                "input_path": str(text_src),
+                "output_path": str(redacted),
+                "pattern": r"Secret\s+\d+",
+            },
+        )
+    )
+    assert Path(res["output_path"]).exists()
+    assert res["redacted"] >= 1
+    redacted_text = "".join((page.extract_text() or "") for page in PdfReader(str(redacted)).pages)
+    assert "Secret" not in redacted_text
+    assert "Public" in redacted_text
+
     # annotations and managed text
     annotated = tmp_path / "mcp_annotated.pdf"
     res = asyncio.run(
@@ -402,6 +520,20 @@ def test_mcp_layer_can_call_all_tools(tmp_path: Path):
     md = res["metadata"]
     assert md.get("Title") == "T"
     assert md.get("Author") == "A"
+
+    # sanitize_pdf_metadata
+    sanitized = tmp_path / "mcp_meta_sanitized.pdf"
+    res = asyncio.run(
+        call(
+            "sanitize_pdf_metadata",
+            {"input_path": str(meta_out), "output_path": str(sanitized)},
+        )
+    )
+    assert Path(res["output_path"]).exists()
+    res = asyncio.run(call("get_pdf_metadata", {"pdf_path": str(sanitized)}))
+    md = res["metadata"]
+    assert "Title" not in md
+    assert "Author" not in md
 
     # watermark
     wm_out = tmp_path / "mcp_wm.pdf"

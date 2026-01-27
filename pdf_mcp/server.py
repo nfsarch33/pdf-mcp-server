@@ -6,10 +6,10 @@ Run with: python -m pdf_mcp.server
 
 Available tool categories:
 - Form handling (4 tools)
-- Page operations (5 tools)
-- Annotations & text (9 tools)
+- Page operations (6 tools)
+- Annotations & text (10 tools)
 - Signatures & security (4 tools)
-- Metadata (2 tools)
+- Metadata (3 tools)
 - OCR & text extraction (8 tools)
 - Table/image extraction (3 tools)
 - Form detection (1 tool)
@@ -145,6 +145,13 @@ def rotate_pages(
 
 @mcp.tool()
 @_handle_errors
+def reorder_pages(input_path: str, pages: List[int], output_path: str) -> Dict[str, Any]:
+    """Reorder pages in a PDF using a 1-based page list."""
+    return pdf_tools.reorder_pages(input_path, pages, output_path)
+
+
+@mcp.tool()
+@_handle_errors
 def add_text_annotation(
     input_path: str,
     page: int,
@@ -219,6 +226,29 @@ def remove_pages(input_path: str, pages: List[int], output_path: str) -> Dict[st
 
 @mcp.tool()
 @_handle_errors
+def redact_text_regex(
+    input_path: str,
+    output_path: str,
+    pattern: str,
+    pages: Optional[List[int]] = None,
+    case_insensitive: bool = False,
+    whole_words: bool = False,
+    fill: Optional[Sequence[float]] = None,
+) -> Dict[str, Any]:
+    """Redact text using a regex pattern."""
+    return pdf_tools.redact_text_regex(
+        input_path=input_path,
+        output_path=output_path,
+        pattern=pattern,
+        pages=pages,
+        case_insensitive=case_insensitive,
+        whole_words=whole_words,
+        fill=fill,
+    )
+
+
+@mcp.tool()
+@_handle_errors
 def insert_text(
     input_path: str,
     page: int,
@@ -281,6 +311,23 @@ def set_pdf_metadata(
         author=author,
         subject=subject,
         keywords=keywords,
+    )
+
+
+@mcp.tool()
+@_handle_errors
+def sanitize_pdf_metadata(
+    input_path: str,
+    output_path: str,
+    remove_custom: bool = True,
+    remove_xmp: bool = True,
+) -> Dict[str, Any]:
+    """Remove metadata keys from a PDF."""
+    return pdf_tools.sanitize_pdf_metadata(
+        input_path=input_path,
+        output_path=output_path,
+        remove_custom=remove_custom,
+        remove_xmp=remove_xmp,
     )
 
 

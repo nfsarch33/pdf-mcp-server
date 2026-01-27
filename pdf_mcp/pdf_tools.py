@@ -3,8 +3,8 @@ PDF Tools - Core functionality for the PDF MCP Server.
 
 This module provides PDF manipulation, OCR, and extraction capabilities:
 - Form handling: fill, clear, flatten PDF forms
-- Page operations: merge, extract, rotate, insert, remove
-- Annotations: text, comments, watermarks, signatures
+- Page operations: merge, extract, rotate, reorder, insert, remove
+- Annotations: text, comments, watermarks, signatures, redaction
 - OCR: text extraction with Tesseract support, confidence scores
 - Extraction: tables, images, text blocks with positions
 - Form detection: auto-detect fields in non-AcroForm PDFs
@@ -14,6 +14,7 @@ License: AGPL-3.0
 """
 from __future__ import annotations
 
+import re
 import secrets
 from dataclasses import dataclass
 from pathlib import Path
@@ -473,6 +474,26 @@ def rotate_pages(
     return {"output_path": str(dst), "rotated": len(zero_based), "degrees": degrees}
 
 
+def reorder_pages(input_path: str, pages: List[int], output_path: str) -> Dict:
+    src = _ensure_file(input_path)
+    if not pages:
+        raise PdfToolError("No pages specified for reorder")
+
+    reader = PdfReader(str(src))
+    total = len(reader.pages)
+    zero_based = _validate_reorder_pages(pages, total)
+
+    dst = _prepare_output(output_path)
+    writer = PdfWriter()
+    for idx in zero_based:
+        writer.add_page(reader.pages[idx])
+
+    with dst.open("wb") as output_file:
+        writer.write(output_file)
+
+    return {"output_path": str(dst), "reordered": len(zero_based)}
+
+
 def _to_zero_based_pages(pages: List[int], total: int) -> List[int]:
     converted: List[int] = []
     for page in pages:
@@ -485,12 +506,98 @@ def _to_zero_based_pages(pages: List[int], total: int) -> List[int]:
     return sorted(set(converted))
 
 
+def _validate_reorder_pages(pages: List[int], total: int) -> List[int]:
+    converted: List[int] = []
+    seen: set[int] = set()
+    for page in pages:
+        if page == 0:
+            raise PdfToolError("Page numbers must be 1-based")
+        idx = page - 1 if page > 0 else total + page
+        if idx < 0 or idx >= total:
+            raise PdfToolError(f"Page {page} is out of range (1-{total})")
+        if idx in seen:
+            raise PdfToolError(f"Duplicate page specified for reorder: {page}")
+        seen.add(idx)
+        converted.append(idx)
+
+    if len(converted) != total:
+        raise PdfToolError(
+            "Reorder requires a complete page list matching the document length"
+        )
+
+    return converted
+
+
 def _ensure_rect(rect: Optional[Sequence[float]]) -> ArrayObject:
     if rect is None:
         rect = (50, 50, 250, 100)
     if len(rect) != 4:
         raise PdfToolError("rect must contain exactly 4 numbers: [x1, y1, x2, y2]")
     return ArrayObject([NumberObject(float(x)) for x in rect])
+
+
+def redact_text_regex(
+    input_path: str,
+    output_path: str,
+    pattern: str,
+    pages: Optional[List[int]] = None,
+    case_insensitive: bool = False,
+    whole_words: bool = False,
+    fill: Optional[Sequence[float]] = None,
+) -> Dict:
+    if not pattern:
+        raise PdfToolError("Redaction pattern must be provided")
+
+    src = _ensure_file(input_path)
+    dst = _prepare_output(output_path)
+
+    regex_flags = re.IGNORECASE if case_insensitive else 0
+    if whole_words:
+        pattern = rf"\\b{pattern}\\b"
+    regex = re.compile(pattern, regex_flags)
+
+    doc = pymupdf.open(str(src))
+    total = doc.page_count
+    page_indices = _to_zero_based_pages(pages, total) if pages else list(range(total))
+    if not page_indices:
+        raise PdfToolError("No pages selected for redaction")
+
+    redacted = 0
+    for idx in page_indices:
+        page = doc.load_page(idx)
+        words = page.get_text("words") or []
+        if not words:
+            continue
+        words_sorted = sorted(words, key=lambda w: (w[5], w[6], w[7]))
+        combined_parts: List[str] = []
+        spans: List[tuple[int, int, tuple[float, float, float, float]]] = []
+        offset = 0
+        for w in words_sorted:
+            if combined_parts:
+                combined_parts.append(" ")
+                offset += 1
+            word_text = str(w[4])
+            start = offset
+            combined_parts.append(word_text)
+            offset += len(word_text)
+            spans.append((start, offset, (w[0], w[1], w[2], w[3])))
+
+        combined_text = "".join(combined_parts)
+        page_redactions = 0
+        for match in regex.finditer(combined_text):
+            match_start, match_end = match.span()
+            for span_start, span_end, rect in spans:
+                if span_start < match_end and span_end > match_start:
+                    page.add_redact_annot(rect, fill=fill or (0, 0, 0))
+                    redacted += 1
+                    page_redactions += 1
+        if page_redactions:
+            page.apply_redactions()
+
+    doc.save(str(dst))
+    doc.close()
+
+    return {"output_path": str(dst), "redacted": redacted, "pages": len(page_indices)}
 
 
 def add_text_annotation(
@@ -845,6 +952,59 @@ def set_pdf_metadata(
         writer.write(output_file)
 
     return {"output_path": str(dst), "updated": {k: v for k, v in {"title": title, "author": author, "subject": subject, "keywords": keywords}.items() if v is not None}}
+
+
+def sanitize_pdf_metadata(
+    input_path: str,
+    output_path: str,
+    remove_custom: bool = True,
+    remove_xmp: bool = True,
+) -> Dict[str, Any]:
+    """
+    Remove metadata keys from a PDF.
+
+    By default, this removes standard metadata keys and any custom keys.
+    """
+    src = _ensure_file(input_path)
+    dst = _prepare_output(output_path)
+
+    reader = PdfReader(str(src))
+    writer = PdfWriter()
+    writer.clone_document_from_reader(reader)
+
+    standard_keys = {
+        "/Title",
+        "/Author",
+        "/Subject",
+        "/Keywords",
+        "/Creator",
+        "/Producer",
+        "/CreationDate",
+        "/ModDate",
+        "/Trapped",
+    }
+
+    removed: List[str] = []
+    info = getattr(writer, "_info", None)
+    if info is not None:
+        info_obj = info.get_object() if hasattr(info, "get_object") else info
+        for key in list(info_obj.keys()):
+            key_str = str(key)
+            normalized = key_str[1:] if key_str.startswith("/") else key_str
+            if key_str in standard_keys or remove_custom:
+                removed.append(normalized)
+                del info_obj[key]
+
+    if remove_xmp:
+        root_obj = writer._root_object  # type: ignore[attr-defined]
+        if NameObject("/Metadata") in root_obj:
+            del root_obj[NameObject("/Metadata")]
+            removed.append("Metadata")
+
+    with dst.open("wb") as output_file:
+        writer.write(output_file)
+
+    return {"output_path": str(dst), "removed": sorted(set(removed))}
 
 
 def add_text_watermark(

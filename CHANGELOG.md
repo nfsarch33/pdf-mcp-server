@@ -6,6 +6,11 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+### Added
+- `reorder_pages`: reorder PDF pages with an explicit 1-based page list.
+- `redact_text_regex`: redact text using a regex pattern.
+- `sanitize_pdf_metadata`: remove standard and custom metadata keys.
+
 ## 0.3.0 - 2026-01-27
 
 ### Added

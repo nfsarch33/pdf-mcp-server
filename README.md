@@ -101,8 +101,8 @@ Restart Cursor after saving.
 | Category | Tools | Description |
 |----------|-------|-------------|
 | **Form Handling** | 4 tools | Fill, clear, flatten PDF forms |
-| **Page Operations** | 5 tools | Merge, extract, rotate, insert, remove pages |
-| **Annotations** | 9 tools | Text, comments, watermarks, signatures |
+| **Page Operations** | 6 tools | Merge, extract, rotate, reorder, insert, remove pages |
+| **Annotations** | 10 tools | Text, comments, watermarks, signatures, redaction |
 | **OCR & Text** | 8 tools | Type detection, native/OCR extraction, confidence scores |
 | **Table Extraction** | 1 tool | Extract tables as structured data |
 | **Image Extraction** | 2 tools | Extract/analyze embedded images |
@@ -126,6 +126,7 @@ Restart Cursor after saving.
 - `merge_pdfs(pdf_list, output_path)`: merge multiple PDFs.
 - `extract_pages(input_path, pages, output_path)`: 1-based pages, supports negatives (e.g., -1 = last).
 - `rotate_pages(input_path, pages, degrees, output_path)`: degrees must be multiple of 90.
+- `reorder_pages(input_path, pages, output_path)`: reorder pages using a 1-based page list.
 - `insert_pages(input_path, insert_from_path, at_page, output_path)`: insert pages from another PDF.
 - `remove_pages(input_path, pages, output_path)`: remove specific pages.
 
@@ -135,6 +136,7 @@ Restart Cursor after saving.
 - `remove_text_annotation(input_path, output_path, annotation_id, pages=None)`: remove annotation by id.
 - `remove_annotations(input_path, output_path, pages, subtype=None)`: remove annotations, optionally by subtype.
 - `insert_text` / `edit_text` / `remove_text`: managed text via FreeText annotations.
+- `redact_text_regex(input_path, output_path, pattern, ...)`: redact text using a regex pattern.
 - `add_text_watermark(input_path, output_path, text, ...)`: add text watermark/stamp.
 - `add_comment` / `update_comment` / `remove_comment`: PDF comments (sticky notes).
 
@@ -147,6 +149,7 @@ Restart Cursor after saving.
 ### Metadata
 - `get_pdf_metadata(pdf_path)`: return document metadata.
 - `set_pdf_metadata(input_path, output_path, title=None, author=None, ...)`: set metadata fields.
+- `sanitize_pdf_metadata(input_path, output_path, ...)`: remove metadata keys.
 
 ### OCR and Text Extraction (Phase 1)
 - `detect_pdf_type(pdf_path)`: analyze PDF to classify as "searchable", "image_based", or "hybrid"; returns page-by-page metrics and OCR recommendation.
