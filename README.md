@@ -110,35 +110,39 @@ Restart Cursor after saving.
 
 ## Available Tools
 
-### Form Operations
+### Form Handling
 - `get_pdf_form_fields(pdf_path)`: list fields and count.
-- `fill_pdf_form(input_path, output_path, data, flatten=False)`: fill fields; optional flatten (uses fillpdf if available, else pypdf fallback).
-- `clear_pdf_form_fields(input_path, output_path, fields=None)`: clear (delete) values for selected form fields while keeping fields fillable.
+- `fill_pdf_form(input_path, output_path, data, flatten=False)`: fill fields; optional flatten.
+- `clear_pdf_form_fields(input_path, output_path, fields=None)`: clear values while keeping fields fillable.
 - `flatten_pdf(input_path, output_path)`: flatten forms/annotations.
+
+### Page Operations
 - `merge_pdfs(pdf_list, output_path)`: merge multiple PDFs.
 - `extract_pages(input_path, pages, output_path)`: 1-based pages, supports negatives (e.g., -1 = last).
 - `rotate_pages(input_path, pages, degrees, output_path)`: degrees must be multiple of 90.
-- `add_text_annotation(input_path, page, text, output_path, rect=None, annotation_id=None)`: add a FreeText annotation (managed text insertion).
-- `update_text_annotation(input_path, output_path, annotation_id, text, pages=None)`: update an annotation by id.
-- `remove_text_annotation(input_path, output_path, annotation_id, pages=None)`: remove an annotation by id.
-- `remove_annotations(input_path, output_path, pages, subtype=None)`: remove annotations on pages, optionally filtered by subtype (example FreeText).
-- `insert_pages(input_path, insert_from_path, at_page, output_path)`: insert all pages from another PDF before at_page (1-based).
-- `remove_pages(input_path, pages, output_path)`: remove specific 1-based pages.
-- `insert_text(input_path, page, text, output_path, rect=None, text_id=None)`: insert text via a managed FreeText annotation.
-- `edit_text(input_path, output_path, text_id, text, pages=None)`: edit managed inserted text.
-- `remove_text(input_path, output_path, text_id, pages=None)`: remove managed inserted text.
-- `get_pdf_metadata(pdf_path)`: return basic PDF document metadata.
-- `set_pdf_metadata(input_path, output_path, title=None, author=None, subject=None, keywords=None)`: set basic metadata fields.
-- `add_text_watermark(input_path, output_path, text, pages=None, rect=None, annotation_id=None)`: add a simple text watermark or stamp via FreeText annotations.
-- `add_comment(input_path, output_path, page, text, pos, comment_id=None)`: add a PDF comment (Text annotation, sticky note).
-- `update_comment(input_path, output_path, comment_id, text, pages=None)`: update a PDF comment by id.
-- `remove_comment(input_path, output_path, comment_id, pages=None)`: remove a PDF comment by id.
-- `add_signature_image(input_path, output_path, page, image_path, rect)`: add a signature image to a page (returns `signature_xref`).
-- `update_signature_image(input_path, output_path, page, signature_xref, image_path=None, rect=None)`: update or resize a signature image.
-- `remove_signature_image(input_path, output_path, page, signature_xref)`: remove a signature image.
-- `encrypt_pdf(input_path, output_path, user_password, owner_password=None, ...)`: encrypt (password-protect) a PDF (use after `add_signature_image` to protect a signed PDF).
+- `insert_pages(input_path, insert_from_path, at_page, output_path)`: insert pages from another PDF.
+- `remove_pages(input_path, pages, output_path)`: remove specific pages.
 
-### OCR and Text Extraction Tools
+### Annotations & Text
+- `add_text_annotation(input_path, page, text, output_path, rect=None, annotation_id=None)`: add FreeText annotation.
+- `update_text_annotation(input_path, output_path, annotation_id, text, pages=None)`: update annotation by id.
+- `remove_text_annotation(input_path, output_path, annotation_id, pages=None)`: remove annotation by id.
+- `remove_annotations(input_path, output_path, pages, subtype=None)`: remove annotations, optionally by subtype.
+- `insert_text` / `edit_text` / `remove_text`: managed text via FreeText annotations.
+- `add_text_watermark(input_path, output_path, text, ...)`: add text watermark/stamp.
+- `add_comment` / `update_comment` / `remove_comment`: PDF comments (sticky notes).
+
+### Signatures & Security
+- `add_signature_image(input_path, output_path, page, image_path, rect)`: add signature image.
+- `update_signature_image(...)`: update or resize signature.
+- `remove_signature_image(...)`: remove signature image.
+- `encrypt_pdf(input_path, output_path, user_password, ...)`: password-protect PDF.
+
+### Metadata
+- `get_pdf_metadata(pdf_path)`: return document metadata.
+- `set_pdf_metadata(input_path, output_path, title=None, author=None, ...)`: set metadata fields.
+
+### OCR and Text Extraction (Phase 1)
 - `detect_pdf_type(pdf_path)`: analyze PDF to classify as "searchable", "image_based", or "hybrid"; returns page-by-page metrics and OCR recommendation.
 - `extract_text_native(pdf_path, pages=None)`: extract text using native PDF text layer only (fast, no OCR).
 - `extract_text_ocr(pdf_path, pages=None, engine="auto", dpi=300, language="eng")`: extract text with OCR fallback; engine options: "auto" (native→OCR), "native", "tesseract", "force_ocr".
