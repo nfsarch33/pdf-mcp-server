@@ -1,0 +1,90 @@
+---
+description: "Cursor Memory System - Workspace Rules"
+globs: ["**/*"]
+alwaysApply: true
+---
+
+# Memory Strategy
+
+## Three-Layer Architecture
+
+Your system has three memory layers that work together automatically:
+
+### Layer 1: .cursor/rules (Always in Context)
+
+- Memory strategy and self-regulation
+- Development standards and patterns
+- This file is auto-injected into every conversation
+- System health check: if this file is visible, the system is healthy
+
+### Layer 2: Pepper Memory Bank (On-Demand via MCP)
+
+- Location: ~/memo/global-memories/
+- Detailed procedures, guides, and error solutions
+- Framework-specific patterns and best practices
+- Search and access via MCP memory tools
+
+### Layer 3: global-kb (Permanent Archive)
+
+- Location: ~/Code/global-kb/
+- Completed investigations and research
+- Architecture decision records (ADRs)
+- Historical documentation
+- Synced to GitHub private repo
+
+## Memory Actions (Follow This Decision Tree)
+
+### When You Discover New Information
+
+| Situation | Action | Where |
+| --- | --- | --- |
+| User contradicts existing info | Delete Cursor memory | Layer 1 |
+| New pattern needed every chat | Create Cursor + update Pepper | Layer 1 + 2 |
+| Procedure or guide discovered | Update Pepper only | Layer 2 |
+| Investigation completed | Write to global-kb/ | Layer 3 |
+
+### Quality Gates (Before Creating Cursor Memory)
+
+1. Is this needed every conversation?
+   - Yes: continue to next gate
+   - No: put in Pepper Memory Bank only
+2. Does it fit in one paragraph?
+   - Yes: create Cursor memory
+   - No: put in Pepper Memory Bank
+3. Is it a rule or pattern, not a task?
+   - Yes: can memorize
+   - No: do not memorize
+
+## Self-Regulation (Automatic)
+
+### Implicit Health Check
+
+- Rules file is visible in this context = system healthy
+- If not visible, check `.cursor/rules` exists
+- If MCP servers fail, system falls back to rules only
+
+### Explicit Health Check
+
+Say "health check" in any conversation to verify:
+1. Rules file loads correctly
+2. Pepper Memory Bank accessible
+3. All MCP servers responsive
+4. System status is healthy or issues reported
+
+## Repository Memory Sources
+
+- Canonical onboarding/runbooks are under `PROJECT_MEMO/`
+- Portable KB items intended for Pepper sync live under `PROJECT_MEMO/PEPPER_SYNC/memories-and-kb/`
+- Pepper memory should be updated from that sync source on a regular cadence
+
+## SOP Pointers (Cross-Workstation)
+
+- `memory-sop.md` (routing rules and automation)
+- `sync-policy.md` (cross-machine sync and GitHub backup)
+
+## Professional Standards
+
+- No emojis in code, configs, commits, or documentation
+- Lowercase log messages with structured fields
+- Conventional commits: `type: description`
+  - Type examples: `add`, `update`, `fix`, `archive`, `sync`
