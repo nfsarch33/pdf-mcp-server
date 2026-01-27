@@ -1,3 +1,17 @@
+"""
+PDF Tools - Core functionality for the PDF MCP Server.
+
+This module provides PDF manipulation, OCR, and extraction capabilities:
+- Form handling: fill, clear, flatten PDF forms
+- Page operations: merge, extract, rotate, insert, remove
+- Annotations: text, comments, watermarks, signatures
+- OCR: text extraction with Tesseract support, confidence scores
+- Extraction: tables, images, text blocks with positions
+- Form detection: auto-detect fields in non-AcroForm PDFs
+
+Version: 0.2.0
+License: AGPL-3.0
+"""
 from __future__ import annotations
 
 import secrets

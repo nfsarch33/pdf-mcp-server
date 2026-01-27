@@ -1,3 +1,22 @@
+"""
+PDF MCP Server - Model Context Protocol server for PDF operations.
+
+This module exposes PDF tools via the MCP protocol for use with AI assistants.
+Run with: python -m pdf_mcp.server
+
+Available tool categories:
+- Form handling (4 tools)
+- Page operations (5 tools)
+- Annotations & text (9 tools)
+- Signatures & security (4 tools)
+- Metadata (2 tools)
+- OCR & text extraction (8 tools)
+- Table/image extraction (3 tools)
+- Form detection (1 tool)
+
+Version: 0.2.0
+License: AGPL-3.0
+"""
 from __future__ import annotations
 
 import functools

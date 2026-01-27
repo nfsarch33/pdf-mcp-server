@@ -6,6 +6,14 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+### Planned for v0.3.0 (Phase 3)
+- **PDF Optimization**: Compress/reduce PDF file size
+- **Link Extraction**: Extract URLs, hyperlinks, and internal references
+- **Barcode/QR Code**: Detect and decode barcodes and QR codes in PDFs
+- **Page Splitting**: Split PDFs by bookmarks or content markers
+- **PDF Comparison**: Diff two PDFs and highlight changes
+- **Batch Processing**: Process multiple PDFs in a single call
+
 ## 0.2.0 - 2026-01-26
 
 ### Added
