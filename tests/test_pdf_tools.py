@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pymupdf
@@ -294,6 +295,89 @@ def test_sanitize_pdf_metadata_removes_keys(tmp_path: Path):
     assert "Keywords" not in md
 
 
+def test_export_to_json_basic(tmp_path: Path):
+    src = _make_text_pdf(tmp_path / "export.pdf", ["Hello world", "Second page"])
+    out = tmp_path / "export.json"
+
+    res = pdf_tools.export_to_json(str(src), str(out))
+    assert Path(res["output_path"]).exists()
+
+    data = json.loads(Path(res["output_path"]).read_text())
+    assert data["page_count"] == 2
+    assert data["engine"] in ("auto", "native", "ocr")
+    assert "pages" in data and len(data["pages"]) == 2
+    assert "Hello world" in data["pages"][0]["text"]
+
+
+def test_export_to_markdown_basic(tmp_path: Path):
+    src = _make_text_pdf(tmp_path / "export.md.pdf", ["Hello world", "Second page"])
+    out = tmp_path / "export.md"
+
+    res = pdf_tools.export_to_markdown(str(src), str(out))
+    assert Path(res["output_path"]).exists()
+
+    content = Path(res["output_path"]).read_text()
+    assert "Hello world" in content
+    assert "Second page" in content
+
+
+def test_add_page_numbers_writes_annotations(tmp_path: Path):
+    src = _make_pdf(tmp_path / "pages.pdf", pages=2)
+    out = tmp_path / "pages_numbered.pdf"
+
+    res = pdf_tools.add_page_numbers(str(src), str(out))
+    assert Path(res["output_path"]).exists()
+    assert res["added"] == 2
+
+    from pypdf import PdfReader
+
+    reader = PdfReader(str(out))
+    annots = reader.pages[0].get("/Annots")
+    assert annots is not None
+    ann = annots[0].get_object()
+    assert "1" in str(ann.get("/Contents"))
+
+
+def test_add_bates_numbering_writes_annotations(tmp_path: Path):
+    src = _make_pdf(tmp_path / "bates.pdf", pages=2)
+    out = tmp_path / "bates_numbered.pdf"
+
+    res = pdf_tools.add_bates_numbering(str(src), str(out), prefix="DOC-", start=10)
+    assert Path(res["output_path"]).exists()
+    assert res["added"] == 2
+
+    from pypdf import PdfReader
+
+    reader = PdfReader(str(out))
+    annots = reader.pages[0].get("/Annots")
+    assert annots is not None
+    ann = annots[0].get_object()
+    assert "DOC-000010" in str(ann.get("/Contents"))
+
+
+def test_verify_digital_signatures_empty(tmp_path: Path):
+    src = _make_pdf(tmp_path / "unsigned.pdf", pages=1)
+    res = pdf_tools.verify_digital_signatures(str(src))
+    assert res["signatures"] == []
+    assert res["verified"] == 0
+
+
+def test_get_full_metadata_includes_document_info(tmp_path: Path):
+    src = _make_pdf(tmp_path / "meta.pdf", pages=2)
+    meta = tmp_path / "meta_out.pdf"
+    pdf_tools.set_pdf_metadata(
+        str(src),
+        str(meta),
+        title="Title",
+        author="Author",
+    )
+
+    res = pdf_tools.get_full_metadata(str(meta))
+    assert res["metadata"]["Title"] == "Title"
+    assert res["document"]["page_count"] == 2
+    assert isinstance(res["document"]["file_size_bytes"], int)
+
+
 def test_mcp_layer_can_call_all_tools(tmp_path: Path):
     """
     Smoke test the MCP layer in-process (closest to Cursor invocation) by calling
@@ -432,6 +516,28 @@ def test_mcp_layer_can_call_all_tools(tmp_path: Path):
     assert "Secret" not in redacted_text
     assert "Public" in redacted_text
 
+    # export_to_json
+    export_json = tmp_path / "mcp_export.json"
+    res = asyncio.run(
+        call(
+            "export_to_json",
+            {"pdf_path": str(text_src), "output_path": str(export_json)},
+        )
+    )
+    assert Path(res["output_path"]).exists()
+    export_data = json.loads(Path(res["output_path"]).read_text())
+    assert export_data["page_count"] == 2
+
+    # export_to_markdown
+    export_md = tmp_path / "mcp_export.md"
+    res = asyncio.run(
+        call(
+            "export_to_markdown",
+            {"pdf_path": str(text_src), "output_path": str(export_md)},
+        )
+    )
+    assert Path(res["output_path"]).exists()
+
     # annotations and managed text
     annotated = tmp_path / "mcp_annotated.pdf"
     res = asyncio.run(
@@ -534,6 +640,41 @@ def test_mcp_layer_can_call_all_tools(tmp_path: Path):
     md = res["metadata"]
     assert "Title" not in md
     assert "Author" not in md
+
+    # get_full_metadata
+    res = asyncio.run(call("get_full_metadata", {"pdf_path": str(meta_out)}))
+    assert res["document"]["page_count"] >= 1
+
+    # add_page_numbers
+    page_numbers = tmp_path / "mcp_page_numbers.pdf"
+    res = asyncio.run(
+        call(
+            "add_page_numbers",
+            {"input_path": str(blank_a), "output_path": str(page_numbers)},
+        )
+    )
+    assert Path(res["output_path"]).exists()
+    assert res["added"] == 2
+
+    # add_bates_numbering
+    bates = tmp_path / "mcp_bates.pdf"
+    res = asyncio.run(
+        call(
+            "add_bates_numbering",
+            {
+                "input_path": str(blank_a),
+                "output_path": str(bates),
+                "prefix": "DOC-",
+                "start": 1,
+            },
+        )
+    )
+    assert Path(res["output_path"]).exists()
+    assert res["added"] == 2
+
+    # verify_digital_signatures
+    res = asyncio.run(call("verify_digital_signatures", {"pdf_path": str(blank_a)}))
+    assert res["signatures"] == []
 
     # watermark
     wm_out = tmp_path / "mcp_wm.pdf"

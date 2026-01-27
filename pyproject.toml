@@ -9,6 +9,7 @@ dependencies = [
     "pypdf>=5.1.0",
     "fillpdf>=0.7.3",
     "pymupdf>=1.26.7",
+    "pyhanko>=0.32.0",
 ]
 
 [project.optional-dependencies]
