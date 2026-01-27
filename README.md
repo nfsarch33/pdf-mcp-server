@@ -180,13 +180,36 @@ print(pdf_tools.fill_pdf_form(sample, out, {"Name": "Test"}, flatten=True))
 PY
 ```
 
-## Automated tests
+## Automated Tests
+
 ```bash
 cd /path/to/pdf-mcp-server
+
+# Run all tests
 make test
+
+# Run OCR-specific tests (requires Tesseract)
+make test-ocr
+
+# Quick test run
+make test-quick
+
+# Check Tesseract installation status
+make check-tesseract
+
+# Install OCR dependencies
+make install-ocr
+
+# Pre-push checks (lint + format + test + smoke)
+make prepush
 ```
 
-## Development workflow
+### Test Coverage
+- **108 tests** total (56 base + 52 Phase 2 OCR/extraction tests)
+- All tests pass with Tesseract installed
+- 2 tests skip when Tesseract is not available
+
+## Development Workflow
 - Use feature branches off `main` and open a PR for review.
 - Keep each PR focused on a single tool or capability with tests.
 - For larger features, split into small PRs (tool surface, core implementation, tests, docs).

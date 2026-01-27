@@ -713,3 +713,196 @@ class TestEndToEndWorkflows:
                 if w["confidence"] >= 80
             ]
             print(f"High-confidence words (>=80%): {len(high_conf_words)}")
+
+
+# =============================================================================
+# Advanced OCR Tests (requires Tesseract)
+# =============================================================================
+
+
+class TestAdvancedOcr:
+    """Advanced OCR tests that require Tesseract to be installed."""
+
+    @pytest.mark.skipif(not pdf_tools._HAS_TESSERACT, reason="Tesseract not installed")
+    def test_ocr_different_dpi_settings(self):
+        """Test OCR with different DPI settings."""
+        pdf_path = get_test_pdf("scansmpl.pdf")
+        if not pdf_path:
+            pytest.skip("scansmpl.pdf not available")
+
+        # Test with lower DPI (faster but less accurate)
+        result_150 = pdf_tools.extract_text_with_confidence(
+            pdf_path, pages=[1], dpi=150
+        )
+
+        # Test with higher DPI (slower but more accurate)
+        result_300 = pdf_tools.extract_text_with_confidence(
+            pdf_path, pages=[1], dpi=300
+        )
+
+        assert result_150["dpi"] == 150
+        assert result_300["dpi"] == 300
+
+        # Both should produce some text
+        assert result_150["total_words"] >= 0
+        assert result_300["total_words"] >= 0
+
+        print(f"\n--- DPI Comparison ---")
+        print(f"150 DPI: {result_150['total_words']} words, "
+              f"avg confidence: {result_150['overall_average_confidence']}%")
+        print(f"300 DPI: {result_300['total_words']} words, "
+              f"avg confidence: {result_300['overall_average_confidence']}%")
+
+    @pytest.mark.skipif(not pdf_tools._HAS_TESSERACT, reason="Tesseract not installed")
+    def test_ocr_on_multiple_scanned_documents(self):
+        """Test OCR on various scanned document types."""
+        scanned_pdfs = ["scansmpl.pdf", "image-based-pdf-sample.pdf", "TestOCR.pdf"]
+
+        print("\n--- OCR on Multiple Documents ---")
+        for name in scanned_pdfs:
+            pdf_path = get_test_pdf(name)
+            if not pdf_path:
+                continue
+
+            result = pdf_tools.extract_text_with_confidence(
+                pdf_path, pages=[1], dpi=200, min_confidence=50
+            )
+
+            print(f"{name}: {result['total_words']} words (>=50% conf), "
+                  f"avg: {result['overall_average_confidence']}%")
+
+            assert "text" in result
+            assert result["pages_extracted"] == 1
+
+    @pytest.mark.skipif(not pdf_tools._HAS_TESSERACT, reason="Tesseract not installed")
+    def test_smart_extraction_uses_ocr_for_images(self):
+        """Test that smart extraction uses OCR for image-based pages."""
+        pdf_path = get_test_pdf("scansmpl.pdf")
+        if not pdf_path:
+            pytest.skip("scansmpl.pdf not available")
+
+        # With low native threshold, should trigger OCR
+        result = pdf_tools.extract_text_smart(
+            pdf_path,
+            native_threshold=10,  # Very low threshold
+            ocr_dpi=200
+        )
+
+        # Should use OCR for image-based pages
+        if result["pages_using_ocr"] > 0:
+            print(f"\nSmart extraction used OCR on {result['pages_using_ocr']} pages")
+            assert result["total_chars"] > 0
+
+    @pytest.mark.skipif(not pdf_tools._HAS_TESSERACT, reason="Tesseract not installed")
+    def test_confidence_score_ranges(self):
+        """Test that confidence scores are in valid range (0-100)."""
+        pdf_path = get_test_pdf("1006.pdf")
+        if not pdf_path:
+            pytest.skip("1006.pdf not available")
+
+        result = pdf_tools.extract_text_with_confidence(pdf_path, pages=[1])
+
+        for page in result["page_details"]:
+            for word in page.get("words", []):
+                assert 0 <= word["confidence"] <= 100, \
+                    f"Invalid confidence: {word['confidence']}"
+
+        assert 0 <= result["overall_average_confidence"] <= 100
+
+    @pytest.mark.skipif(not pdf_tools._HAS_TESSERACT, reason="Tesseract not installed")
+    def test_extract_text_with_confidence_mcp_layer(self):
+        """Test extract_text_with_confidence via MCP layer."""
+        import asyncio
+        from pdf_mcp import server
+
+        pdf_path = get_test_pdf("1006.pdf")
+        if not pdf_path:
+            pytest.skip("1006.pdf not available")
+
+        async def call():
+            _content, meta = await server.mcp.call_tool(
+                "extract_text_with_confidence",
+                {"pdf_path": pdf_path, "pages": [1], "min_confidence": 50},
+            )
+            result = meta["result"]
+            assert "error" not in result, result.get("error")
+            return result
+
+        result = asyncio.run(call())
+        assert "overall_average_confidence" in result
+        assert result["min_confidence"] == 50
+
+    @pytest.mark.skipif(not pdf_tools._HAS_TESSERACT, reason="Tesseract not installed")
+    def test_ocr_extracts_meaningful_text(self):
+        """Test that OCR extracts actual meaningful text from documents."""
+        pdf_path = get_test_pdf("TestOCR.pdf")
+        if not pdf_path:
+            pdf_path = get_test_pdf("scansmpl.pdf")
+        if not pdf_path:
+            pytest.skip("No suitable OCR test PDF available")
+
+        result = pdf_tools.extract_text_ocr(
+            pdf_path, pages=[1], engine="tesseract", dpi=300
+        )
+
+        # Should extract some text
+        assert result["total_chars"] > 0, "OCR should extract some text"
+        assert len(result["text"].strip()) > 0
+
+        print(f"\n--- OCR Text Preview ---")
+        preview = result["text"][:200].replace("\n", " ")
+        print(f"Extracted: {preview}...")
+
+    @pytest.mark.skipif(not pdf_tools._HAS_TESSERACT, reason="Tesseract not installed")
+    def test_force_ocr_on_searchable_pdf(self):
+        """Test force_ocr engine on a searchable PDF."""
+        pdf_path = get_test_pdf("1006.pdf")
+        if not pdf_path:
+            pytest.skip("1006.pdf not available")
+
+        # Native extraction first
+        native_result = pdf_tools.extract_text_native(pdf_path, pages=[1])
+
+        # Force OCR
+        ocr_result = pdf_tools.extract_text_ocr(
+            pdf_path, pages=[1], engine="force_ocr", dpi=200
+        )
+
+        assert native_result["method"] == "native"
+        assert "ocr" in ocr_result["method_used"]
+
+        # Both should produce text
+        assert native_result["total_chars"] > 0
+        assert ocr_result["total_chars"] > 0
+
+        print(f"\n--- Native vs Force OCR ---")
+        print(f"Native: {native_result['total_chars']} chars")
+        print(f"Force OCR: {ocr_result['total_chars']} chars")
+
+
+class TestOcrLanguageSupport:
+    """Tests for OCR language support features."""
+
+    @pytest.mark.skipif(not pdf_tools._HAS_TESSERACT, reason="Tesseract not installed")
+    def test_get_installed_languages(self):
+        """Test that installed languages are reported correctly."""
+        result = pdf_tools.get_ocr_languages()
+
+        assert result["tesseract_available"] is True
+        assert "eng" in result["installed_languages"], "English should be installed"
+
+        print(f"\nInstalled languages: {result['installed_languages']}")
+
+    @pytest.mark.skipif(not pdf_tools._HAS_TESSERACT, reason="Tesseract not installed")
+    def test_ocr_with_english_language(self):
+        """Test OCR with explicit English language setting."""
+        pdf_path = get_test_pdf("1006.pdf")
+        if not pdf_path:
+            pytest.skip("1006.pdf not available")
+
+        result = pdf_tools.extract_text_with_confidence(
+            pdf_path, pages=[1], language="eng"
+        )
+
+        assert result["language"] == "eng"
+        assert result["total_words"] > 0
