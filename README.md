@@ -1,6 +1,6 @@
 # PDF MCP Server
 
-**Version 0.2.0** | MCP server for PDF form filling, editing, OCR text extraction, table extraction, and image extraction.
+**Version 0.3.0** | MCP server for PDF form filling, editing, OCR text extraction, table extraction, image extraction, link extraction, and batch processing.
 
 Built with Python, `pypdf`, `fillpdf`, and `pymupdf` (AGPL).
 
@@ -107,6 +107,12 @@ Restart Cursor after saving.
 | **Table Extraction** | 1 tool | Extract tables as structured data |
 | **Image Extraction** | 2 tools | Extract/analyze embedded images |
 | **Form Detection** | 1 tool | Auto-detect form fields in non-AcroForm PDFs |
+| **Link Extraction** | 1 tool | Extract URLs, hyperlinks, internal references |
+| **PDF Optimization** | 1 tool | Compress/reduce PDF file size |
+| **Barcode/QR Detection** | 1 tool | Detect and decode barcodes and QR codes |
+| **Page Splitting** | 2 tools | Split by bookmarks or page count |
+| **PDF Comparison** | 1 tool | Compare two PDFs and find differences |
+| **Batch Processing** | 1 tool | Process multiple PDFs at once |
 
 ## Available Tools
 
@@ -163,6 +169,25 @@ Restart Cursor after saving.
 ### Form Auto-Detection
 - `detect_form_fields(pdf_path, pages=None)`: detect potential form fields in non-AcroForm PDFs using text pattern analysis (labels, checkboxes, underlines).
 
+### Link Extraction (Phase 3)
+- `extract_links(pdf_path, pages=None)`: extract URLs, hyperlinks, and internal references with type categorization.
+
+### PDF Optimization (Phase 3)
+- `optimize_pdf(pdf_path, output_path, quality="medium")`: compress PDF; quality: "low" (max compression), "medium", "high".
+
+### Barcode/QR Detection (Phase 3)
+- `detect_barcodes(pdf_path, pages=None, dpi=200)`: detect and decode QR codes, Code128, EAN13, etc. Requires optional `pyzbar`.
+
+### Page Splitting (Phase 3)
+- `split_pdf_by_bookmarks(pdf_path, output_dir)`: split PDF into files based on table of contents.
+- `split_pdf_by_pages(pdf_path, output_dir, pages_per_split=1)`: split by page count.
+
+### PDF Comparison (Phase 3)
+- `compare_pdfs(pdf1_path, pdf2_path, compare_text=True, compare_images=False)`: diff two PDFs, find text and page differences.
+
+### Batch Processing (Phase 3)
+- `batch_process(pdf_paths, operation, output_dir=None)`: process multiple PDFs; operations: "get_info", "extract_text", "extract_links", "optimize".
+
 ## Conventions
 - Paths should be absolute; outputs are created with parent directories if missing.
 - Inputs must exist and be files; errors return `{ "error": "..." }`.
@@ -205,9 +230,9 @@ make prepush
 ```
 
 ### Test Coverage
-- **108 tests** total (56 base + 52 Phase 2 OCR/extraction tests)
+- **149 tests** total (56 base + 52 Phase 2 + 41 Phase 3 tests)
 - All tests pass with Tesseract installed
-- 2 tests skip when Tesseract is not available
+- 3 tests skip when optional dependencies (Tesseract/pyzbar) are not available
 
 ## Development Workflow
 - Use feature branches off `main` and open a PR for review.

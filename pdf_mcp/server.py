@@ -14,7 +14,7 @@ Available tool categories:
 - Table/image extraction (3 tools)
 - Form detection (1 tool)
 
-Version: 0.2.0
+Version: 0.3.0
 License: AGPL-3.0
 """
 from __future__ import annotations
@@ -660,6 +660,161 @@ def detect_form_fields(
     Useful for PDFs that appear to be forms but don't have AcroForm fields.
     """
     return pdf_tools.detect_form_fields(pdf_path, pages=pages)
+
+
+# =============================================================================
+# Phase 3: Link Extraction, Optimization, Barcodes, Splitting, Comparison, Batch
+# =============================================================================
+
+
+@mcp.tool()
+@_handle_errors
+def extract_links(
+    pdf_path: str,
+    pages: Optional[List[int]] = None,
+) -> Dict[str, Any]:
+    """
+    Extract links (URLs, hyperlinks, internal references) from a PDF.
+
+    Returns all links with their types (uri, goto, external_goto, etc.)
+    and positions on the page.
+
+    Args:
+        pdf_path: Path to the PDF file
+        pages: Optional list of page numbers (1-indexed). None = all pages.
+    """
+    return pdf_tools.extract_links(pdf_path, pages=pages)
+
+
+@mcp.tool()
+@_handle_errors
+def optimize_pdf(
+    pdf_path: str,
+    output_path: str,
+    quality: str = "medium",
+) -> Dict[str, Any]:
+    """
+    Optimize/compress a PDF to reduce file size.
+
+    Applies various optimization techniques: garbage collection,
+    image compression, font subsetting.
+
+    Args:
+        pdf_path: Path to the input PDF
+        output_path: Path for the optimized PDF
+        quality: "low" (max compression), "medium", or "high" (min compression)
+    """
+    return pdf_tools.optimize_pdf(pdf_path, output_path, quality=quality)
+
+
+@mcp.tool()
+@_handle_errors
+def detect_barcodes(
+    pdf_path: str,
+    pages: Optional[List[int]] = None,
+    dpi: int = 200,
+) -> Dict[str, Any]:
+    """
+    Detect and decode barcodes/QR codes in a PDF.
+
+    Requires pyzbar library. Renders each page and scans for:
+    QR codes, Code128, Code39, EAN13, EAN8, UPC-A, etc.
+
+    Args:
+        pdf_path: Path to the PDF file
+        pages: Optional page numbers (1-indexed). None = all pages.
+        dpi: Render resolution (higher = better detection, slower)
+    """
+    return pdf_tools.detect_barcodes(pdf_path, pages=pages, dpi=dpi)
+
+
+@mcp.tool()
+@_handle_errors
+def split_pdf_by_bookmarks(
+    pdf_path: str,
+    output_dir: str,
+) -> Dict[str, Any]:
+    """
+    Split a PDF into multiple files based on its bookmarks (TOC).
+
+    Each bookmark becomes a separate PDF containing pages from that
+    section to the next bookmark.
+
+    Args:
+        pdf_path: Path to the input PDF
+        output_dir: Directory to save split PDFs
+    """
+    return pdf_tools.split_pdf_by_bookmarks(pdf_path, output_dir)
+
+
+@mcp.tool()
+@_handle_errors
+def split_pdf_by_pages(
+    pdf_path: str,
+    output_dir: str,
+    pages_per_split: int = 1,
+) -> Dict[str, Any]:
+    """
+    Split a PDF into multiple files by page count.
+
+    Each output file contains the specified number of pages.
+
+    Args:
+        pdf_path: Path to the input PDF
+        output_dir: Directory to save split PDFs
+        pages_per_split: Number of pages per output file (default: 1)
+    """
+    return pdf_tools.split_pdf_by_pages(pdf_path, output_dir, pages_per_split=pages_per_split)
+
+
+@mcp.tool()
+@_handle_errors
+def compare_pdfs(
+    pdf1_path: str,
+    pdf2_path: str,
+    compare_text: bool = True,
+    compare_images: bool = False,
+) -> Dict[str, Any]:
+    """
+    Compare two PDFs and identify differences.
+
+    Compares page count, text content, and optionally images.
+
+    Args:
+        pdf1_path: Path to the first PDF
+        pdf2_path: Path to the second PDF
+        compare_text: Whether to compare text content (default: True)
+        compare_images: Whether to compare image counts (default: False)
+    """
+    return pdf_tools.compare_pdfs(
+        pdf1_path, pdf2_path,
+        compare_text=compare_text,
+        compare_images=compare_images,
+    )
+
+
+@mcp.tool()
+@_handle_errors
+def batch_process(
+    pdf_paths: List[str],
+    operation: str,
+    output_dir: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Process multiple PDFs with a single operation.
+
+    Supported operations:
+    - "get_info": Get basic PDF info (page count, metadata, size)
+    - "extract_text": Extract text from each PDF
+    - "extract_links": Extract links from each PDF
+    - "optimize": Compress each PDF (requires output_dir)
+
+    Args:
+        pdf_paths: List of PDF file paths
+        operation: Operation to perform
+        output_dir: Required for "optimize" operation
+    """
+    return pdf_tools.batch_process(pdf_paths, operation, output_dir=output_dir)
 
 
 if __name__ == "__main__":

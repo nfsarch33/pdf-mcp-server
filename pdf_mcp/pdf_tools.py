@@ -9,7 +9,7 @@ This module provides PDF manipulation, OCR, and extraction capabilities:
 - Extraction: tables, images, text blocks with positions
 - Form detection: auto-detect fields in non-AcroForm PDFs
 
-Version: 0.2.0
+Version: 0.3.0
 License: AGPL-3.0
 """
 from __future__ import annotations
@@ -17,8 +17,9 @@ from __future__ import annotations
 import secrets
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Sequence, Any
+from typing import Any, Dict, Iterable, List, Optional, Sequence
 
+import pymupdf
 from pypdf import PdfReader, PdfWriter
 from pypdf.constants import UserAccessPermissions
 from pypdf.generic import (
@@ -30,7 +31,6 @@ from pypdf.generic import (
     NumberObject,
     TextStringObject,
 )
-import pymupdf
 
 try:
     from fillpdf import fillpdfs
@@ -40,9 +40,10 @@ except ImportError:
     _HAS_FILLPDF = False
 
 try:
+    import io
+
     import pytesseract
     from PIL import Image
-    import io
 
     _HAS_TESSERACT = True
 except ImportError:
@@ -2239,3 +2240,558 @@ def _form_recommendation(has_acroform: bool, detected_count: int) -> str:
         )
     return "No form fields detected. PDF may not be a form."
 
+
+# =============================================================================
+# Phase 3 Features: v0.3.0
+# =============================================================================
+
+# Optional pyzbar for barcode detection
+try:
+    from pyzbar import pyzbar
+    _HAS_PYZBAR = True
+except ImportError:
+    _HAS_PYZBAR = False
+
+
+def extract_links(
+    pdf_path: str,
+    pages: Optional[List[int]] = None,
+) -> Dict[str, Any]:
+    """
+    Extract links (URLs, hyperlinks, internal references) from a PDF.
+
+    Args:
+        pdf_path: Path to the PDF file
+        pages: Optional list of page numbers (1-indexed). None = all pages.
+
+    Returns:
+        Dict with link information:
+        - pdf_path: Path to the PDF
+        - total_links: Total number of links found
+        - links: List of link details (page, type, uri, rect)
+        - link_types: Count of links by type
+        - pages_scanned: Number of pages scanned
+    """
+    path = _ensure_file(pdf_path)
+    doc = pymupdf.open(str(path))
+
+    try:
+        total_pages = len(doc)
+        if pages:
+            page_indices = _to_zero_based_pages(pages, total_pages)
+        else:
+            page_indices = list(range(total_pages))
+        
+        all_links = []
+        link_type_counts: Dict[str, int] = {}
+
+        for page_idx in page_indices:
+            page = doc[page_idx]
+            links = page.get_links()
+
+            for link in links:
+                link_info = {
+                    "page": page_idx + 1,
+                    "type": link.get("kind", 0),
+                    "rect": list(link.get("from", [])) if link.get("from") else None,
+                }
+
+                # Map link kind to type name
+                kind = link.get("kind", 0)
+                if kind == 1:  # LINK_URI
+                    link_info["type"] = "uri"
+                    link_info["uri"] = link.get("uri", "")
+                elif kind == 2:  # LINK_GOTO
+                    link_info["type"] = "goto"
+                    link_info["destination_page"] = link.get("page", 0) + 1
+                elif kind == 3:  # LINK_GOTOR
+                    link_info["type"] = "external_goto"
+                    link_info["file"] = link.get("file", "")
+                elif kind == 4:  # LINK_LAUNCH
+                    link_info["type"] = "launch"
+                    link_info["file"] = link.get("file", "")
+                elif kind == 5:  # LINK_NAMED
+                    link_info["type"] = "named"
+                    link_info["name"] = link.get("name", "")
+                else:
+                    link_info["type"] = "unknown"
+
+                all_links.append(link_info)
+                
+                # Count by type
+                link_type = link_info["type"]
+                link_type_counts[link_type] = link_type_counts.get(link_type, 0) + 1
+
+        return {
+            "pdf_path": str(path),
+            "total_links": len(all_links),
+            "links": all_links,
+            "link_types": link_type_counts,
+            "pages_scanned": len(page_indices),
+        }
+    finally:
+        doc.close()
+
+
+def optimize_pdf(
+    pdf_path: str,
+    output_path: str,
+    quality: str = "medium",
+) -> Dict[str, Any]:
+    """
+    Optimize/compress a PDF to reduce file size.
+
+    Args:
+        pdf_path: Path to the input PDF
+        output_path: Path for the optimized PDF
+        quality: Compression quality - "low", "medium", or "high"
+                 low = maximum compression, high = minimum compression
+
+    Returns:
+        Dict with optimization results:
+        - input_path: Original file path
+        - output_path: Optimized file path
+        - original_size: Original file size in bytes
+        - optimized_size: New file size in bytes
+        - compression_ratio: Ratio of new/original size
+        - size_reduction_percent: Percentage of size reduced
+    """
+    path = _ensure_file(pdf_path)
+    original_size = path.stat().st_size
+
+    # Quality settings map to PyMuPDF garbage collection levels
+    quality_map = {
+        "low": 4,      # Maximum compression
+        "medium": 3,   # Balanced
+        "high": 2,     # Minimal compression
+    }
+    garbage_level = quality_map.get(quality, 3)
+
+    doc = pymupdf.open(str(path))
+    try:
+        # Save with optimization options
+        output = Path(output_path)
+        doc.save(
+            str(output),
+            garbage=garbage_level,
+            deflate=True,
+            clean=True,
+            deflate_images=True,
+            deflate_fonts=True,
+        )
+
+        optimized_size = output.stat().st_size
+        compression_ratio = optimized_size / original_size if original_size > 0 else 1.0
+        reduction_percent = (1 - compression_ratio) * 100
+
+        return {
+            "input_path": str(path),
+            "output_path": str(output),
+            "original_size": original_size,
+            "optimized_size": optimized_size,
+            "compression_ratio": round(compression_ratio, 4),
+            "size_reduction_percent": round(reduction_percent, 2),
+            "quality_setting": quality,
+        }
+    finally:
+        doc.close()
+
+
+def detect_barcodes(
+    pdf_path: str,
+    pages: Optional[List[int]] = None,
+    dpi: int = 200,
+) -> Dict[str, Any]:
+    """
+    Detect and decode barcodes/QR codes in a PDF.
+
+    Requires pyzbar library for barcode decoding.
+
+    Args:
+        pdf_path: Path to the PDF file
+        pages: Optional list of page numbers (1-indexed). None = all pages.
+        dpi: Resolution for rendering pages (higher = better detection)
+
+    Returns:
+        Dict with barcode information:
+        - pdf_path: Path to the PDF
+        - total_barcodes: Total number of barcodes found
+        - barcodes: List of barcode details (page, type, data, position)
+        - pages_scanned: Number of pages scanned
+        - pyzbar_available: Whether pyzbar is installed
+    """
+    path = _ensure_file(pdf_path)
+    doc = pymupdf.open(str(path))
+
+    try:
+        total_pages = len(doc)
+        if pages:
+            page_indices = _to_zero_based_pages(pages, total_pages)
+        else:
+            page_indices = list(range(total_pages))
+        
+        all_barcodes = []
+
+        if _HAS_PYZBAR:
+            for page_idx in page_indices:
+                page = doc[page_idx]
+                
+                # Render page to image
+                mat = pymupdf.Matrix(dpi / 72, dpi / 72)
+                pix = page.get_pixmap(matrix=mat)
+                
+                # Convert to PIL Image for pyzbar
+                img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                
+                # Detect barcodes
+                decoded_objects = pyzbar.decode(img)
+                
+                for obj in decoded_objects:
+                    barcode_info = {
+                        "page": page_idx + 1,
+                        "type": obj.type,
+                        "data": obj.data.decode("utf-8", errors="replace"),
+                        "position": {
+                            "left": obj.rect.left,
+                            "top": obj.rect.top,
+                            "width": obj.rect.width,
+                            "height": obj.rect.height,
+                        },
+                    }
+                    all_barcodes.append(barcode_info)
+
+        return {
+            "pdf_path": str(path),
+            "total_barcodes": len(all_barcodes),
+            "barcodes": all_barcodes,
+            "pages_scanned": len(page_indices),
+            "pyzbar_available": _HAS_PYZBAR,
+        }
+    finally:
+        doc.close()
+
+
+def split_pdf_by_bookmarks(
+    pdf_path: str,
+    output_dir: str,
+) -> Dict[str, Any]:
+    """
+    Split a PDF by its bookmarks (table of contents).
+
+    Each bookmark creates a separate PDF file containing pages
+    from that bookmark to the next one.
+
+    Args:
+        pdf_path: Path to the input PDF
+        output_dir: Directory to save split PDFs
+
+    Returns:
+        Dict with splitting results:
+        - input_path: Original file path
+        - output_dir: Output directory
+        - total_bookmarks: Number of bookmarks found
+        - files_created: List of created file details
+    """
+    path = _ensure_file(pdf_path)
+    out_dir = Path(output_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    doc = pymupdf.open(str(path))
+    try:
+        toc = doc.get_toc()  # [[level, title, page], ...]
+        total_pages = len(doc)
+        files_created = []
+
+        if not toc:
+            # No bookmarks - return single file or empty
+            return {
+                "input_path": str(path),
+                "output_dir": str(out_dir),
+                "total_bookmarks": 0,
+                "files_created": [],
+                "message": "No bookmarks found in PDF",
+            }
+
+        # Process bookmarks
+        for i, bookmark in enumerate(toc):
+            level, title, start_page = bookmark
+            
+            # Determine end page
+            if i + 1 < len(toc):
+                end_page = toc[i + 1][2] - 1  # Page before next bookmark
+            else:
+                end_page = total_pages
+
+            # Create safe filename
+            safe_title = "".join(c if c.isalnum() or c in " -_" else "_" for c in title)
+            safe_title = safe_title[:50].strip()  # Limit length
+            output_file = out_dir / f"{i + 1:03d}_{safe_title}.pdf"
+
+            # Extract pages
+            new_doc = pymupdf.open()
+            try:
+                new_doc.insert_pdf(doc, from_page=start_page - 1, to_page=end_page - 1)
+                new_doc.save(str(output_file))
+                
+                files_created.append({
+                    "path": str(output_file),
+                    "title": title,
+                    "page_range": f"{start_page}-{end_page}",
+                    "page_count": end_page - start_page + 1,
+                })
+            finally:
+                new_doc.close()
+
+        return {
+            "input_path": str(path),
+            "output_dir": str(out_dir),
+            "total_bookmarks": len(toc),
+            "files_created": files_created,
+        }
+    finally:
+        doc.close()
+
+
+def split_pdf_by_pages(
+    pdf_path: str,
+    output_dir: str,
+    pages_per_split: int = 1,
+) -> Dict[str, Any]:
+    """
+    Split a PDF into multiple files by page count.
+
+    Args:
+        pdf_path: Path to the input PDF
+        output_dir: Directory to save split PDFs
+        pages_per_split: Number of pages per output file
+
+    Returns:
+        Dict with splitting results:
+        - input_path: Original file path
+        - output_dir: Output directory
+        - files_created: List of created file details
+    """
+    path = _ensure_file(pdf_path)
+    out_dir = Path(output_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    doc = pymupdf.open(str(path))
+    try:
+        total_pages = len(doc)
+        files_created = []
+        
+        base_name = path.stem
+
+        for start in range(0, total_pages, pages_per_split):
+            end = min(start + pages_per_split - 1, total_pages - 1)
+            
+            output_file = out_dir / f"{base_name}_pages_{start + 1}-{end + 1}.pdf"
+
+            new_doc = pymupdf.open()
+            try:
+                new_doc.insert_pdf(doc, from_page=start, to_page=end)
+                new_doc.save(str(output_file))
+                
+                files_created.append({
+                    "path": str(output_file),
+                    "title": f"Pages {start + 1}-{end + 1}",
+                    "page_range": f"{start + 1}-{end + 1}",
+                    "page_count": end - start + 1,
+                })
+            finally:
+                new_doc.close()
+
+        return {
+            "input_path": str(path),
+            "output_dir": str(out_dir),
+            "total_pages": total_pages,
+            "pages_per_split": pages_per_split,
+            "files_created": files_created,
+        }
+    finally:
+        doc.close()
+
+
+def compare_pdfs(
+    pdf1_path: str,
+    pdf2_path: str,
+    compare_text: bool = True,
+    compare_images: bool = False,
+) -> Dict[str, Any]:
+    """
+    Compare two PDFs and identify differences.
+
+    Args:
+        pdf1_path: Path to the first PDF
+        pdf2_path: Path to the second PDF
+        compare_text: Whether to compare text content
+        compare_images: Whether to compare images (slower)
+
+    Returns:
+        Dict with comparison results:
+        - pdf1_path: First PDF path
+        - pdf2_path: Second PDF path
+        - are_identical: Whether PDFs are identical
+        - differences: List of differences found
+        - summary: Human-readable summary
+    """
+    path1 = _ensure_file(pdf1_path)
+    path2 = _ensure_file(pdf2_path)
+
+    doc1 = pymupdf.open(str(path1))
+    doc2 = pymupdf.open(str(path2))
+
+    try:
+        differences = []
+        
+        # Compare page count
+        if len(doc1) != len(doc2):
+            differences.append({
+                "type": "page_count",
+                "pdf1_pages": len(doc1),
+                "pdf2_pages": len(doc2),
+                "description": f"Page count differs: {len(doc1)} vs {len(doc2)}",
+            })
+
+        # Compare text content per page
+        if compare_text:
+            min_pages = min(len(doc1), len(doc2))
+            for page_idx in range(min_pages):
+                text1 = doc1[page_idx].get_text().strip()
+                text2 = doc2[page_idx].get_text().strip()
+                
+                if text1 != text2:
+                    differences.append({
+                        "type": "text",
+                        "page": page_idx + 1,
+                        "description": f"Text differs on page {page_idx + 1}",
+                        "pdf1_text_length": len(text1),
+                        "pdf2_text_length": len(text2),
+                    })
+
+        # Compare images if requested
+        if compare_images:
+            min_pages = min(len(doc1), len(doc2))
+            for page_idx in range(min_pages):
+                images1 = doc1[page_idx].get_images()
+                images2 = doc2[page_idx].get_images()
+                
+                if len(images1) != len(images2):
+                    differences.append({
+                        "type": "images",
+                        "page": page_idx + 1,
+                        "description": f"Image count differs on page {page_idx + 1}",
+                        "pdf1_images": len(images1),
+                        "pdf2_images": len(images2),
+                    })
+
+        # Generate summary
+        are_identical = len(differences) == 0
+        if are_identical:
+            summary = "PDFs are identical"
+        else:
+            diff_types = set(d["type"] for d in differences)
+            summary = f"Found {len(differences)} difference(s): {', '.join(diff_types)}"
+
+        return {
+            "pdf1_path": str(path1),
+            "pdf2_path": str(path2),
+            "are_identical": are_identical,
+            "differences": differences,
+            "summary": summary,
+            "pdf1_page_count": len(doc1),
+            "pdf2_page_count": len(doc2),
+        }
+    finally:
+        doc1.close()
+        doc2.close()
+
+
+def batch_process(
+    pdf_paths: List[str],
+    operation: str,
+    output_dir: Optional[str] = None,
+    **kwargs,
+) -> Dict[str, Any]:
+    """
+    Process multiple PDFs with a single operation.
+
+    Args:
+        pdf_paths: List of PDF file paths
+        operation: Operation to perform. Supported:
+                   - "get_info": Get basic PDF info
+                   - "extract_text": Extract text from each PDF
+                   - "extract_links": Extract links from each PDF
+                   - "optimize": Optimize each PDF (requires output_dir)
+        output_dir: Directory for output files (required for some operations)
+        **kwargs: Additional arguments for the operation
+
+    Returns:
+        Dict with batch results:
+        - operation: The operation performed
+        - total_files: Total number of files processed
+        - successful: Number of successful operations
+        - failed: Number of failed operations
+        - results: List of individual results
+    """
+    supported_ops = ["get_info", "extract_text", "extract_links", "optimize"]
+    if operation not in supported_ops:
+        raise PdfToolError(f"Unsupported operation: {operation}. Supported: {supported_ops}")
+
+    results = []
+    successful = 0
+    failed = 0
+
+    for pdf_path in pdf_paths:
+        try:
+            if operation == "get_info":
+                path = Path(pdf_path)
+                if not path.exists():
+                    raise FileNotFoundError(f"File not found: {pdf_path}")
+                doc = pymupdf.open(str(path))
+                try:
+                    result = {
+                        "pdf_path": str(path),
+                        "page_count": len(doc),
+                        "metadata": doc.metadata,
+                        "file_size": path.stat().st_size,
+                    }
+                finally:
+                    doc.close()
+
+            elif operation == "extract_text":
+                result = extract_text_native(pdf_path)
+
+            elif operation == "extract_links":
+                result = extract_links(pdf_path)
+
+            elif operation == "optimize":
+                if not output_dir:
+                    raise PdfToolError("output_dir required for optimize operation")
+                out_dir = Path(output_dir)
+                out_dir.mkdir(parents=True, exist_ok=True)
+                output_file = out_dir / f"optimized_{Path(pdf_path).name}"
+                result = optimize_pdf(pdf_path, str(output_file), **kwargs)
+
+            results.append({
+                "pdf_path": pdf_path,
+                "success": True,
+                "result": result,
+            })
+            successful += 1
+
+        except Exception as e:
+            results.append({
+                "pdf_path": pdf_path,
+                "success": False,
+                "error": str(e),
+            })
+            failed += 1
+
+    return {
+        "operation": operation,
+        "total_files": len(pdf_paths),
+        "successful": successful,
+        "failed": failed,
+        "results": results,
+    }

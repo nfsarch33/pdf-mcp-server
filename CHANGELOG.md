@@ -6,13 +6,44 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
-### Planned for v0.3.0 (Phase 3)
-- **PDF Optimization**: Compress/reduce PDF file size
-- **Link Extraction**: Extract URLs, hyperlinks, and internal references
-- **Barcode/QR Code**: Detect and decode barcodes and QR codes in PDFs
-- **Page Splitting**: Split PDFs by bookmarks or content markers
-- **PDF Comparison**: Diff two PDFs and highlight changes
-- **Batch Processing**: Process multiple PDFs in a single call
+## 0.3.0 - 2026-01-27
+
+### Added
+- **Link Extraction**
+  - `extract_links`: Extract URLs, hyperlinks, and internal references from PDFs
+  - Link categorization by type (uri, goto, external_goto, launch, named)
+  - Page-level link filtering
+
+- **PDF Optimization**
+  - `optimize_pdf`: Compress/reduce PDF file size
+  - Quality settings: low (max compression), medium, high (min compression)
+  - Reports original/optimized size and compression ratio
+
+- **Barcode/QR Code Detection**
+  - `detect_barcodes`: Detect and decode barcodes and QR codes in PDFs
+  - Supports QR codes, Code128, Code39, EAN13, EAN8, UPC-A, etc.
+  - Requires optional pyzbar library
+
+- **Page Splitting**
+  - `split_pdf_by_bookmarks`: Split PDFs by table of contents/bookmarks
+  - `split_pdf_by_pages`: Split PDFs by page count
+  - Configurable pages per split
+
+- **PDF Comparison**
+  - `compare_pdfs`: Diff two PDFs and identify differences
+  - Compares page count, text content, and optionally images
+  - Generates human-readable summary
+
+- **Batch Processing**
+  - `batch_process`: Process multiple PDFs with a single operation
+  - Supports: get_info, extract_text, extract_links, optimize
+  - Reports individual success/failure for each file
+
+- 42 new integration tests for Phase 3 features
+- Module docstrings in pdf_tools.py and server.py
+
+### Changed
+- Total test count increased to 149
 
 ## 0.2.0 - 2026-01-26
 
