@@ -1,5 +1,5 @@
 """
-Integration tests for Phase 3 features (v0.3.0):
+Integration tests for Phase 3 features:
 - Link extraction: Extract URLs, hyperlinks, internal references
 - PDF optimization: Compress/reduce PDF file size
 - Barcode/QR code detection: Detect and decode barcodes and QR codes

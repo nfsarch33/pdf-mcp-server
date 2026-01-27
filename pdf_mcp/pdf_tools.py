@@ -10,7 +10,7 @@ This module provides PDF manipulation, OCR, and extraction capabilities:
 - Form detection: auto-detect fields in non-AcroForm PDFs
 - Export: markdown and JSON export
 
-Version: 0.3.0
+Version: 0.4.0
 License: AGPL-3.0
 """
 from __future__ import annotations
@@ -2664,7 +2664,7 @@ def _form_recommendation(has_acroform: bool, detected_count: int) -> str:
 
 
 # =============================================================================
-# Phase 3 Features: v0.3.0
+# Phase 3 Features
 # =============================================================================
 
 # Optional pyzbar for barcode detection

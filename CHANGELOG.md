@@ -6,6 +6,8 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 0.4.0 - 2026-01-27
+
 ### Added
 - `reorder_pages`: reorder PDF pages with an explicit 1-based page list.
 - `redact_text_regex`: redact text using a regex pattern.
