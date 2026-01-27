@@ -15,7 +15,7 @@ Available tool categories:
 - Table/image extraction (3 tools)
 - Form detection (1 tool)
 
-Version: 0.4.0
+Version: 0.4.1
 License: AGPL-3.0
 """
 from __future__ import annotations

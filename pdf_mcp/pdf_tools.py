@@ -10,7 +10,7 @@ This module provides PDF manipulation, OCR, and extraction capabilities:
 - Form detection: auto-detect fields in non-AcroForm PDFs
 - Export: markdown and JSON export
 
-Version: 0.4.0
+Version: 0.4.1
 License: AGPL-3.0
 """
 from __future__ import annotations

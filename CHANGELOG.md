@@ -6,6 +6,12 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 0.4.1 - 2026-01-27
+
+### Added
+- `PROJECT_MEMO/PROJECT_STATUS_PROMPT.md`: status prompt for v0.3.0 planning.
+- `PROJECT_MEMO/README.md`: reference to the new status prompt.
+
 ## 0.4.0 - 2026-01-27
 
 ### Added
