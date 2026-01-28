@@ -96,16 +96,16 @@ Edit `~/.cursor/mcp.json`:
 ```
 Restart Cursor after saving.
 
-## Features Overview
+## Features Overview (47 tools)
 
 | Category | Tools | Description |
 |----------|-------|-------------|
 | **Form Handling** | 6 tools | Fill, clear, flatten, and create PDF forms |
-| **Page Operations** | 6 tools | Merge, extract, rotate, reorder, insert, remove pages |
-| **Annotations** | 14 tools | Text, comments, watermarks, signatures, redaction, numbering, highlights |
+| **Page Operations** | 5 tools | Merge, extract, rotate, reorder, insert, remove pages |
+| **Annotations** | 11 tools | Text annotations, comments, watermarks, redaction, numbering, highlights |
 | **Signatures & Security** | 7 tools | Digital signing, verification, encryption |
-| **Export** | 2 tools | Export PDF content to Markdown or JSON |
-| **OCR & Text** | 8 tools | Type detection, native/OCR extraction, confidence scores |
+| **Metadata** | 3 tools | Get, set, and sanitize PDF metadata |
+| **Export & Text** | 5 tools | Unified text extraction, export to Markdown/JSON |
 | **Table Extraction** | 1 tool | Extract tables as structured data |
 | **Image Extraction** | 2 tools | Extract/analyze embedded images |
 | **Form Detection** | 1 tool | Auto-detect form fields in non-AcroForm PDFs |
@@ -113,7 +113,7 @@ Restart Cursor after saving.
 | **Link Extraction** | 1 tool | Extract URLs, hyperlinks, internal references |
 | **PDF Optimization** | 1 tool | Compress/reduce PDF file size |
 | **Barcode/QR Detection** | 1 tool | Detect and decode barcodes and QR codes |
-| **Page Splitting** | 2 tools | Split by bookmarks or page count |
+| **Page Splitting** | 1 tool | Split by bookmarks or page count (unified API) |
 | **PDF Comparison** | 1 tool | Compare two PDFs and find differences |
 | **Batch Processing** | 1 tool | Process multiple PDFs at once |
 
@@ -140,7 +140,6 @@ Restart Cursor after saving.
 - `update_text_annotation(input_path, output_path, annotation_id, text, pages=None)`: update annotation by id.
 - `remove_text_annotation(input_path, output_path, annotation_id, pages=None)`: remove annotation by id.
 - `remove_annotations(input_path, output_path, pages, subtype=None)`: remove annotations, optionally by subtype.
-- `insert_text` / `edit_text` / `remove_text`: managed text via FreeText annotations.
 - `redact_text_regex(input_path, output_path, pattern, ...)`: redact text using a regex pattern.
 - `add_text_watermark(input_path, output_path, text, ...)`: add text watermark/stamp.
 - `add_highlight(input_path, output_path, page, text=None, rect=None)`: add highlight annotations.
@@ -159,25 +158,18 @@ Restart Cursor after saving.
 - `verify_digital_signatures(pdf_path)`: verify digital signatures.
 
 ### Metadata
-- `get_pdf_metadata(pdf_path)`: return document metadata.
+- `get_pdf_metadata(pdf_path, full=False)`: return document metadata; set `full=True` for extended info.
 - `set_pdf_metadata(input_path, output_path, title=None, author=None, ...)`: set metadata fields.
 - `sanitize_pdf_metadata(input_path, output_path, ...)`: remove metadata keys.
-- `get_full_metadata(pdf_path)`: return full metadata + document info.
 
 ### Export
-- `export_to_markdown(pdf_path, output_path, ...)`: export text to Markdown.
-- `export_to_json(pdf_path, output_path, ...)`: export text and metadata to JSON.
+- `export_pdf(pdf_path, output_path, format="markdown", ...)`: export text to Markdown or JSON. Formats: "markdown", "json".
 
-### OCR and Text Extraction (Phase 1)
+### OCR and Text Extraction
 - `detect_pdf_type(pdf_path)`: analyze PDF to classify as "searchable", "image_based", or "hybrid"; returns page-by-page metrics and OCR recommendation.
-- `extract_text_native(pdf_path, pages=None)`: extract text using native PDF text layer only (fast, no OCR).
-- `extract_text_ocr(pdf_path, pages=None, engine="auto", dpi=300, language="eng")`: extract text with OCR fallback; engine options: "auto" (native→OCR), "native", "tesseract", "force_ocr".
+- `extract_text(pdf_path, engine="auto", pages=None, include_confidence=False, ...)`: unified text extraction. Engines: "native", "auto", "smart", "ocr", "force_ocr". Set `include_confidence=True` for word-level confidence scores.
 - `get_pdf_text_blocks(pdf_path, pages=None)`: extract text blocks with bounding box positions (useful for form field detection).
-
-### OCR Phase 2: Enhanced OCR Tools
 - `get_ocr_languages()`: get available Tesseract languages and installation status.
-- `extract_text_with_confidence(pdf_path, pages=None, language="eng", dpi=300, min_confidence=0)`: OCR with word-level confidence scores; supports multi-language (e.g., "eng+fra").
-- `extract_text_smart(pdf_path, pages=None, native_threshold=100, ocr_dpi=300, language="eng")`: smart per-page method selection (native vs OCR) for hybrid documents.
 
 ### Table Extraction
 - `extract_tables(pdf_path, pages=None, output_format="list")`: extract tables as structured data; format "list" or "dict" (with headers).
@@ -192,39 +184,50 @@ Restart Cursor after saving.
 ### PII Detection
 - `detect_pii_patterns(pdf_path, pages=None)`: detect common PII patterns (email, phone, SSN, credit cards).
 
-### Link Extraction (Phase 3)
+### Link Extraction
 - `extract_links(pdf_path, pages=None)`: extract URLs, hyperlinks, and internal references with type categorization.
 
-### PDF Optimization (Phase 3)
+### PDF Optimization
 - `optimize_pdf(pdf_path, output_path, quality="medium")`: compress PDF; quality: "low" (max compression), "medium", "high".
 
-### Barcode/QR Detection (Phase 3)
+### Barcode/QR Detection
 - `detect_barcodes(pdf_path, pages=None, dpi=200)`: detect and decode QR codes, Code128, EAN13, etc. Requires optional `pyzbar`.
 
-### Page Splitting (Phase 3)
-- `split_pdf_by_bookmarks(pdf_path, output_dir)`: split PDF into files based on table of contents.
-- `split_pdf_by_pages(pdf_path, output_dir, pages_per_split=1)`: split by page count.
+### Page Splitting
+- `split_pdf(pdf_path, output_dir, mode="pages", pages_per_split=1)`: split PDF by pages or bookmarks. Modes: "pages", "bookmarks".
 
-### PDF Comparison (Phase 3)
+### PDF Comparison
 - `compare_pdfs(pdf1_path, pdf2_path, compare_text=True, compare_images=False)`: diff two PDFs, find text and page differences.
 
-### Batch Processing (Phase 3)
+### Batch Processing
 - `batch_process(pdf_paths, operation, output_dir=None)`: process multiple PDFs; operations: "get_info", "extract_text", "extract_links", "optimize".
 
-### Consolidated API (v0.6.0+)
-These unified tools consolidate multiple specialized tools for a cleaner API:
+### API Reference
 
-- `extract_text(pdf_path, engine="auto", include_confidence=False, ...)`: Unified text extraction replacing `extract_text_native`, `extract_text_ocr`, `extract_text_smart`, `extract_text_with_confidence`. Engines: "native", "auto", "smart", "ocr", "force_ocr".
-- `split_pdf(pdf_path, output_dir, mode="pages", pages_per_split=1)`: Unified splitting replacing `split_pdf_by_bookmarks` and `split_pdf_by_pages`. Modes: "pages", "bookmarks".
-- `export_pdf(pdf_path, output_path, format="markdown", ...)`: Unified export replacing `export_to_markdown` and `export_to_json`. Formats: "markdown", "json".
-- `get_pdf_metadata(pdf_path, full=False)`: Extended to include document info when `full=True`, replacing `get_full_metadata`.
+**Unified Text Extraction:**
+```python
+extract_text(pdf_path, engine="auto", pages=None, include_confidence=False, 
+             native_threshold=100, dpi=300, language="eng", min_confidence=0)
+```
+- Engines: "native" (fast), "auto" (native→OCR), "smart" (per-page), "ocr"/"tesseract", "force_ocr"
+- Set `include_confidence=True` for word-level confidence scores
 
-**Deprecated tools** (will be removed in v0.7.0):
-- `insert_text`, `edit_text`, `remove_text` → Use `add_text_annotation`, `update_text_annotation`, `remove_text_annotation`
-- `extract_text_native`, `extract_text_ocr`, `extract_text_smart`, `extract_text_with_confidence` → Use `extract_text`
-- `split_pdf_by_bookmarks`, `split_pdf_by_pages` → Use `split_pdf`
-- `export_to_markdown`, `export_to_json` → Use `export_pdf`
-- `get_full_metadata` → Use `get_pdf_metadata(full=True)`
+**Unified Page Splitting:**
+```python
+split_pdf(pdf_path, output_dir, mode="pages", pages_per_split=1)
+```
+- Modes: "pages" (by count), "bookmarks" (by table of contents)
+
+**Unified Export:**
+```python
+export_pdf(pdf_path, output_path, format="markdown", engine="auto", ...)
+```
+- Formats: "markdown", "json"
+
+**Extended Metadata:**
+```python
+get_pdf_metadata(pdf_path, full=False)  # Set full=True for document info
+```
 
 ## Conventions
 - Paths should be absolute; outputs are created with parent directories if missing.
