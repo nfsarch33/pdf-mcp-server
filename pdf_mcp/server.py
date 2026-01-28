@@ -8,7 +8,7 @@ Available tool categories:
 - Form handling (6 tools)
 - Page operations (6 tools)
 - Annotations & text (14 tools)
-- Signatures & security (5 tools)
+- Signatures & security (7 tools)
 - Metadata (4 tools)
 - Export (2 tools)
 - OCR & text extraction (8 tools)
@@ -17,7 +17,7 @@ Available tool categories:
 - PII detection (1 tool)
  - PII detection (1 tool)
 
-Version: 0.5.0
+Version: 0.5.1
 License: AGPL-3.0
 """
 from __future__ import annotations
@@ -466,6 +466,60 @@ def add_bates_numbering(
 def verify_digital_signatures(pdf_path: str) -> Dict[str, Any]:
     """Verify digital signatures in a PDF."""
     return pdf_tools.verify_digital_signatures(pdf_path)
+
+
+@mcp.tool()
+@_handle_errors
+def sign_pdf(
+    input_path: str,
+    output_path: str,
+    pfx_path: str,
+    pfx_password: Optional[str] = None,
+    field_name: str = "Signature1",
+    certify: bool = True,
+    reason: Optional[str] = None,
+    location: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Digitally sign a PDF using a PKCS#12/PFX certificate."""
+    return pdf_tools.sign_pdf(
+        input_path=input_path,
+        output_path=output_path,
+        pfx_path=pfx_path,
+        pfx_password=pfx_password,
+        field_name=field_name,
+        certify=certify,
+        reason=reason,
+        location=location,
+    )
+
+
+@mcp.tool()
+@_handle_errors
+def sign_pdf_pem(
+    input_path: str,
+    output_path: str,
+    key_path: str,
+    cert_path: str,
+    chain_paths: Optional[List[str]] = None,
+    key_password: Optional[str] = None,
+    field_name: str = "Signature1",
+    certify: bool = True,
+    reason: Optional[str] = None,
+    location: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Digitally sign a PDF using PEM key + cert chain."""
+    return pdf_tools.sign_pdf_pem(
+        input_path=input_path,
+        output_path=output_path,
+        key_path=key_path,
+        cert_path=cert_path,
+        chain_paths=chain_paths,
+        key_password=key_password,
+        field_name=field_name,
+        certify=certify,
+        reason=reason,
+        location=location,
+    )
 
 
 @mcp.tool()

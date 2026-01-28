@@ -26,6 +26,11 @@ Cursor has its own memory system and MCP tooling. This repo keeps a portable, re
 2) Use absolute paths for inputs and outputs.
 3) Test each tool with a small dummy PDF and verify output by reopening it.
 
+## Release checklist hygiene (must)
+
+- Review open PRs/branches before release; merge or close outdated ones.
+- Delete stale branches tied to past releases unless they are active POCs or new feature tracks.
+
 ## Open source hygiene
 
 - Files like `cursor-memory-complete-setup-guide.md` must remain untracked and ignored.
