@@ -6,18 +6,19 @@ Run with: python -m pdf_mcp.server
 
 Available tool categories:
 - Form handling (6 tools)
-- Page operations (6 tools)
-- Annotations & text (14 tools)
+- Page operations (5 tools)
+- Annotations & text (11 tools)
 - Signatures & security (7 tools)
-- Metadata (4 tools)
-- Export (2 tools)
-- OCR & text extraction (8 tools)
+- Metadata (3 tools)
+- Export & extraction (5 tools)
+- OCR & text (3 tools)
 - Table/image extraction (3 tools)
 - Form detection (1 tool)
 - PII detection (1 tool)
- - PII detection (1 tool)
+- Batch processing (1 tool)
+- Consolidated API (3 tools)
 
-Version: 0.6.0
+Version: 0.7.0
 License: AGPL-3.0
 """
 from __future__ import annotations
@@ -276,87 +277,6 @@ def redact_text_regex(
 
 @mcp.tool()
 @_handle_errors
-def export_to_json(
-    pdf_path: str,
-    output_path: str,
-    pages: Optional[List[int]] = None,
-    engine: str = "auto",
-    dpi: int = 300,
-    language: str = "eng",
-) -> Dict[str, Any]:
-    """Export PDF text and metadata to JSON."""
-    return pdf_tools.export_to_json(
-        pdf_path=pdf_path,
-        output_path=output_path,
-        pages=pages,
-        engine=engine,
-        dpi=dpi,
-        language=language,
-    )
-
-
-@mcp.tool()
-@_handle_errors
-def export_to_markdown(
-    pdf_path: str,
-    output_path: str,
-    pages: Optional[List[int]] = None,
-    engine: str = "auto",
-    dpi: int = 300,
-    language: str = "eng",
-) -> Dict[str, Any]:
-    """Export PDF text to Markdown."""
-    return pdf_tools.export_to_markdown(
-        pdf_path=pdf_path,
-        output_path=output_path,
-        pages=pages,
-        engine=engine,
-        dpi=dpi,
-        language=language,
-    )
-
-
-@mcp.tool()
-@_handle_errors
-def insert_text(
-    input_path: str,
-    page: int,
-    text: str,
-    output_path: str,
-    rect: Optional[Sequence[float]] = None,
-    text_id: Optional[str] = None,
-) -> Dict[str, Any]:
-    """Insert text via a managed FreeText annotation."""
-    return pdf_tools.insert_text(input_path, page, text, output_path, rect=rect, text_id=text_id)
-
-
-@mcp.tool()
-@_handle_errors
-def edit_text(
-    input_path: str,
-    output_path: str,
-    text_id: str,
-    text: str,
-    pages: Optional[List[int]] = None,
-) -> Dict[str, Any]:
-    """Edit managed inserted text."""
-    return pdf_tools.edit_text(input_path, output_path, text_id, text, pages=pages)
-
-
-@mcp.tool()
-@_handle_errors
-def remove_text(
-    input_path: str,
-    output_path: str,
-    text_id: str,
-    pages: Optional[List[int]] = None,
-) -> Dict[str, Any]:
-    """Remove managed inserted text."""
-    return pdf_tools.remove_text(input_path, output_path, text_id, pages=pages)
-
-
-@mcp.tool()
-@_handle_errors
 def get_pdf_metadata(pdf_path: str, full: bool = False) -> Dict[str, Any]:
     """
     Get PDF document metadata.
@@ -388,13 +308,6 @@ def set_pdf_metadata(
         subject=subject,
         keywords=keywords,
     )
-
-
-@mcp.tool()
-@_handle_errors
-def get_full_metadata(pdf_path: str) -> Dict[str, Any]:
-    """Get full PDF metadata and document info."""
-    return pdf_tools.get_full_metadata(pdf_path)
 
 
 @mcp.tool()
@@ -745,50 +658,6 @@ def detect_pdf_type(pdf_path: str) -> Dict[str, Any]:
 
 @mcp.tool()
 @_handle_errors
-def extract_text_native(
-    pdf_path: str,
-    pages: Optional[List[int]] = None,
-) -> Dict[str, Any]:
-    """
-    Extract text from PDF using native text layer only (no OCR).
-
-    Fast extraction for PDFs with embedded text. Use detect_pdf_type first
-    to determine if the PDF has sufficient native text.
-    """
-    return pdf_tools.extract_text_native(pdf_path, pages=pages)
-
-
-@mcp.tool()
-@_handle_errors
-def extract_text_ocr(
-    pdf_path: str,
-    pages: Optional[List[int]] = None,
-    engine: str = "auto",
-    dpi: int = 300,
-    language: str = "eng",
-) -> Dict[str, Any]:
-    """
-    Extract text from PDF with OCR support.
-
-    Engine options:
-    - "auto": Try native extraction first; fall back to OCR if insufficient
-    - "native": Use only native text extraction (no OCR)
-    - "tesseract": Force OCR using Tesseract
-    - "force_ocr": Always use OCR even if native text exists
-
-    Requires tesseract-ocr to be installed for OCR functionality.
-    """
-    return pdf_tools.extract_text_ocr(
-        pdf_path,
-        pages=pages,
-        engine=engine,
-        dpi=dpi,
-        language=language,
-    )
-
-
-@mcp.tool()
-@_handle_errors
 def get_pdf_text_blocks(
     pdf_path: str,
     pages: Optional[List[int]] = None,
@@ -816,32 +685,6 @@ def get_ocr_languages() -> Dict[str, Any]:
     Returns list of installed language codes and common language mappings.
     """
     return pdf_tools.get_ocr_languages()
-
-
-@mcp.tool()
-@_handle_errors
-def extract_text_with_confidence(
-    pdf_path: str,
-    pages: Optional[List[int]] = None,
-    language: str = "eng",
-    dpi: int = 300,
-    min_confidence: int = 0,
-) -> Dict[str, Any]:
-    """
-    Extract text from PDF with OCR confidence scores.
-
-    Returns word-level confidence scores (0-100), allowing filtering of
-    low-confidence text. Useful for quality assessment and post-processing.
-
-    Supports multi-language with '+' separator (e.g., "eng+fra").
-    """
-    return pdf_tools.extract_text_with_confidence(
-        pdf_path,
-        pages=pages,
-        language=language,
-        dpi=dpi,
-        min_confidence=min_confidence,
-    )
 
 
 # =============================================================================
@@ -909,38 +752,6 @@ def get_image_info(
     Returns image metadata: dimensions, format, position, etc.
     """
     return pdf_tools.get_image_info(pdf_path, pages=pages)
-
-
-# =============================================================================
-# Smart/Hybrid Text Extraction
-# =============================================================================
-
-
-@mcp.tool()
-@_handle_errors
-def extract_text_smart(
-    pdf_path: str,
-    pages: Optional[List[int]] = None,
-    native_threshold: int = 100,
-    ocr_dpi: int = 300,
-    language: str = "eng",
-) -> Dict[str, Any]:
-    """
-    Smart text extraction with per-page method selection.
-
-    For each page, decides whether to use native extraction or OCR based on
-    the native text content. Optimal for hybrid documents with mixed pages.
-
-    Args:
-        native_threshold: Min chars to prefer native extraction (default: 100)
-    """
-    return pdf_tools.extract_text_smart(
-        pdf_path,
-        pages=pages,
-        native_threshold=native_threshold,
-        ocr_dpi=ocr_dpi,
-        language=language,
-    )
 
 
 # =============================================================================
@@ -1043,45 +854,6 @@ def detect_barcodes(
         dpi: Render resolution (higher = better detection, slower)
     """
     return pdf_tools.detect_barcodes(pdf_path, pages=pages, dpi=dpi)
-
-
-@mcp.tool()
-@_handle_errors
-def split_pdf_by_bookmarks(
-    pdf_path: str,
-    output_dir: str,
-) -> Dict[str, Any]:
-    """
-    Split a PDF into multiple files based on its bookmarks (TOC).
-
-    Each bookmark becomes a separate PDF containing pages from that
-    section to the next bookmark.
-
-    Args:
-        pdf_path: Path to the input PDF
-        output_dir: Directory to save split PDFs
-    """
-    return pdf_tools.split_pdf_by_bookmarks(pdf_path, output_dir)
-
-
-@mcp.tool()
-@_handle_errors
-def split_pdf_by_pages(
-    pdf_path: str,
-    output_dir: str,
-    pages_per_split: int = 1,
-) -> Dict[str, Any]:
-    """
-    Split a PDF into multiple files by page count.
-
-    Each output file contains the specified number of pages.
-
-    Args:
-        pdf_path: Path to the input PDF
-        output_dir: Directory to save split PDFs
-        pages_per_split: Number of pages per output file (default: 1)
-    """
-    return pdf_tools.split_pdf_by_pages(pdf_path, output_dir, pages_per_split=pages_per_split)
 
 
 @mcp.tool()

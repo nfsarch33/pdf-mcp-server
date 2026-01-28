@@ -263,14 +263,14 @@ class TestDetectBarcodes:
 
 
 class TestSplitPdfByBookmarks:
-    """Tests for splitting PDFs by bookmarks."""
+    """Tests for splitting PDFs by bookmarks using split_pdf(mode='bookmarks')."""
 
     def test_split_by_bookmarks_returns_structure(self, sample_pdf, temp_dir):
-        """Test that split_pdf_by_bookmarks returns proper structure."""
+        """Test that split_pdf with mode='bookmarks' returns proper structure."""
         if not sample_pdf:
             pytest.skip("Sample PDF not available")
 
-        result = pdf_tools.split_pdf_by_bookmarks(sample_pdf, temp_dir)
+        result = pdf_tools.split_pdf(sample_pdf, temp_dir, mode="bookmarks")
 
         assert "input_path" in result
         assert "output_dir" in result
@@ -283,7 +283,7 @@ class TestSplitPdfByBookmarks:
         if not sample_pdf:
             pytest.skip("Sample PDF not available")
 
-        result = pdf_tools.split_pdf_by_bookmarks(sample_pdf, temp_dir)
+        result = pdf_tools.split_pdf(sample_pdf, temp_dir, mode="bookmarks")
 
         # Even if no bookmarks, should report results
         assert "files_created" in result
@@ -299,7 +299,7 @@ class TestSplitPdfByBookmarks:
         if not pdf_path:
             pytest.skip("Test PDF not available")
 
-        result = pdf_tools.split_pdf_by_bookmarks(pdf_path, temp_dir)
+        result = pdf_tools.split_pdf(pdf_path, temp_dir, mode="bookmarks")
 
         # Should indicate no bookmarks found
         assert result["total_bookmarks"] == 0
@@ -307,7 +307,7 @@ class TestSplitPdfByBookmarks:
     def test_split_by_bookmarks_invalid_pdf(self, temp_dir):
         """Test error handling for invalid PDF."""
         with pytest.raises(PdfToolError):
-            pdf_tools.split_pdf_by_bookmarks("/nonexistent.pdf", temp_dir)
+            pdf_tools.split_pdf("/nonexistent.pdf", temp_dir, mode="bookmarks")
 
     def test_split_by_pages(self, sample_pdf, temp_dir):
         """Test splitting PDF by page ranges."""
@@ -315,7 +315,7 @@ class TestSplitPdfByBookmarks:
             pytest.skip("Sample PDF not available")
 
         # Split every 2 pages
-        result = pdf_tools.split_pdf_by_pages(sample_pdf, temp_dir, pages_per_split=2)
+        result = pdf_tools.split_pdf(sample_pdf, temp_dir, mode="pages", pages_per_split=2)
 
         assert "files_created" in result
         assert len(result["files_created"]) > 0
@@ -551,11 +551,11 @@ class TestMcpLayerPhase3:
         
         assert hasattr(server, "detect_barcodes")
 
-    def test_mcp_split_pdf_by_bookmarks_exists(self):
-        """Test that MCP split_pdf_by_bookmarks tool exists."""
+    def test_mcp_split_pdf_exists(self):
+        """Test that MCP split_pdf tool exists."""
         from pdf_mcp import server
-        
-        assert hasattr(server, "split_pdf_by_bookmarks")
+
+        assert hasattr(server, "split_pdf")
 
     def test_mcp_compare_pdfs_exists(self):
         """Test that MCP compare_pdfs tool exists."""

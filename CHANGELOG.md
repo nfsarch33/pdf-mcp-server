@@ -6,6 +6,25 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 0.7.0 - 2026-01-26
+
+### Removed
+Deprecated tools have been removed as announced in v0.6.0:
+- `insert_text`, `edit_text`, `remove_text` - Use `add_text_annotation`, `update_text_annotation`, `remove_text_annotation` instead
+- `extract_text_native`, `extract_text_ocr`, `extract_text_smart`, `extract_text_with_confidence` - Use `extract_text` with appropriate `engine` parameter instead
+- `split_pdf_by_bookmarks`, `split_pdf_by_pages` - Use `split_pdf` with `mode` parameter instead
+- `export_to_markdown`, `export_to_json` - Use `export_pdf` with `format` parameter instead
+- `get_full_metadata` - Use `get_pdf_metadata(pdf_path, full=True)` instead
+
+### Changed
+- **API Cleanup**: 12 deprecated functions removed, consolidating into 4 unified tools
+- Internal implementations refactored with `_impl` helper functions for cleaner code
+- All tests updated to use the new consolidated API
+- Tool count reduced from 59 to 47 (cleaner API surface)
+
+### Fixed
+- Server module docstring had duplicate "PII detection" line
+
 ## 0.6.0 - 2026-01-28
 
 ### Added

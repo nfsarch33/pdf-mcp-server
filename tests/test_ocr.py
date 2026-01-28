@@ -151,7 +151,7 @@ class TestDetectPdfType:
 
 
 # =============================================================================
-# extract_text_native Tests
+# extract_text (engine="native") Tests
 # =============================================================================
 
 
@@ -164,7 +164,7 @@ class TestExtractTextNative:
         if not path.exists():
             pytest.skip("1006.pdf fixture not available")
         
-        result = pdf_tools.extract_text_native(str(path))
+        result = pdf_tools.extract_text(str(path), engine="native")
         
         assert result["method"] == "native"
         assert result["total_chars"] > 0
@@ -179,7 +179,7 @@ class TestExtractTextNative:
             pytest.skip("1006.pdf fixture not available")
         
         # Extract only page 1
-        result = pdf_tools.extract_text_native(str(path), pages=[1])
+        result = pdf_tools.extract_text(str(path), pages=[1])
         
         assert result["pages_extracted"] == 1
         assert len(result["page_details"]) == 1
@@ -195,7 +195,7 @@ class TestExtractTextNative:
             pytest.skip("No image-based PDF fixtures available")
         
         path = fixtures[image_pdfs[0]]["path"]
-        result = pdf_tools.extract_text_native(path)
+        result = pdf_tools.extract_text(path, engine="native")
         
         # Image-based PDFs should have minimal native text
         # (but might have some due to PDF metadata or embedded fonts)
@@ -209,7 +209,7 @@ class TestExtractTextNative:
         
         print("\n--- Native Text Extraction Summary ---")
         for name, info in fixtures.items():
-            result = pdf_tools.extract_text_native(info["path"])
+            result = pdf_tools.extract_text(info["path"], engine="native")
             print(f"{name}: {result['total_chars']} chars from {result['pages_extracted']} pages")
             
             assert "text" in result
@@ -217,7 +217,7 @@ class TestExtractTextNative:
 
 
 # =============================================================================
-# extract_text_ocr Tests
+# extract_text (with OCR engines) Tests
 # =============================================================================
 
 
@@ -230,22 +230,23 @@ class TestExtractTextOcr:
         if not path.exists():
             pytest.skip("1006.pdf fixture not available")
         
-        result = pdf_tools.extract_text_ocr(str(path), engine="auto")
+        result = pdf_tools.extract_text(str(path), engine="auto")
         
         assert result["engine_requested"] == "auto"
         assert result["method_used"] in ("native", "ocr", "hybrid")
         assert "text" in result
 
     def test_extract_ocr_native_engine(self):
-        """Test native-only engine mode (no OCR)."""
+        """Test native-only engine mode via extract_text."""
         path = TESTS_DIR / "1006.pdf"
         if not path.exists():
             pytest.skip("1006.pdf fixture not available")
         
-        result = pdf_tools.extract_text_ocr(str(path), engine="native")
+        result = pdf_tools.extract_text(str(path), engine="native")
         
-        assert result["engine_requested"] == "native"
-        assert result["method_used"] == "native"
+        # Native mode returns "method" instead of "engine_requested"
+        assert result["method"] == "native"
+        assert "text" in result
 
     def test_extract_ocr_invalid_engine(self):
         """Test error handling for invalid engine."""
@@ -254,7 +255,7 @@ class TestExtractTextOcr:
             pytest.skip("1006.pdf fixture not available")
         
         with pytest.raises(PdfToolError) as exc:
-            pdf_tools.extract_text_ocr(str(path), engine="invalid_engine")
+            pdf_tools.extract_text(str(path), engine="invalid_engine")
         assert "Invalid engine" in str(exc.value)
 
     def test_extract_ocr_specific_pages(self):
@@ -263,7 +264,7 @@ class TestExtractTextOcr:
         if not path.exists():
             pytest.skip("1006.pdf fixture not available")
         
-        result = pdf_tools.extract_text_ocr(str(path), pages=[1], engine="native")
+        result = pdf_tools.extract_text(str(path), pages=[1], engine="native")
         
         assert result["pages_extracted"] == 1
         assert len(result["page_details"]) == 1
@@ -279,7 +280,7 @@ class TestExtractTextOcr:
             pytest.skip("1006.pdf fixture not available")
         
         with pytest.raises(PdfToolError) as exc:
-            pdf_tools.extract_text_ocr(str(path), engine="tesseract")
+            pdf_tools.extract_text(str(path), engine="tesseract")
         assert "Tesseract" in str(exc.value) or "not available" in str(exc.value).lower()
 
     @pytest.mark.skipif(not pdf_tools._HAS_TESSERACT, reason="Tesseract not installed")
@@ -293,7 +294,7 @@ class TestExtractTextOcr:
             pytest.skip("No image-based PDF fixtures available")
         
         path = fixtures[image_pdfs[0]]["path"]
-        result = pdf_tools.extract_text_ocr(path, engine="tesseract", dpi=150)
+        result = pdf_tools.extract_text(path, engine="tesseract", dpi=150)
         
         assert result["engine_requested"] == "tesseract"
         assert result["method_used"] in ("ocr", "hybrid")
@@ -306,7 +307,7 @@ class TestExtractTextOcr:
         if not path.exists():
             pytest.skip("1006.pdf fixture not available")
         
-        result = pdf_tools.extract_text_ocr(str(path), engine="force_ocr", pages=[1])
+        result = pdf_tools.extract_text(str(path), engine="force_ocr", pages=[1])
         
         assert result["engine_requested"] == "force_ocr"
         assert "ocr" in result["method_used"]
@@ -317,7 +318,7 @@ class TestExtractTextOcr:
         
         print("\n--- OCR Text Extraction Summary (auto mode) ---")
         for name, info in fixtures.items():
-            result = pdf_tools.extract_text_ocr(info["path"], engine="auto")
+            result = pdf_tools.extract_text(info["path"], engine="auto")
             print(f"{name}: method={result['method_used']}, "
                   f"{result['total_chars']} chars from {result['pages_extracted']} pages")
             
@@ -436,7 +437,7 @@ class TestMcpLayerOcr:
         assert result["classification"] in ("searchable", "image_based", "hybrid")
 
     def test_mcp_extract_text_native(self):
-        """Test extract_text_native via MCP layer."""
+        """Test extract_text with engine='native' via MCP layer."""
         import asyncio
         from pdf_mcp import server
 
@@ -446,7 +447,7 @@ class TestMcpLayerOcr:
 
         async def call():
             _content, meta = await server.mcp.call_tool(
-                "extract_text_native", {"pdf_path": str(path)}
+                "extract_text", {"pdf_path": str(path), "engine": "native"}
             )
             result = meta["result"]
             assert "error" not in result, result.get("error")
@@ -457,7 +458,7 @@ class TestMcpLayerOcr:
         assert "text" in result
 
     def test_mcp_extract_text_ocr(self):
-        """Test extract_text_ocr via MCP layer."""
+        """Test extract_text with engine='auto' via MCP layer."""
         import asyncio
         from pdf_mcp import server
 
@@ -467,7 +468,7 @@ class TestMcpLayerOcr:
 
         async def call():
             _content, meta = await server.mcp.call_tool(
-                "extract_text_ocr",
+                "extract_text",
                 {"pdf_path": str(path), "engine": "auto"},
             )
             result = meta["result"]
@@ -520,11 +521,11 @@ class TestSpecificPdfRegression:
         assert detect_result["needs_ocr"] is False
         
         # Native extraction
-        native_result = pdf_tools.extract_text_native(str(path))
+        native_result = pdf_tools.extract_text(str(path), engine="native")
         assert native_result["total_chars"] > 100
         
         # OCR extraction (should use native)
-        ocr_result = pdf_tools.extract_text_ocr(str(path), engine="auto")
+        ocr_result = pdf_tools.extract_text(str(path), engine="auto")
         assert ocr_result["method_used"] in ("native", "hybrid")
         
         # Text blocks
@@ -549,7 +550,7 @@ class TestSpecificPdfRegression:
         assert detect_result["classification"] in ("image_based", "hybrid")
         
         # OCR extraction should produce text
-        ocr_result = pdf_tools.extract_text_ocr(path, engine="tesseract", dpi=200)
+        ocr_result = pdf_tools.extract_text(path, engine="tesseract", dpi=200)
         assert ocr_result["method_used"] in ("ocr", "hybrid")
         
         print(f"\n--- OCR Result for {image_pdfs[0]} ---")
@@ -592,7 +593,7 @@ class TestSpecificPdfRegression:
               f"native_chars={detect_result['total_native_chars']}")
         
         # Test extraction of first few pages only (for speed)
-        native_result = pdf_tools.extract_text_native(str(path), pages=[1, 2])
+        native_result = pdf_tools.extract_text(str(path), pages=[1, 2])
         assert native_result["pages_extracted"] == 2
 
 
@@ -628,9 +629,9 @@ class TestOcrPerformance:
             pytest.skip("1006.pdf fixture not available")
         
         start = time.time()
-        pdf_tools.extract_text_native(str(path))
+        pdf_tools.extract_text(str(path), engine="native")
         elapsed = time.time() - start
         
         # Native extraction should be very fast
-        assert elapsed < 1.0, f"extract_text_native took {elapsed:.2f}s"
+        assert elapsed < 1.0, f"extract_text(engine='native') took {elapsed:.2f}s"
 

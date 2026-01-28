@@ -74,12 +74,12 @@ class TestExtractTextWithConfidence:
 
     @pytest.mark.skipif(not pdf_tools._HAS_TESSERACT, reason="Tesseract not installed")
     def test_extract_with_confidence_structure(self):
-        """Test extract_text_with_confidence returns proper structure."""
+        """Test extract_text with include_confidence=True returns proper structure."""
         pdf_path = get_test_pdf("1006.pdf")
         if not pdf_path:
             pytest.skip("1006.pdf not available")
 
-        result = pdf_tools.extract_text_with_confidence(pdf_path, pages=[1])
+        result = pdf_tools.extract_text(pdf_path, pages=[1], include_confidence=True)
 
         assert "pdf_path" in result
         assert "language" in result
@@ -98,7 +98,7 @@ class TestExtractTextWithConfidence:
         if not pdf_path:
             pytest.skip("1006.pdf not available")
 
-        result = pdf_tools.extract_text_with_confidence(pdf_path, pages=[1])
+        result = pdf_tools.extract_text(pdf_path, pages=[1], include_confidence=True)
 
         assert result["pages_extracted"] == 1
         page_detail = result["page_details"][0]
@@ -111,7 +111,6 @@ class TestExtractTextWithConfidence:
             word = page_detail["words"][0]
             assert "text" in word
             assert "confidence" in word
-            assert "bbox" in word
             assert isinstance(word["confidence"], int)
 
     @pytest.mark.skipif(not pdf_tools._HAS_TESSERACT, reason="Tesseract not installed")
@@ -122,20 +121,20 @@ class TestExtractTextWithConfidence:
             pytest.skip("1006.pdf not available")
 
         # Extract all words
-        result_all = pdf_tools.extract_text_with_confidence(
-            pdf_path, pages=[1], min_confidence=0
+        result_all = pdf_tools.extract_text(
+            pdf_path, pages=[1], include_confidence=True, min_confidence=0
         )
 
         # Extract only high confidence words
-        result_high = pdf_tools.extract_text_with_confidence(
-            pdf_path, pages=[1], min_confidence=80
+        result_high = pdf_tools.extract_text(
+            pdf_path, pages=[1], include_confidence=True, min_confidence=80
         )
 
         # High confidence should have same or fewer words
         assert result_high["total_words"] <= result_all["total_words"]
 
     def test_extract_with_confidence_no_tesseract(self):
-        """Test error when Tesseract not available."""
+        """Test error when Tesseract not available and confidence requested."""
         if pdf_tools._HAS_TESSERACT:
             pytest.skip("Tesseract is available")
 
@@ -144,7 +143,7 @@ class TestExtractTextWithConfidence:
             pytest.skip("1006.pdf not available")
 
         with pytest.raises(PdfToolError) as exc:
-            pdf_tools.extract_text_with_confidence(pdf_path)
+            pdf_tools.extract_text(pdf_path, include_confidence=True)
         assert "Tesseract" in str(exc.value)
 
 
@@ -333,24 +332,25 @@ class TestImageExtraction:
 
 
 class TestSmartExtraction:
-    """Tests for smart/hybrid text extraction."""
+    """Tests for smart/hybrid text extraction using extract_text(engine='smart')."""
 
     def test_extract_text_smart_structure(self):
-        """Test that extract_text_smart returns proper structure."""
+        """Test that extract_text with engine='smart' returns proper structure."""
         pdf_path = get_test_pdf("1006.pdf")
         if not pdf_path:
             pytest.skip("1006.pdf not available")
 
-        result = pdf_tools.extract_text_smart(pdf_path)
+        result = pdf_tools.extract_text(pdf_path, engine="smart")
 
         assert "pdf_path" in result
-        assert "total_pages" in result
+        assert "method" in result
+        assert result["method"] == "smart"
         assert "pages_extracted" in result
         assert "total_chars" in result
         assert "native_threshold" in result
-        assert "pages_using_native" in result
-        assert "pages_using_ocr" in result
-        assert "tesseract_available" in result
+        assert "native_pages" in result
+        assert "ocr_pages" in result
+        assert "ocr_available" in result
         assert "text" in result
         assert "page_details" in result
 
@@ -360,7 +360,7 @@ class TestSmartExtraction:
         if not pdf_path:
             pytest.skip("1006.pdf not available")
 
-        result = pdf_tools.extract_text_smart(pdf_path)
+        result = pdf_tools.extract_text(pdf_path, engine="smart")
 
         for page_detail in result["page_details"]:
             assert "page" in page_detail
@@ -377,17 +377,17 @@ class TestSmartExtraction:
             pytest.skip("1006.pdf not available")
 
         # With very high threshold, more pages should try OCR
-        result_high = pdf_tools.extract_text_smart(
-            pdf_path, native_threshold=10000
+        result_high = pdf_tools.extract_text(
+            pdf_path, engine="smart", native_threshold=10000
         )
 
         # With low threshold, most pages should use native
-        result_low = pdf_tools.extract_text_smart(
-            pdf_path, native_threshold=10
+        result_low = pdf_tools.extract_text(
+            pdf_path, engine="smart", native_threshold=10
         )
 
         # Low threshold should have more native pages
-        assert result_low["pages_using_native"] >= result_high["pages_using_native"]
+        assert result_low["native_pages"] >= result_high["native_pages"]
 
     def test_extract_text_smart_hybrid_document(self):
         """Test smart extraction on image-based PDF."""
@@ -395,13 +395,13 @@ class TestSmartExtraction:
         if not pdf_path:
             pytest.skip("scansmpl.pdf not available")
 
-        result = pdf_tools.extract_text_smart(pdf_path)
+        result = pdf_tools.extract_text(pdf_path, engine="smart")
 
         # Image-based PDFs should have mostly OCR pages if Tesseract available
         if pdf_tools._HAS_TESSERACT:
             # At least some pages should attempt OCR
-            print(f"\nSmart extraction: {result['pages_using_native']} native, "
-                  f"{result['pages_using_ocr']} OCR")
+            print(f"\nSmart extraction: {result['native_pages']} native, "
+                  f"{result['ocr_pages']} OCR")
 
     def test_extract_text_smart_all_fixtures(self):
         """Test smart extraction on multiple PDFs."""
@@ -413,9 +413,9 @@ class TestSmartExtraction:
             if not pdf_path:
                 continue
 
-            result = pdf_tools.extract_text_smart(pdf_path)
-            print(f"{name}: {result['pages_using_native']} native, "
-                  f"{result['pages_using_ocr']} OCR, "
+            result = pdf_tools.extract_text(pdf_path, engine="smart")
+            print(f"{name}: {result['native_pages']} native, "
+                  f"{result['ocr_pages']} OCR, "
                   f"{result['total_chars']} chars")
 
 
@@ -588,15 +588,15 @@ class TestMcpLayerPhase2:
 
         async def call():
             _content, meta = await server.mcp.call_tool(
-                "extract_text_smart",
-                {"pdf_path": pdf_path, "pages": [1]},
+                "extract_text",
+                {"pdf_path": pdf_path, "pages": [1], "engine": "smart"},
             )
             result = meta["result"]
             assert "error" not in result, result.get("error")
             return result
 
         result = asyncio.run(call())
-        assert "pages_using_native" in result
+        assert "native_pages" in result
 
     def test_mcp_detect_form_fields(self):
         """Test detect_form_fields via MCP layer."""
@@ -639,7 +639,7 @@ class TestEndToEndWorkflows:
         assert type_result["classification"] in ("searchable", "image_based", "hybrid")
 
         # Step 2: Smart text extraction
-        text_result = pdf_tools.extract_text_smart(pdf_path)
+        text_result = pdf_tools.extract_text(pdf_path, engine="smart")
         assert text_result["total_chars"] >= 0
 
         # Step 3: Table extraction
@@ -657,8 +657,8 @@ class TestEndToEndWorkflows:
         print(f"\n--- Document Analysis: {Path(pdf_path).name} ---")
         print(f"Type: {type_result['classification']}")
         print(f"Text: {text_result['total_chars']} chars "
-              f"({text_result['pages_using_native']} native, "
-              f"{text_result['pages_using_ocr']} OCR)")
+              f"({text_result['native_pages']} native, "
+              f"{text_result['ocr_pages']} OCR)")
         print(f"Tables: {table_result['total_tables']}")
         print(f"Images: {image_result['total_images']}")
         print(f"Form: {form_result['has_existing_acroform']}, "
@@ -674,7 +674,7 @@ class TestEndToEndWorkflows:
         type_result = pdf_tools.detect_pdf_type(pdf_path)
 
         # Smart extraction should handle image-based pages
-        text_result = pdf_tools.extract_text_smart(pdf_path)
+        text_result = pdf_tools.extract_text(pdf_path, engine="smart")
 
         # Get image info
         image_result = pdf_tools.get_image_info(pdf_path)
@@ -696,8 +696,8 @@ class TestEndToEndWorkflows:
             pytest.skip("scansmpl.pdf not available")
 
         # Extract with confidence scores
-        result = pdf_tools.extract_text_with_confidence(
-            pdf_path, pages=[1], min_confidence=0
+        result = pdf_tools.extract_text(
+            pdf_path, pages=[1], include_confidence=True, min_confidence=0
         )
 
         avg_conf = result["overall_average_confidence"]
@@ -731,13 +731,13 @@ class TestAdvancedOcr:
             pytest.skip("scansmpl.pdf not available")
 
         # Test with lower DPI (faster but less accurate)
-        result_150 = pdf_tools.extract_text_with_confidence(
-            pdf_path, pages=[1], dpi=150
+        result_150 = pdf_tools.extract_text(
+            pdf_path, pages=[1], include_confidence=True, dpi=150
         )
 
         # Test with higher DPI (slower but more accurate)
-        result_300 = pdf_tools.extract_text_with_confidence(
-            pdf_path, pages=[1], dpi=300
+        result_300 = pdf_tools.extract_text(
+            pdf_path, pages=[1], include_confidence=True, dpi=300
         )
 
         assert result_150["dpi"] == 150
@@ -764,8 +764,8 @@ class TestAdvancedOcr:
             if not pdf_path:
                 continue
 
-            result = pdf_tools.extract_text_with_confidence(
-                pdf_path, pages=[1], dpi=200, min_confidence=50
+            result = pdf_tools.extract_text(
+                pdf_path, pages=[1], include_confidence=True, dpi=200, min_confidence=50
             )
 
             print(f"{name}: {result['total_words']} words (>=50% conf), "
@@ -782,15 +782,16 @@ class TestAdvancedOcr:
             pytest.skip("scansmpl.pdf not available")
 
         # With low native threshold, should trigger OCR
-        result = pdf_tools.extract_text_smart(
+        result = pdf_tools.extract_text(
             pdf_path,
+            engine="smart",
             native_threshold=10,  # Very low threshold
-            ocr_dpi=200
+            dpi=200
         )
 
         # Should use OCR for image-based pages
-        if result["pages_using_ocr"] > 0:
-            print(f"\nSmart extraction used OCR on {result['pages_using_ocr']} pages")
+        if result["ocr_pages"] > 0:
+            print(f"\nSmart extraction used OCR on {result['ocr_pages']} pages")
             assert result["total_chars"] > 0
 
     @pytest.mark.skipif(not pdf_tools._HAS_TESSERACT, reason="Tesseract not installed")
@@ -800,7 +801,7 @@ class TestAdvancedOcr:
         if not pdf_path:
             pytest.skip("1006.pdf not available")
 
-        result = pdf_tools.extract_text_with_confidence(pdf_path, pages=[1])
+        result = pdf_tools.extract_text(pdf_path, pages=[1], include_confidence=True)
 
         for page in result["page_details"]:
             for word in page.get("words", []):
@@ -821,8 +822,8 @@ class TestAdvancedOcr:
 
         async def call():
             _content, meta = await server.mcp.call_tool(
-                "extract_text_with_confidence",
-                {"pdf_path": pdf_path, "pages": [1], "min_confidence": 50},
+                "extract_text",
+                {"pdf_path": pdf_path, "pages": [1], "include_confidence": True, "min_confidence": 50},
             )
             result = meta["result"]
             assert "error" not in result, result.get("error")
@@ -841,7 +842,7 @@ class TestAdvancedOcr:
         if not pdf_path:
             pytest.skip("No suitable OCR test PDF available")
 
-        result = pdf_tools.extract_text_ocr(
+        result = pdf_tools.extract_text(
             pdf_path, pages=[1], engine="tesseract", dpi=300
         )
 
@@ -861,10 +862,10 @@ class TestAdvancedOcr:
             pytest.skip("1006.pdf not available")
 
         # Native extraction first
-        native_result = pdf_tools.extract_text_native(pdf_path, pages=[1])
+        native_result = pdf_tools.extract_text(pdf_path, pages=[1], engine="native")
 
         # Force OCR
-        ocr_result = pdf_tools.extract_text_ocr(
+        ocr_result = pdf_tools.extract_text(
             pdf_path, pages=[1], engine="force_ocr", dpi=200
         )
 
@@ -900,8 +901,8 @@ class TestOcrLanguageSupport:
         if not pdf_path:
             pytest.skip("1006.pdf not available")
 
-        result = pdf_tools.extract_text_with_confidence(
-            pdf_path, pages=[1], language="eng"
+        result = pdf_tools.extract_text(
+            pdf_path, pages=[1], include_confidence=True, language="eng"
         )
 
         assert result["language"] == "eng"

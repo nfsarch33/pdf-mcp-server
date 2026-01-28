@@ -11,7 +11,7 @@ This module provides PDF manipulation, OCR, and extraction capabilities:
 - Export: markdown and JSON export
 - PII detection: scan for common personal data patterns
 
-Version: 0.6.0
+Version: 0.7.0
 License: AGPL-3.0
 """
 from __future__ import annotations
@@ -21,10 +21,9 @@ import json
 import os
 import re
 import secrets
-import warnings
 from concurrent.futures import ThreadPoolExecutor
-from datetime import date
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
@@ -59,8 +58,8 @@ except ImportError:
     _HAS_TESSERACT = False
 
 try:
-    from pyhanko.pdf_utils.reader import PdfFileReader
     from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
+    from pyhanko.pdf_utils.reader import PdfFileReader
     from pyhanko.sign import fields, signers, validation
     from pyhanko.sign.timestamps.requests_client import HTTPTimeStamper
 
@@ -799,7 +798,7 @@ def _freetext_rect_for_position(
 ) -> ArrayObject:
     mediabox = page.mediabox
     page_width = float(mediabox.width)
-    page_height = float(mediabox.height)
+    float(mediabox.height)
 
     if position == "bottom-left":
         x1, y1 = margin, margin
@@ -1166,59 +1165,6 @@ def remove_pages(input_path: str, pages: List[int], output_path: str) -> Dict:
     return {"output_path": str(dst), "removed": len(zero_based), "total_pages": len(writer.pages)}
 
 
-# Text insert/edit/remove: deprecated aliases for text annotation functions.
-# These will be removed in v0.7.0. Use add_text_annotation/update_text_annotation/remove_text_annotation instead.
-def insert_text(
-    input_path: str,
-    page: int,
-    text: str,
-    output_path: str,
-    rect: Optional[Sequence[float]] = None,
-    text_id: Optional[str] = None,
-) -> Dict:
-    """Deprecated: Use add_text_annotation instead. Will be removed in v0.7.0."""
-    warnings.warn(
-        "insert_text is deprecated and will be removed in v0.7.0. "
-        "Use add_text_annotation instead.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    return add_text_annotation(input_path, page, text, output_path, rect=rect, annotation_id=text_id)
-
-
-def edit_text(
-    input_path: str,
-    output_path: str,
-    text_id: str,
-    text: str,
-    pages: Optional[List[int]] = None,
-) -> Dict:
-    """Deprecated: Use update_text_annotation instead. Will be removed in v0.7.0."""
-    warnings.warn(
-        "edit_text is deprecated and will be removed in v0.7.0. "
-        "Use update_text_annotation instead.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    return update_text_annotation(input_path, output_path, text_id, text, pages=pages)
-
-
-def remove_text(
-    input_path: str,
-    output_path: str,
-    text_id: str,
-    pages: Optional[List[int]] = None,
-) -> Dict:
-    """Deprecated: Use remove_text_annotation instead. Will be removed in v0.7.0."""
-    warnings.warn(
-        "remove_text is deprecated and will be removed in v0.7.0. "
-        "Use remove_text_annotation instead.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    return remove_text_annotation(input_path, output_path, text_id, pages=pages)
-
-
 def get_pdf_metadata(pdf_path: str, full: bool = False) -> Dict[str, Any]:
     """
     Return PDF document metadata.
@@ -1353,88 +1299,6 @@ def sanitize_pdf_metadata(
         writer.write(output_file)
 
     return {"output_path": str(dst), "removed": sorted(set(removed))}
-
-
-def _extract_text_for_export(
-    pdf_path: str,
-    pages: Optional[List[int]],
-    engine: str,
-    dpi: int,
-    language: str,
-) -> Dict[str, Any]:
-    if engine == "auto":
-        return extract_text_smart(pdf_path, pages=pages)
-    if engine == "native":
-        return extract_text_native(pdf_path, pages=pages)
-    if engine in ("ocr", "tesseract", "force_ocr"):
-        ocr_engine = "tesseract" if engine == "ocr" else engine
-        return extract_text_ocr(pdf_path, pages=pages, engine=ocr_engine, dpi=dpi, language=language)
-    raise PdfToolError("engine must be one of: auto, native, ocr, tesseract, force_ocr")
-
-
-def export_to_json(
-    pdf_path: str,
-    output_path: str,
-    pages: Optional[List[int]] = None,
-    engine: str = "auto",
-    dpi: int = 300,
-    language: str = "eng",
-) -> Dict[str, Any]:
-    """Deprecated: Use export_pdf(format='json') instead. Will be removed in v0.7.0."""
-    warnings.warn(
-        "export_to_json is deprecated and will be removed in v0.7.0. "
-        "Use export_pdf(pdf_path, output_path, format='json') instead.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    src = _ensure_file(pdf_path)
-    dst = _prepare_output(output_path)
-
-    text_result = _extract_text_for_export(str(src), pages, engine, dpi, language)
-    reader = PdfReader(str(src))
-
-    payload = {
-        "pdf_path": str(src),
-        "engine": engine,
-        "page_count": len(reader.pages),
-        "metadata": get_pdf_metadata(str(src))["metadata"],
-        "pages": [
-            {"page": p["page"], "text": p["text"], "char_count": p["char_count"]}
-            for p in text_result.get("page_details", [])
-        ],
-    }
-
-    dst.write_text(json.dumps(payload, ensure_ascii=True, indent=2))
-    return {"output_path": str(dst), "page_count": payload["page_count"], "engine": engine}
-
-
-def export_to_markdown(
-    pdf_path: str,
-    output_path: str,
-    pages: Optional[List[int]] = None,
-    engine: str = "auto",
-    dpi: int = 300,
-    language: str = "eng",
-) -> Dict[str, Any]:
-    """Deprecated: Use export_pdf(format='markdown') instead. Will be removed in v0.7.0."""
-    warnings.warn(
-        "export_to_markdown is deprecated and will be removed in v0.7.0. "
-        "Use export_pdf(pdf_path, output_path, format='markdown') instead.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    src = _ensure_file(pdf_path)
-    dst = _prepare_output(output_path)
-
-    text_result = _extract_text_for_export(str(src), pages, engine, dpi, language)
-    parts: List[str] = []
-    for page in text_result.get("page_details", []):
-        parts.append(f"# Page {page['page']}")
-        parts.append(page["text"].rstrip())
-        parts.append("")
-
-    dst.write_text("\n".join(parts), encoding="utf-8")
-    return {"output_path": str(dst), "engine": engine, "pages": len(text_result.get("page_details", []))}
 
 
 def add_page_numbers(
@@ -1729,17 +1593,6 @@ def sign_pdf_pem(
         allow_fetching,
         docmdp_permissions,
     )
-
-
-def get_full_metadata(pdf_path: str) -> Dict[str, Any]:
-    """Deprecated: Use get_pdf_metadata(pdf_path, full=True) instead. Will be removed in v0.7.0."""
-    warnings.warn(
-        "get_full_metadata is deprecated and will be removed in v0.7.0. "
-        "Use get_pdf_metadata(pdf_path, full=True) instead.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    return get_pdf_metadata(pdf_path, full=True)
 
 
 def add_text_watermark(
@@ -2113,207 +1966,6 @@ def detect_pdf_type(pdf_path: str) -> Dict[str, Any]:
         doc.close()
 
 
-def extract_text_native(pdf_path: str, pages: Optional[List[int]] = None) -> Dict[str, Any]:
-    """
-    Extract text from PDF using native text layer only (no OCR).
-
-    Deprecated: Use extract_text(engine="native") instead. Will be removed in v0.7.0.
-
-    Uses PyMuPDF for robust text extraction with layout preservation.
-    """
-    warnings.warn(
-        "extract_text_native is deprecated and will be removed in v0.7.0. "
-        "Use extract_text(pdf_path, engine='native') instead.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    path = _ensure_file(pdf_path)
-    doc = pymupdf.open(str(path))
-
-    try:
-        total_pages = doc.page_count
-        if pages:
-            page_indices = _to_zero_based_pages(pages, total_pages)
-        else:
-            page_indices = list(range(total_pages))
-
-        extracted_pages: List[Dict[str, Any]] = []
-        total_chars = 0
-
-        for idx in page_indices:
-            page = doc.load_page(idx)
-            text = page.get_text("text")
-            char_count = len(text.strip())
-
-            extracted_pages.append({
-                "page": idx + 1,
-                "text": text,
-                "char_count": char_count,
-            })
-            total_chars += char_count
-
-        # Combine all text
-        full_text = "\n\n--- Page Break ---\n\n".join(
-            p["text"] for p in extracted_pages
-        )
-
-        return {
-            "pdf_path": str(path),
-            "method": "native",
-            "pages_extracted": len(extracted_pages),
-            "total_chars": total_chars,
-            "text": full_text,
-            "page_details": extracted_pages,
-        }
-    finally:
-        doc.close()
-
-
-def extract_text_ocr(
-    pdf_path: str,
-    pages: Optional[List[int]] = None,
-    engine: str = "auto",
-    dpi: int = 300,
-    language: str = "eng",
-) -> Dict[str, Any]:
-    """
-    Extract text from PDF with OCR support.
-
-    Deprecated: Use extract_text(engine=...) instead. Will be removed in v0.7.0.
-
-    Engine options:
-    - "auto": Try native extraction first; fall back to OCR if insufficient text
-    - "native": Use only native text extraction (no OCR)
-    - "tesseract": Force OCR using Tesseract
-    - "force_ocr": Always use OCR even if native text exists
-
-    Args:
-        pdf_path: Path to PDF file
-        pages: Optional list of 1-based page numbers (default: all pages)
-        engine: OCR engine selection ("auto", "native", "tesseract", "force_ocr")
-        dpi: Resolution for rendering pages to images (default: 300)
-        language: Tesseract language code (default: "eng")
-
-    Returns:
-        Dict with extracted text and metadata
-    """
-    warnings.warn(
-        "extract_text_ocr is deprecated and will be removed in v0.7.0. "
-        "Use extract_text(pdf_path, engine=...) instead.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    path = _ensure_file(pdf_path)
-
-    # Validate engine choice
-    valid_engines = ("auto", "native", "tesseract", "force_ocr")
-    if engine not in valid_engines:
-        raise PdfToolError(f"Invalid engine: {engine}. Must be one of {valid_engines}")
-
-    if engine in ("tesseract", "force_ocr") and not _HAS_TESSERACT:
-        raise PdfToolError(
-            "Tesseract OCR not available. Install pytesseract and tesseract-ocr: "
-            "pip install pytesseract pillow && brew install tesseract (macOS) "
-            "or apt-get install tesseract-ocr (Linux)"
-        )
-
-    doc = pymupdf.open(str(path))
-
-    try:
-        total_pages = doc.page_count
-        if pages:
-            page_indices = _to_zero_based_pages(pages, total_pages)
-        else:
-            page_indices = list(range(total_pages))
-
-        extracted_pages: List[Dict[str, Any]] = []
-        total_chars = 0
-        ocr_used = False
-        native_used = False
-
-        for idx in page_indices:
-            page = doc.load_page(idx)
-            page_result: Dict[str, Any] = {"page": idx + 1}
-
-            # Try native extraction first (unless force_ocr)
-            native_text = ""
-            if engine != "force_ocr":
-                native_text = page.get_text("text").strip()
-                page_result["native_chars"] = len(native_text)
-
-            # Determine if we should use OCR for this page
-            use_ocr_for_page = False
-            if engine == "tesseract" or engine == "force_ocr":
-                use_ocr_for_page = True
-            elif engine == "auto":
-                # Use OCR if native text is insufficient (less than 50 chars)
-                # and the page has images
-                has_images = len(page.get_images()) > 0
-                insufficient_text = len(native_text) < 50
-                use_ocr_for_page = has_images and insufficient_text
-
-            # Perform OCR if needed
-            ocr_text = ""
-            if use_ocr_for_page and _HAS_TESSERACT:
-                try:
-                    # Render page to image
-                    mat = pymupdf.Matrix(dpi / 72, dpi / 72)
-                    pix = page.get_pixmap(matrix=mat)
-                    img_data = pix.tobytes("png")
-
-                    # OCR with Tesseract
-                    img = Image.open(io.BytesIO(img_data))
-                    ocr_text = pytesseract.image_to_string(img, lang=language)
-                    ocr_text = ocr_text.strip()
-                    page_result["ocr_chars"] = len(ocr_text)
-                    ocr_used = True
-                except Exception as e:
-                    page_result["ocr_error"] = str(e)
-
-            # Choose best text for this page
-            if use_ocr_for_page and ocr_text:
-                final_text = ocr_text
-                page_result["method"] = "ocr"
-            else:
-                final_text = native_text
-                page_result["method"] = "native"
-                if native_text:
-                    native_used = True
-
-            page_result["text"] = final_text
-            page_result["char_count"] = len(final_text)
-            extracted_pages.append(page_result)
-            total_chars += len(final_text)
-
-        # Combine all text
-        full_text = "\n\n--- Page Break ---\n\n".join(
-            p["text"] for p in extracted_pages if p["text"]
-        )
-
-        # Determine overall method used
-        if ocr_used and native_used:
-            method = "hybrid"
-        elif ocr_used:
-            method = "ocr"
-        else:
-            method = "native"
-
-        return {
-            "pdf_path": str(path),
-            "engine_requested": engine,
-            "method_used": method,
-            "pages_extracted": len(extracted_pages),
-            "total_chars": total_chars,
-            "ocr_available": _HAS_TESSERACT,
-            "dpi": dpi if ocr_used else None,
-            "language": language if ocr_used else None,
-            "text": full_text,
-            "page_details": extracted_pages,
-        }
-    finally:
-        doc.close()
-
-
 def get_pdf_text_blocks(
     pdf_path: str,
     pages: Optional[List[int]] = None,
@@ -2413,141 +2065,6 @@ def get_ocr_languages() -> Dict[str, Any]:
         "installed_languages": installed_languages,
         "common_language_codes": TESSERACT_LANGUAGES,
     }
-
-
-def extract_text_with_confidence(
-    pdf_path: str,
-    pages: Optional[List[int]] = None,
-    language: str = "eng",
-    dpi: int = 300,
-    min_confidence: int = 0,
-) -> Dict[str, Any]:
-    """
-    Extract text from PDF with OCR confidence scores.
-
-    Deprecated: Use extract_text(include_confidence=True) instead. Will be removed in v0.7.0.
-
-    This function performs OCR and returns word-level confidence scores,
-    allowing filtering of low-confidence text.
-
-    Args:
-        pdf_path: Path to PDF file
-        pages: Optional list of 1-based page numbers (default: all pages)
-        language: Tesseract language code (default: "eng"). Use "+" for multiple: "eng+fra"
-        dpi: Resolution for rendering pages (default: 300)
-        min_confidence: Minimum confidence threshold 0-100 (default: 0 = all text)
-
-    Returns:
-        Dict with text, confidence scores, and word-level details
-    """
-    warnings.warn(
-        "extract_text_with_confidence is deprecated and will be removed in v0.7.0. "
-        "Use extract_text(pdf_path, include_confidence=True) instead.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    if not _HAS_TESSERACT:
-        raise PdfToolError(
-            "Tesseract OCR not available. Install pytesseract and tesseract-ocr."
-        )
-
-    path = _ensure_file(pdf_path)
-    doc = pymupdf.open(str(path))
-
-    try:
-        total_pages = doc.page_count
-        if pages:
-            page_indices = _to_zero_based_pages(pages, total_pages)
-        else:
-            page_indices = list(range(total_pages))
-
-        extracted_pages: List[Dict[str, Any]] = []
-        total_words = 0
-        total_confidence_sum = 0.0
-        all_text_parts: List[str] = []
-
-        for idx in page_indices:
-            page = doc.load_page(idx)
-            page_result: Dict[str, Any] = {"page": idx + 1, "words": []}
-
-            # Render page to image
-            mat = pymupdf.Matrix(dpi / 72, dpi / 72)
-            pix = page.get_pixmap(matrix=mat)
-            img_data = pix.tobytes("png")
-            img = Image.open(io.BytesIO(img_data))
-
-            # Get word-level OCR data with confidence
-            try:
-                ocr_data = pytesseract.image_to_data(
-                    img, lang=language, output_type=pytesseract.Output.DICT
-                )
-
-                page_text_parts: List[str] = []
-                page_words: List[Dict[str, Any]] = []
-                page_confidence_sum = 0.0
-                page_word_count = 0
-
-                for i, word in enumerate(ocr_data["text"]):
-                    conf = int(ocr_data["conf"][i])
-                    if word.strip() and conf >= min_confidence:
-                        word_info = {
-                            "text": word,
-                            "confidence": conf,
-                            "bbox": [
-                                ocr_data["left"][i],
-                                ocr_data["top"][i],
-                                ocr_data["left"][i] + ocr_data["width"][i],
-                                ocr_data["top"][i] + ocr_data["height"][i],
-                            ],
-                            "line_num": ocr_data["line_num"][i],
-                            "block_num": ocr_data["block_num"][i],
-                        }
-                        page_words.append(word_info)
-                        page_text_parts.append(word)
-                        if conf >= 0:  # Tesseract returns -1 for non-text
-                            page_confidence_sum += conf
-                            page_word_count += 1
-
-                page_text = " ".join(page_text_parts)
-                page_avg_confidence = (
-                    page_confidence_sum / page_word_count if page_word_count > 0 else 0
-                )
-
-                page_result["text"] = page_text
-                page_result["words"] = page_words
-                page_result["word_count"] = page_word_count
-                page_result["average_confidence"] = round(page_avg_confidence, 1)
-
-                all_text_parts.append(page_text)
-                total_words += page_word_count
-                total_confidence_sum += page_confidence_sum
-
-            except Exception as e:
-                page_result["error"] = str(e)
-                page_result["text"] = ""
-                page_result["words"] = []
-                page_result["word_count"] = 0
-                page_result["average_confidence"] = 0
-
-            extracted_pages.append(page_result)
-
-        overall_avg_confidence = (
-            total_confidence_sum / total_words if total_words > 0 else 0
-        )
-
-        return {
-            "pdf_path": str(path),
-            "language": language,
-            "dpi": dpi,
-            "min_confidence": min_confidence,
-            "pages_extracted": len(extracted_pages),
-            "total_words": total_words,
-            "overall_average_confidence": round(overall_avg_confidence, 1),
-            "text": "\n\n--- Page Break ---\n\n".join(all_text_parts),
-            "page_details": extracted_pages,
-        }
-    finally:
-        doc.close()
 
 
 # =============================================================================
@@ -2845,135 +2362,6 @@ def get_image_info(pdf_path: str, pages: Optional[List[int]] = None) -> Dict[str
             "pages_analyzed": len(page_images),
             "total_images": total_images,
             "page_images": page_images,
-        }
-    finally:
-        doc.close()
-
-
-# =============================================================================
-# Hybrid Document Processing (Enhanced)
-# =============================================================================
-
-
-def extract_text_smart(
-    pdf_path: str,
-    pages: Optional[List[int]] = None,
-    native_threshold: int = 100,
-    ocr_dpi: int = 300,
-    language: str = "eng",
-) -> Dict[str, Any]:
-    """
-    Smart text extraction with per-page method selection.
-
-    Deprecated: Use extract_text(engine="smart") instead. Will be removed in v0.7.0.
-
-    For each page, decides whether to use native extraction or OCR based on
-    the native text content. This provides optimal results for hybrid documents.
-
-    Args:
-        pdf_path: Path to PDF file
-        pages: Optional list of 1-based page numbers (default: all pages)
-        native_threshold: Minimum chars to prefer native extraction (default: 100)
-        ocr_dpi: DPI for OCR rendering (default: 300)
-        language: Tesseract language code (default: "eng")
-
-    Returns:
-        Dict with extracted text and per-page method details
-    """
-    warnings.warn(
-        "extract_text_smart is deprecated and will be removed in v0.7.0. "
-        "Use extract_text(pdf_path, engine='smart') instead.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    path = _ensure_file(pdf_path)
-    doc = pymupdf.open(str(path))
-
-    try:
-        total_pages = doc.page_count
-        if pages:
-            page_indices = _to_zero_based_pages(pages, total_pages)
-        else:
-            page_indices = list(range(total_pages))
-
-        extracted_pages: List[Dict[str, Any]] = []
-        all_text_parts: List[str] = []
-        total_chars = 0
-        native_pages = 0
-        ocr_pages = 0
-
-        for idx in page_indices:
-            page = doc.load_page(idx)
-            page_result: Dict[str, Any] = {"page": idx + 1}
-
-            # Try native extraction first
-            native_text = page.get_text("text").strip()
-            native_chars = len(native_text)
-            page_result["native_chars"] = native_chars
-
-            # Check if page has images
-            images = page.get_images()
-            has_images = len(images) > 0
-            page_result["has_images"] = has_images
-
-            # Decide method for this page
-            use_native = native_chars >= native_threshold
-
-            if use_native:
-                page_result["method"] = "native"
-                page_result["text"] = native_text
-                page_result["char_count"] = native_chars
-                all_text_parts.append(native_text)
-                total_chars += native_chars
-                native_pages += 1
-            else:
-                # Try OCR if Tesseract is available and page has images
-                if _HAS_TESSERACT and has_images:
-                    try:
-                        mat = pymupdf.Matrix(ocr_dpi / 72, ocr_dpi / 72)
-                        pix = page.get_pixmap(matrix=mat)
-                        img_data = pix.tobytes("png")
-                        img = Image.open(io.BytesIO(img_data))
-                        ocr_text = pytesseract.image_to_string(img, lang=language).strip()
-
-                        page_result["method"] = "ocr"
-                        page_result["text"] = ocr_text
-                        page_result["char_count"] = len(ocr_text)
-                        all_text_parts.append(ocr_text)
-                        total_chars += len(ocr_text)
-                        ocr_pages += 1
-                    except Exception as e:
-                        # Fall back to native on OCR error
-                        page_result["method"] = "native"
-                        page_result["text"] = native_text
-                        page_result["char_count"] = native_chars
-                        page_result["ocr_error"] = str(e)
-                        all_text_parts.append(native_text)
-                        total_chars += native_chars
-                        native_pages += 1
-                else:
-                    # No OCR available, use native
-                    page_result["method"] = "native"
-                    page_result["text"] = native_text
-                    page_result["char_count"] = native_chars
-                    page_result["ocr_unavailable"] = not _HAS_TESSERACT
-                    all_text_parts.append(native_text)
-                    total_chars += native_chars
-                    native_pages += 1
-
-            extracted_pages.append(page_result)
-
-        return {
-            "pdf_path": str(path),
-            "total_pages": total_pages,
-            "pages_extracted": len(extracted_pages),
-            "total_chars": total_chars,
-            "native_threshold": native_threshold,
-            "pages_using_native": native_pages,
-            "pages_using_ocr": ocr_pages,
-            "tesseract_available": _HAS_TESSERACT,
-            "text": "\n\n--- Page Break ---\n\n".join(all_text_parts),
-            "page_details": extracted_pages,
         }
     finally:
         doc.close()
@@ -3541,163 +2929,6 @@ def detect_barcodes(
         doc.close()
 
 
-def split_pdf_by_bookmarks(
-    pdf_path: str,
-    output_dir: str,
-) -> Dict[str, Any]:
-    """
-    Split a PDF by its bookmarks (table of contents).
-
-    Deprecated: Use split_pdf(mode="bookmarks") instead. Will be removed in v0.7.0.
-
-    Each bookmark creates a separate PDF file containing pages
-    from that bookmark to the next one.
-
-    Args:
-        pdf_path: Path to the input PDF
-        output_dir: Directory to save split PDFs
-
-    Returns:
-        Dict with splitting results:
-        - input_path: Original file path
-        - output_dir: Output directory
-        - total_bookmarks: Number of bookmarks found
-        - files_created: List of created file details
-    """
-    warnings.warn(
-        "split_pdf_by_bookmarks is deprecated and will be removed in v0.7.0. "
-        "Use split_pdf(pdf_path, output_dir, mode='bookmarks') instead.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    path = _ensure_file(pdf_path)
-    out_dir = Path(output_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    doc = pymupdf.open(str(path))
-    try:
-        toc = doc.get_toc()  # [[level, title, page], ...]
-        total_pages = len(doc)
-        files_created = []
-
-        if not toc:
-            # No bookmarks - return single file or empty
-            return {
-                "input_path": str(path),
-                "output_dir": str(out_dir),
-                "total_bookmarks": 0,
-                "files_created": [],
-                "message": "No bookmarks found in PDF",
-            }
-
-        # Process bookmarks
-        for i, bookmark in enumerate(toc):
-            level, title, start_page = bookmark
-            
-            # Determine end page
-            if i + 1 < len(toc):
-                end_page = toc[i + 1][2] - 1  # Page before next bookmark
-            else:
-                end_page = total_pages
-
-            # Create safe filename
-            safe_title = "".join(c if c.isalnum() or c in " -_" else "_" for c in title)
-            safe_title = safe_title[:50].strip()  # Limit length
-            output_file = out_dir / f"{i + 1:03d}_{safe_title}.pdf"
-
-            # Extract pages
-            new_doc = pymupdf.open()
-            try:
-                new_doc.insert_pdf(doc, from_page=start_page - 1, to_page=end_page - 1)
-                new_doc.save(str(output_file))
-                
-                files_created.append({
-                    "path": str(output_file),
-                    "title": title,
-                    "page_range": f"{start_page}-{end_page}",
-                    "page_count": end_page - start_page + 1,
-                })
-            finally:
-                new_doc.close()
-
-        return {
-            "input_path": str(path),
-            "output_dir": str(out_dir),
-            "total_bookmarks": len(toc),
-            "files_created": files_created,
-        }
-    finally:
-        doc.close()
-
-
-def split_pdf_by_pages(
-    pdf_path: str,
-    output_dir: str,
-    pages_per_split: int = 1,
-) -> Dict[str, Any]:
-    """
-    Split a PDF into multiple files by page count.
-
-    Deprecated: Use split_pdf(mode="pages") instead. Will be removed in v0.7.0.
-
-    Args:
-        pdf_path: Path to the input PDF
-        output_dir: Directory to save split PDFs
-        pages_per_split: Number of pages per output file
-
-    Returns:
-        Dict with splitting results:
-        - input_path: Original file path
-        - output_dir: Output directory
-        - files_created: List of created file details
-    """
-    warnings.warn(
-        "split_pdf_by_pages is deprecated and will be removed in v0.7.0. "
-        "Use split_pdf(pdf_path, output_dir, mode='pages') instead.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    path = _ensure_file(pdf_path)
-    out_dir = Path(output_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    doc = pymupdf.open(str(path))
-    try:
-        total_pages = len(doc)
-        files_created = []
-        
-        base_name = path.stem
-
-        for start in range(0, total_pages, pages_per_split):
-            end = min(start + pages_per_split - 1, total_pages - 1)
-            
-            output_file = out_dir / f"{base_name}_pages_{start + 1}-{end + 1}.pdf"
-
-            new_doc = pymupdf.open()
-            try:
-                new_doc.insert_pdf(doc, from_page=start, to_page=end)
-                new_doc.save(str(output_file))
-                
-                files_created.append({
-                    "path": str(output_file),
-                    "title": f"Pages {start + 1}-{end + 1}",
-                    "page_range": f"{start + 1}-{end + 1}",
-                    "page_count": end - start + 1,
-                })
-            finally:
-                new_doc.close()
-
-        return {
-            "input_path": str(path),
-            "output_dir": str(out_dir),
-            "total_pages": total_pages,
-            "pages_per_split": pages_per_split,
-            "files_created": files_created,
-        }
-    finally:
-        doc.close()
-
-
 def compare_pdfs(
     pdf1_path: str,
     pdf2_path: str,
@@ -3846,7 +3077,7 @@ def batch_process(
                     doc.close()
 
             elif operation == "extract_text":
-                result = extract_text_native(pdf_path)
+                result = extract_text(pdf_path, engine="native")
 
             elif operation == "extract_links":
                 result = extract_links(pdf_path)
@@ -3884,8 +3115,434 @@ def batch_process(
 
 
 # =============================================================================
-# Consolidated API (v0.6.0+)
-# These unified tools replace multiple specialized tools for cleaner API.
+# Internal Implementation Functions (v0.7.0+)
+# These are the core implementations called by the consolidated API.
+# =============================================================================
+
+
+def _extract_text_native_impl(pdf_path: str, pages: Optional[List[int]] = None) -> Dict[str, Any]:
+    """Internal: Extract text using native text layer only (no OCR)."""
+    path = _ensure_file(pdf_path)
+    doc = pymupdf.open(str(path))
+
+    try:
+        total_pages = doc.page_count
+        if pages:
+            page_indices = _to_zero_based_pages(pages, total_pages)
+        else:
+            page_indices = list(range(total_pages))
+
+        extracted_pages: List[Dict[str, Any]] = []
+        total_chars = 0
+
+        for idx in page_indices:
+            page = doc.load_page(idx)
+            text = page.get_text("text")
+            char_count = len(text.strip())
+
+            extracted_pages.append({
+                "page": idx + 1,
+                "text": text,
+                "char_count": char_count,
+            })
+            total_chars += char_count
+
+        full_text = "\n\n--- Page Break ---\n\n".join(
+            p["text"] for p in extracted_pages
+        )
+
+        return {
+            "pdf_path": str(path),
+            "method": "native",
+            "pages_extracted": len(extracted_pages),
+            "total_chars": total_chars,
+            "text": full_text,
+            "page_details": extracted_pages,
+        }
+    finally:
+        doc.close()
+
+
+def _extract_text_ocr_impl(
+    pdf_path: str,
+    pages: Optional[List[int]] = None,
+    engine: str = "auto",
+    dpi: int = 300,
+    language: str = "eng",
+) -> Dict[str, Any]:
+    """Internal: Extract text with OCR support."""
+    path = _ensure_file(pdf_path)
+
+    valid_engines = ("auto", "native", "tesseract", "force_ocr", "ocr")
+    if engine not in valid_engines:
+        raise PdfToolError(f"Invalid engine: {engine}. Must be one of {valid_engines}")
+
+    if engine in ("tesseract", "force_ocr", "ocr") and not _HAS_TESSERACT:
+        raise PdfToolError(
+            "Tesseract OCR not available. Install pytesseract and tesseract-ocr: "
+            "pip install pytesseract pillow && brew install tesseract (macOS) "
+            "or apt-get install tesseract-ocr (Linux)"
+        )
+
+    doc = pymupdf.open(str(path))
+
+    try:
+        total_pages = doc.page_count
+        if pages:
+            page_indices = _to_zero_based_pages(pages, total_pages)
+        else:
+            page_indices = list(range(total_pages))
+
+        extracted_pages: List[Dict[str, Any]] = []
+        total_chars = 0
+        ocr_used = False
+        native_used = False
+
+        for idx in page_indices:
+            page = doc.load_page(idx)
+            page_result: Dict[str, Any] = {"page": idx + 1}
+
+            native_text = ""
+            if engine != "force_ocr":
+                native_text = page.get_text("text").strip()
+                page_result["native_chars"] = len(native_text)
+
+            use_ocr_for_page = False
+            if engine in ("tesseract", "force_ocr", "ocr"):
+                use_ocr_for_page = True
+            elif engine == "auto":
+                has_images = len(page.get_images()) > 0
+                insufficient_text = len(native_text) < 50
+                use_ocr_for_page = has_images and insufficient_text
+
+            ocr_text = ""
+            if use_ocr_for_page and _HAS_TESSERACT:
+                try:
+                    mat = pymupdf.Matrix(dpi / 72, dpi / 72)
+                    pix = page.get_pixmap(matrix=mat)
+                    img_data = pix.tobytes("png")
+                    img = Image.open(io.BytesIO(img_data))
+                    ocr_text = pytesseract.image_to_string(img, lang=language).strip()
+                    page_result["ocr_chars"] = len(ocr_text)
+                    ocr_used = True
+                except Exception as e:
+                    page_result["ocr_error"] = str(e)
+
+            if use_ocr_for_page and ocr_text:
+                final_text = ocr_text
+                page_result["method"] = "ocr"
+            else:
+                final_text = native_text
+                page_result["method"] = "native"
+                if native_text:
+                    native_used = True
+
+            page_result["text"] = final_text
+            page_result["char_count"] = len(final_text)
+            extracted_pages.append(page_result)
+            total_chars += len(final_text)
+
+        full_text = "\n\n--- Page Break ---\n\n".join(
+            p["text"] for p in extracted_pages if p["text"]
+        )
+
+        if ocr_used and native_used:
+            method = "hybrid"
+        elif ocr_used:
+            method = "ocr"
+        else:
+            method = "native"
+
+        return {
+            "pdf_path": str(path),
+            "engine_requested": engine,
+            "method_used": method,
+            "pages_extracted": len(extracted_pages),
+            "total_chars": total_chars,
+            "ocr_available": _HAS_TESSERACT,
+            "dpi": dpi if ocr_used else None,
+            "language": language if ocr_used else None,
+            "text": full_text,
+            "page_details": extracted_pages,
+        }
+    finally:
+        doc.close()
+
+
+def _extract_text_smart_impl(
+    pdf_path: str,
+    pages: Optional[List[int]] = None,
+    native_threshold: int = 100,
+    ocr_dpi: int = 300,
+    language: str = "eng",
+) -> Dict[str, Any]:
+    """Internal: Smart per-page method selection based on native text availability."""
+    path = _ensure_file(pdf_path)
+    doc = pymupdf.open(str(path))
+
+    try:
+        total_pages = doc.page_count
+        if pages:
+            page_indices = _to_zero_based_pages(pages, total_pages)
+        else:
+            page_indices = list(range(total_pages))
+
+        extracted_pages: List[Dict[str, Any]] = []
+        total_chars = 0
+        ocr_pages = 0
+        native_pages = 0
+
+        for idx in page_indices:
+            page = doc.load_page(idx)
+            page_result: Dict[str, Any] = {"page": idx + 1}
+
+            native_text = page.get_text("text").strip()
+            native_chars = len(native_text)
+            page_result["native_chars"] = native_chars
+
+            if native_chars >= native_threshold:
+                final_text = native_text
+                page_result["method"] = "native"
+                native_pages += 1
+            else:
+                if _HAS_TESSERACT:
+                    try:
+                        mat = pymupdf.Matrix(ocr_dpi / 72, ocr_dpi / 72)
+                        pix = page.get_pixmap(matrix=mat)
+                        img_data = pix.tobytes("png")
+                        img = Image.open(io.BytesIO(img_data))
+                        ocr_text = pytesseract.image_to_string(img, lang=language).strip()
+                        if len(ocr_text) > native_chars:
+                            final_text = ocr_text
+                            page_result["method"] = "ocr"
+                            page_result["ocr_chars"] = len(ocr_text)
+                            ocr_pages += 1
+                        else:
+                            final_text = native_text
+                            page_result["method"] = "native"
+                            native_pages += 1
+                    except Exception as e:
+                        final_text = native_text
+                        page_result["method"] = "native"
+                        page_result["ocr_error"] = str(e)
+                        native_pages += 1
+                else:
+                    final_text = native_text
+                    page_result["method"] = "native"
+                    native_pages += 1
+
+            page_result["text"] = final_text
+            page_result["char_count"] = len(final_text)
+            extracted_pages.append(page_result)
+            total_chars += len(final_text)
+
+        full_text = "\n\n--- Page Break ---\n\n".join(
+            p["text"] for p in extracted_pages if p["text"]
+        )
+
+        return {
+            "pdf_path": str(path),
+            "method": "smart",
+            "native_threshold": native_threshold,
+            "pages_extracted": len(extracted_pages),
+            "native_pages": native_pages,
+            "ocr_pages": ocr_pages,
+            "total_chars": total_chars,
+            "ocr_available": _HAS_TESSERACT,
+            "text": full_text,
+            "page_details": extracted_pages,
+        }
+    finally:
+        doc.close()
+
+
+def _extract_text_with_confidence_impl(
+    pdf_path: str,
+    pages: Optional[List[int]] = None,
+    language: str = "eng",
+    dpi: int = 300,
+    min_confidence: int = 0,
+) -> Dict[str, Any]:
+    """Internal: Extract text with OCR confidence scores."""
+    if not _HAS_TESSERACT:
+        raise PdfToolError(
+            "Tesseract OCR not available. Install pytesseract and tesseract-ocr."
+        )
+
+    path = _ensure_file(pdf_path)
+    doc = pymupdf.open(str(path))
+
+    try:
+        total_pages = doc.page_count
+        if pages:
+            page_indices = _to_zero_based_pages(pages, total_pages)
+        else:
+            page_indices = list(range(total_pages))
+
+        page_details: List[Dict[str, Any]] = []
+        all_text_parts: List[str] = []
+        total_words = 0
+        confidence_sum = 0
+
+        for idx in page_indices:
+            page = doc.load_page(idx)
+            mat = pymupdf.Matrix(dpi / 72, dpi / 72)
+            pix = page.get_pixmap(matrix=mat)
+            img_data = pix.tobytes("png")
+            img = Image.open(io.BytesIO(img_data))
+
+            data = pytesseract.image_to_data(img, lang=language, output_type=pytesseract.Output.DICT)
+
+            page_words: List[Dict[str, Any]] = []
+            page_text_parts: List[str] = []
+
+            for i, word in enumerate(data["text"]):
+                conf = int(data["conf"][i])
+                if word.strip() and conf >= min_confidence:
+                    word_info = {
+                        "text": word,
+                        "confidence": conf,
+                        "left": data["left"][i],
+                        "top": data["top"][i],
+                        "width": data["width"][i],
+                        "height": data["height"][i],
+                    }
+                    page_words.append(word_info)
+                    page_text_parts.append(word)
+                    confidence_sum += conf
+                    total_words += 1
+
+            page_text = " ".join(page_text_parts)
+            avg_conf = sum(w["confidence"] for w in page_words) / len(page_words) if page_words else 0
+
+            page_details.append({
+                "page": idx + 1,
+                "text": page_text,
+                "word_count": len(page_words),
+                "average_confidence": round(avg_conf, 2),
+                "words": page_words,
+            })
+            all_text_parts.append(page_text)
+
+        overall_avg = confidence_sum / total_words if total_words > 0 else 0
+
+        return {
+            "pdf_path": str(path),
+            "language": language,
+            "dpi": dpi,
+            "min_confidence": min_confidence,
+            "pages_extracted": len(page_details),
+            "total_words": total_words,
+            "overall_average_confidence": round(overall_avg, 2),
+            "text": "\n\n--- Page Break ---\n\n".join(all_text_parts),
+            "page_details": page_details,
+        }
+    finally:
+        doc.close()
+
+
+def _split_pdf_by_bookmarks_impl(pdf_path: str, output_dir: str) -> Dict[str, Any]:
+    """Internal: Split PDF by bookmarks/table of contents."""
+    path = _ensure_file(pdf_path)
+    out_dir = Path(output_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    doc = pymupdf.open(str(path))
+    try:
+        toc = doc.get_toc()
+        total_pages = len(doc)
+        files_created = []
+
+        if not toc:
+            return {
+                "input_path": str(path),
+                "output_dir": str(out_dir),
+                "total_bookmarks": 0,
+                "files_created": [],
+                "message": "No bookmarks found in PDF",
+            }
+
+        for i, bookmark in enumerate(toc):
+            level, title, start_page = bookmark
+            if i + 1 < len(toc):
+                end_page = toc[i + 1][2] - 1
+            else:
+                end_page = total_pages
+
+            safe_title = "".join(c if c.isalnum() or c in " -_" else "_" for c in title)
+            safe_title = safe_title[:50].strip()
+            output_file = out_dir / f"{i + 1:03d}_{safe_title}.pdf"
+
+            new_doc = pymupdf.open()
+            try:
+                new_doc.insert_pdf(doc, from_page=start_page - 1, to_page=end_page - 1)
+                new_doc.save(str(output_file))
+                files_created.append({
+                    "path": str(output_file),
+                    "title": title,
+                    "page_range": f"{start_page}-{end_page}",
+                    "page_count": end_page - start_page + 1,
+                })
+            finally:
+                new_doc.close()
+
+        return {
+            "input_path": str(path),
+            "output_dir": str(out_dir),
+            "total_bookmarks": len(toc),
+            "files_created": files_created,
+        }
+    finally:
+        doc.close()
+
+
+def _split_pdf_by_pages_impl(
+    pdf_path: str,
+    output_dir: str,
+    pages_per_split: int = 1,
+) -> Dict[str, Any]:
+    """Internal: Split PDF by page count."""
+    path = _ensure_file(pdf_path)
+    out_dir = Path(output_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    doc = pymupdf.open(str(path))
+    try:
+        total_pages = len(doc)
+        files_created = []
+        base_name = path.stem
+
+        for start in range(0, total_pages, pages_per_split):
+            end = min(start + pages_per_split - 1, total_pages - 1)
+            output_file = out_dir / f"{base_name}_pages_{start + 1}-{end + 1}.pdf"
+
+            new_doc = pymupdf.open()
+            try:
+                new_doc.insert_pdf(doc, from_page=start, to_page=end)
+                new_doc.save(str(output_file))
+                files_created.append({
+                    "path": str(output_file),
+                    "title": f"Pages {start + 1}-{end + 1}",
+                    "page_range": f"{start + 1}-{end + 1}",
+                    "page_count": end - start + 1,
+                })
+            finally:
+                new_doc.close()
+
+        return {
+            "input_path": str(path),
+            "output_dir": str(out_dir),
+            "total_pages": total_pages,
+            "pages_per_split": pages_per_split,
+            "files_created": files_created,
+        }
+    finally:
+        doc.close()
+
+
+# =============================================================================
+# Consolidated API (v0.7.0+)
+# Unified tools for cleaner, more maintainable API surface.
 # =============================================================================
 
 
@@ -3901,9 +3558,6 @@ def extract_text(
 ) -> Dict[str, Any]:
     """
     Unified text extraction with multiple engine options and optional confidence scores.
-
-    This consolidates extract_text_native, extract_text_ocr, extract_text_smart,
-    and extract_text_with_confidence into a single tool.
 
     Args:
         pdf_path: Path to PDF file
@@ -3923,21 +3577,19 @@ def extract_text(
     Returns:
         Dict with extracted text and metadata
     """
-    # Route to appropriate implementation based on engine and options
+    # Use internal implementations directly
     if include_confidence:
-        # Force OCR with confidence - use extract_text_with_confidence
-        return extract_text_with_confidence(
+        return _extract_text_with_confidence_impl(
             pdf_path, pages=pages, language=language, dpi=dpi, min_confidence=min_confidence
         )
     elif engine == "native":
-        return extract_text_native(pdf_path, pages=pages)
+        return _extract_text_native_impl(pdf_path, pages=pages)
     elif engine == "smart":
-        return extract_text_smart(
+        return _extract_text_smart_impl(
             pdf_path, pages=pages, native_threshold=native_threshold, ocr_dpi=dpi, language=language
         )
     else:
-        # auto, ocr, tesseract, force_ocr all go to extract_text_ocr
-        return extract_text_ocr(pdf_path, pages=pages, engine=engine, dpi=dpi, language=language)
+        return _extract_text_ocr_impl(pdf_path, pages=pages, engine=engine, dpi=dpi, language=language)
 
 
 def split_pdf(
@@ -3948,8 +3600,6 @@ def split_pdf(
 ) -> Dict[str, Any]:
     """
     Split a PDF into multiple files.
-
-    This consolidates split_pdf_by_bookmarks and split_pdf_by_pages.
 
     Args:
         pdf_path: Path to the input PDF
@@ -3966,9 +3616,9 @@ def split_pdf(
         raise PdfToolError("mode must be 'pages' or 'bookmarks'")
 
     if mode == "bookmarks":
-        return split_pdf_by_bookmarks(pdf_path, output_dir)
+        return _split_pdf_by_bookmarks_impl(pdf_path, output_dir)
     else:
-        return split_pdf_by_pages(pdf_path, output_dir, pages_per_split=pages_per_split)
+        return _split_pdf_by_pages_impl(pdf_path, output_dir, pages_per_split=pages_per_split)
 
 
 def export_pdf(
@@ -3982,8 +3632,6 @@ def export_pdf(
 ) -> Dict[str, Any]:
     """
     Export PDF content to different formats.
-
-    This consolidates export_to_markdown and export_to_json.
 
     Args:
         pdf_path: Path to the input PDF
@@ -4002,7 +3650,31 @@ def export_pdf(
     if format not in ("markdown", "json"):
         raise PdfToolError("format must be 'markdown' or 'json'")
 
+    src = _ensure_file(pdf_path)
+    dst = _prepare_output(output_path)
+    
+    # Extract text using unified extract_text
+    text_result = extract_text(str(src), pages=pages, engine=engine, dpi=dpi, language=language)
+
     if format == "json":
-        return export_to_json(pdf_path, output_path, pages=pages, engine=engine, dpi=dpi, language=language)
+        reader = PdfReader(str(src))
+        payload = {
+            "pdf_path": str(src),
+            "engine": engine,
+            "page_count": len(reader.pages),
+            "metadata": get_pdf_metadata(str(src))["metadata"],
+            "pages": [
+                {"page": p["page"], "text": p["text"], "char_count": p["char_count"]}
+                for p in text_result.get("page_details", [])
+            ],
+        }
+        dst.write_text(json.dumps(payload, ensure_ascii=True, indent=2))
+        return {"output_path": str(dst), "page_count": payload["page_count"], "engine": engine}
     else:
-        return export_to_markdown(pdf_path, output_path, pages=pages, engine=engine, dpi=dpi, language=language)
+        parts: List[str] = []
+        for page in text_result.get("page_details", []):
+            parts.append(f"# Page {page['page']}")
+            parts.append(page["text"].rstrip())
+            parts.append("")
+        dst.write_text("\n".join(parts), encoding="utf-8")
+        return {"output_path": str(dst), "engine": engine, "pages": len(text_result.get("page_details", []))}

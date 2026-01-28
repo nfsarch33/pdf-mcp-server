@@ -408,11 +408,11 @@ def test_sanitize_pdf_metadata_removes_keys(tmp_path: Path):
     assert "Keywords" not in md
 
 
-def test_export_to_json_basic(tmp_path: Path):
+def test_export_pdf_json_basic(tmp_path: Path):
     src = _make_text_pdf(tmp_path / "export.pdf", ["Hello world", "Second page"])
     out = tmp_path / "export.json"
 
-    res = pdf_tools.export_to_json(str(src), str(out))
+    res = pdf_tools.export_pdf(str(src), str(out), format="json")
     assert Path(res["output_path"]).exists()
 
     data = json.loads(Path(res["output_path"]).read_text())
@@ -422,11 +422,11 @@ def test_export_to_json_basic(tmp_path: Path):
     assert "Hello world" in data["pages"][0]["text"]
 
 
-def test_export_to_markdown_basic(tmp_path: Path):
+def test_export_pdf_markdown_basic(tmp_path: Path):
     src = _make_text_pdf(tmp_path / "export.md.pdf", ["Hello world", "Second page"])
     out = tmp_path / "export.md"
 
-    res = pdf_tools.export_to_markdown(str(src), str(out))
+    res = pdf_tools.export_pdf(str(src), str(out), format="markdown")
     assert Path(res["output_path"]).exists()
 
     content = Path(res["output_path"]).read_text()
@@ -622,7 +622,7 @@ def test_sign_pdf_with_validation_info(tmp_path: Path):
     assert verify["signatures"][0].get("intact") is True
 
 
-def test_get_full_metadata_includes_document_info(tmp_path: Path):
+def test_get_pdf_metadata_full_includes_document_info(tmp_path: Path):
     src = _make_pdf(tmp_path / "meta.pdf", pages=2)
     meta = tmp_path / "meta_out.pdf"
     pdf_tools.set_pdf_metadata(
@@ -632,7 +632,7 @@ def test_get_full_metadata_includes_document_info(tmp_path: Path):
         author="Author",
     )
 
-    res = pdf_tools.get_full_metadata(str(meta))
+    res = pdf_tools.get_pdf_metadata(str(meta), full=True)
     assert res["metadata"]["Title"] == "Title"
     assert res["document"]["page_count"] == 2
     assert isinstance(res["document"]["file_size_bytes"], int)
@@ -866,24 +866,24 @@ def test_mcp_layer_can_call_all_tools(tmp_path: Path):
     res = asyncio.run(call("detect_pii_patterns", {"pdf_path": str(pii_src)}))
     assert res["total_matches"] >= 2
 
-    # export_to_json
+    # export_pdf (json)
     export_json = tmp_path / "mcp_export.json"
     res = asyncio.run(
         call(
-            "export_to_json",
-            {"pdf_path": str(text_src), "output_path": str(export_json)},
+            "export_pdf",
+            {"pdf_path": str(text_src), "output_path": str(export_json), "format": "json"},
         )
     )
     assert Path(res["output_path"]).exists()
     export_data = json.loads(Path(res["output_path"]).read_text())
     assert export_data["page_count"] == 2
 
-    # export_to_markdown
+    # export_pdf (markdown)
     export_md = tmp_path / "mcp_export.md"
     res = asyncio.run(
         call(
-            "export_to_markdown",
-            {"pdf_path": str(text_src), "output_path": str(export_md)},
+            "export_pdf",
+            {"pdf_path": str(text_src), "output_path": str(export_md), "format": "markdown"},
         )
     )
     assert Path(res["output_path"]).exists()
@@ -991,8 +991,8 @@ def test_mcp_layer_can_call_all_tools(tmp_path: Path):
     assert "Title" not in md
     assert "Author" not in md
 
-    # get_full_metadata
-    res = asyncio.run(call("get_full_metadata", {"pdf_path": str(meta_out)}))
+    # get_pdf_metadata with full=True
+    res = asyncio.run(call("get_pdf_metadata", {"pdf_path": str(meta_out), "full": True}))
     assert res["document"]["page_count"] >= 1
 
     # add_page_numbers
@@ -1300,14 +1300,14 @@ def test_mcp_layer_real_world_1006_regression(tmp_path: Path):
     t3 = tmp_path / "1006_t3.pdf"
     asyncio.run(
         call(
-            "insert_text",
-            {"input_path": str(c3), "page": 1, "text": "T", "output_path": str(t1), "text_id": "t-1006"},
+            "add_text_annotation",
+            {"input_path": str(c3), "page": 1, "text": "T", "output_path": str(t1), "annotation_id": "t-1006"},
         )
     )
     assert_has_nm_annotation(t1, page_idx=0, nm="t-1006", expected_present=True)
-    asyncio.run(call("edit_text", {"input_path": str(t1), "output_path": str(t2), "text_id": "t-1006", "text": "T2"}))
+    asyncio.run(call("update_text_annotation", {"input_path": str(t1), "output_path": str(t2), "annotation_id": "t-1006", "text": "T2"}))
     assert_has_nm_annotation(t2, page_idx=0, nm="t-1006", expected_present=True)
-    asyncio.run(call("remove_text", {"input_path": str(t2), "output_path": str(t3), "text_id": "t-1006"}))
+    asyncio.run(call("remove_text_annotation", {"input_path": str(t2), "output_path": str(t3), "annotation_id": "t-1006"}))
     assert_has_nm_annotation(t3, page_idx=0, nm="t-1006", expected_present=False)
 
     # Signature image then encrypt (visual signature, not cryptographic)
@@ -1410,11 +1410,11 @@ def test_mcp_layer_1006_all_tools_scenario_a(tmp_path: Path):
 
     # managed text insert/edit/remove
     t1 = tmp_path / "a_t1.pdf"
-    asyncio.run(call("insert_text", {"input_path": str(a3), "output_path": str(t1), "page": 1, "text": "T", "text_id": "t-a"}))
+    asyncio.run(call("add_text_annotation", {"input_path": str(a3), "output_path": str(t1), "page": 1, "text": "T", "annotation_id": "t-a"}))
     t2 = tmp_path / "a_t2.pdf"
-    asyncio.run(call("edit_text", {"input_path": str(t1), "output_path": str(t2), "text_id": "t-a", "text": "T2"}))
+    asyncio.run(call("update_text_annotation", {"input_path": str(t1), "output_path": str(t2), "annotation_id": "t-a", "text": "T2"}))
     t3 = tmp_path / "a_t3.pdf"
-    asyncio.run(call("remove_text", {"input_path": str(t2), "output_path": str(t3), "text_id": "t-a"}))
+    asyncio.run(call("remove_text_annotation", {"input_path": str(t2), "output_path": str(t3), "annotation_id": "t-a"}))
 
     # remove_annotations (FreeText only so we don't remove /Widget form fields)
     ra = tmp_path / "a_ra.pdf"
@@ -1570,11 +1570,11 @@ def test_mcp_layer_1006_all_tools_scenario_b(tmp_path: Path):
 
     # managed text second case (different id)
     t1 = tmp_path / "b_t1.pdf"
-    asyncio.run(call("insert_text", {"input_path": str(ann3), "output_path": str(t1), "page": 1, "text": "TB", "text_id": "t-b"}))
+    asyncio.run(call("add_text_annotation", {"input_path": str(ann3), "output_path": str(t1), "page": 1, "text": "TB", "annotation_id": "t-b"}))
     t2 = tmp_path / "b_t2.pdf"
-    asyncio.run(call("edit_text", {"input_path": str(t1), "output_path": str(t2), "text_id": "t-b", "text": "TB2"}))
+    asyncio.run(call("update_text_annotation", {"input_path": str(t1), "output_path": str(t2), "annotation_id": "t-b", "text": "TB2"}))
     t3 = tmp_path / "b_t3.pdf"
-    asyncio.run(call("remove_text", {"input_path": str(t2), "output_path": str(t3), "text_id": "t-b"}))
+    asyncio.run(call("remove_text_annotation", {"input_path": str(t2), "output_path": str(t3), "annotation_id": "t-b"}))
 
     # pages second case (different selections)
     ext = tmp_path / "b_ext.pdf"
@@ -1707,15 +1707,15 @@ def test_annotations_and_text_tools(tmp_path: Path):
     if annots3 is not None:
         assert len(list(annots3.get_object())) == 0
 
-    # managed text wrappers
+    # text annotation wrappers
     inserted = tmp_path / "text_inserted.pdf"
-    res = pdf_tools.insert_text(str(src), page=1, text="T", output_path=str(inserted), text_id="t1")
+    res = pdf_tools.add_text_annotation(str(src), page=1, text="T", output_path=str(inserted), annotation_id="t1")
     assert Path(res["output_path"]).exists()
     edited2 = tmp_path / "text_edited.pdf"
-    res = pdf_tools.edit_text(str(inserted), str(edited2), "t1", "T2")
+    res = pdf_tools.update_text_annotation(str(inserted), str(edited2), "t1", "T2")
     assert Path(res["output_path"]).exists()
     removed2 = tmp_path / "text_removed.pdf"
-    res = pdf_tools.remove_text(str(edited2), str(removed2), "t1")
+    res = pdf_tools.remove_text_annotation(str(edited2), str(removed2), "t1")
     assert Path(res["output_path"]).exists()
 
 
