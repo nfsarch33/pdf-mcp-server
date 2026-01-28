@@ -17,7 +17,7 @@ Available tool categories:
 - PII detection (1 tool)
  - PII detection (1 tool)
 
-Version: 0.5.2
+Version: 0.6.0
 License: AGPL-3.0
 """
 from __future__ import annotations
@@ -357,9 +357,16 @@ def remove_text(
 
 @mcp.tool()
 @_handle_errors
-def get_pdf_metadata(pdf_path: str) -> Dict[str, Any]:
-    """Get basic PDF document metadata."""
-    return pdf_tools.get_pdf_metadata(pdf_path)
+def get_pdf_metadata(pdf_path: str, full: bool = False) -> Dict[str, Any]:
+    """
+    Get PDF document metadata.
+
+    Args:
+        pdf_path: Path to PDF file
+        full: If True, include extended document info (page count, encryption status, file size).
+              If False (default), return only basic metadata.
+    """
+    return pdf_tools.get_pdf_metadata(pdf_path, full=full)
 
 
 @mcp.tool()
@@ -1125,6 +1132,112 @@ def batch_process(
         output_dir: Required for "optimize" operation
     """
     return pdf_tools.batch_process(pdf_paths, operation, output_dir=output_dir)
+
+
+# =============================================================================
+# Consolidated API (v0.6.0+) - Unified tools replacing multiple specialized tools
+# =============================================================================
+
+
+@mcp.tool()
+@_handle_errors
+def extract_text(
+    pdf_path: str,
+    pages: Optional[List[int]] = None,
+    engine: str = "auto",
+    include_confidence: bool = False,
+    native_threshold: int = 100,
+    dpi: int = 300,
+    language: str = "eng",
+    min_confidence: int = 0,
+) -> Dict[str, Any]:
+    """
+    Unified text extraction with multiple engine options and optional confidence scores.
+
+    This consolidates extract_text_native, extract_text_ocr, extract_text_smart,
+    and extract_text_with_confidence into a single tool.
+
+    Args:
+        pdf_path: Path to PDF file
+        pages: Optional list of 1-based page numbers (default: all pages)
+        engine: Extraction engine selection:
+            - "native": Native text layer only (fast, no OCR)
+            - "auto": Try native first, fallback to OCR if insufficient
+            - "smart": Per-page method selection based on native_threshold
+            - "ocr" or "tesseract": Force OCR using Tesseract
+            - "force_ocr": Always use OCR even if native text exists
+        include_confidence: If True, return word-level OCR confidence scores
+        native_threshold: Min chars to prefer native extraction in "smart" mode (default: 100)
+        dpi: Resolution for OCR rendering (default: 300)
+        language: Tesseract language code (default: "eng"). Use "+" for multiple: "eng+fra"
+        min_confidence: Minimum confidence threshold 0-100 when include_confidence=True
+    """
+    return pdf_tools.extract_text(
+        pdf_path,
+        pages=pages,
+        engine=engine,
+        include_confidence=include_confidence,
+        native_threshold=native_threshold,
+        dpi=dpi,
+        language=language,
+        min_confidence=min_confidence,
+    )
+
+
+@mcp.tool()
+@_handle_errors
+def split_pdf(
+    pdf_path: str,
+    output_dir: str,
+    mode: str = "pages",
+    pages_per_split: int = 1,
+) -> Dict[str, Any]:
+    """
+    Split a PDF into multiple files.
+
+    This consolidates split_pdf_by_bookmarks and split_pdf_by_pages.
+
+    Args:
+        pdf_path: Path to the input PDF
+        output_dir: Directory to save split PDFs
+        mode: Split mode:
+            - "pages": Split by page count (uses pages_per_split)
+            - "bookmarks": Split by table of contents/bookmarks
+        pages_per_split: Number of pages per output file (only for mode="pages")
+    """
+    return pdf_tools.split_pdf(pdf_path, output_dir, mode=mode, pages_per_split=pages_per_split)
+
+
+@mcp.tool()
+@_handle_errors
+def export_pdf(
+    pdf_path: str,
+    output_path: str,
+    format: str = "markdown",
+    pages: Optional[List[int]] = None,
+    engine: str = "auto",
+    dpi: int = 300,
+    language: str = "eng",
+) -> Dict[str, Any]:
+    """
+    Export PDF content to different formats.
+
+    This consolidates export_to_markdown and export_to_json.
+
+    Args:
+        pdf_path: Path to the input PDF
+        output_path: Path for the output file
+        format: Export format:
+            - "markdown": Export as Markdown
+            - "json": Export as JSON with metadata
+        pages: Optional list of 1-based page numbers (default: all pages)
+        engine: Text extraction engine (see extract_text)
+        dpi: Resolution for OCR (default: 300)
+        language: Tesseract language code (default: "eng")
+    """
+    return pdf_tools.export_pdf(
+        pdf_path, output_path, format=format, pages=pages, engine=engine, dpi=dpi, language=language
+    )
 
 
 if __name__ == "__main__":

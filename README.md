@@ -1,6 +1,6 @@
 # PDF MCP Server
 
-**Version 0.5.2** | MCP server for PDF form filling, editing, OCR text extraction, table extraction, image extraction, link extraction, and batch processing.
+**Version 0.6.0** | MCP server for PDF form filling, editing, OCR text extraction, table extraction, image extraction, link extraction, and batch processing.
 
 Built with Python, `pypdf`, `fillpdf`, and `pymupdf` (AGPL).
 
@@ -211,6 +211,21 @@ Restart Cursor after saving.
 ### Batch Processing (Phase 3)
 - `batch_process(pdf_paths, operation, output_dir=None)`: process multiple PDFs; operations: "get_info", "extract_text", "extract_links", "optimize".
 
+### Consolidated API (v0.6.0+)
+These unified tools consolidate multiple specialized tools for a cleaner API:
+
+- `extract_text(pdf_path, engine="auto", include_confidence=False, ...)`: Unified text extraction replacing `extract_text_native`, `extract_text_ocr`, `extract_text_smart`, `extract_text_with_confidence`. Engines: "native", "auto", "smart", "ocr", "force_ocr".
+- `split_pdf(pdf_path, output_dir, mode="pages", pages_per_split=1)`: Unified splitting replacing `split_pdf_by_bookmarks` and `split_pdf_by_pages`. Modes: "pages", "bookmarks".
+- `export_pdf(pdf_path, output_path, format="markdown", ...)`: Unified export replacing `export_to_markdown` and `export_to_json`. Formats: "markdown", "json".
+- `get_pdf_metadata(pdf_path, full=False)`: Extended to include document info when `full=True`, replacing `get_full_metadata`.
+
+**Deprecated tools** (will be removed in v0.7.0):
+- `insert_text`, `edit_text`, `remove_text` → Use `add_text_annotation`, `update_text_annotation`, `remove_text_annotation`
+- `extract_text_native`, `extract_text_ocr`, `extract_text_smart`, `extract_text_with_confidence` → Use `extract_text`
+- `split_pdf_by_bookmarks`, `split_pdf_by_pages` → Use `split_pdf`
+- `export_to_markdown`, `export_to_json` → Use `export_pdf`
+- `get_full_metadata` → Use `get_pdf_metadata(full=True)`
+
 ## Conventions
 - Paths should be absolute; outputs are created with parent directories if missing.
 - Inputs must exist and be files; errors return `{ "error": "..." }`.
@@ -253,7 +268,7 @@ make prepush
 ```
 
 ### Test Coverage
-- **168 tests** total (includes Tier 1/2 coverage)
+- **180 tests** total (includes Tier 1/2 coverage)
 - All tests pass with Tesseract installed
 - 3 tests skip when optional dependencies (Tesseract/pyzbar) are not available
 

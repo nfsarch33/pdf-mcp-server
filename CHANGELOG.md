@@ -6,6 +6,27 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 0.6.0 - 2026-01-28
+
+### Added
+- **Consolidated API**: Unified tools for cleaner, more maintainable API surface.
+  - `extract_text`: Unified text extraction with engine selection (native, auto, smart, ocr, force_ocr) and optional confidence scores.
+  - `split_pdf`: Unified PDF splitting with mode selection (pages, bookmarks).
+  - `export_pdf`: Unified export with format selection (markdown, json).
+  - `get_pdf_metadata(full=True)`: Extended metadata including document info.
+- 12 new integration tests for consolidated API tools.
+
+### Changed
+- Total test count increased from 168 to 180.
+
+### Deprecated
+The following tools are deprecated and will be removed in v0.7.0:
+- `insert_text`, `edit_text`, `remove_text` → Use `add_text_annotation`, `update_text_annotation`, `remove_text_annotation`
+- `extract_text_native`, `extract_text_ocr`, `extract_text_smart`, `extract_text_with_confidence` → Use `extract_text`
+- `split_pdf_by_bookmarks`, `split_pdf_by_pages` → Use `split_pdf`
+- `export_to_markdown`, `export_to_json` → Use `export_pdf`
+- `get_full_metadata` → Use `get_pdf_metadata(full=True)`
+
 ## 0.5.2 - 2026-01-29
 
 ### Added

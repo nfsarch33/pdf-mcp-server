@@ -39,6 +39,13 @@ Restart Cursor after saving.
 ### Signing options (0.5.2)
 - `sign_pdf` and `sign_pdf_pem` support `timestamp_url`, `embed_validation_info`, `allow_fetching`, `docmdp_permissions`.
 
+### Consolidated API (0.6.0)
+- `extract_text`: Unified text extraction (replaces 4 separate tools). Engines: native, auto, smart, ocr, force_ocr. Optional confidence scores.
+- `split_pdf`: Unified splitting (replaces 2 tools). Modes: pages, bookmarks.
+- `export_pdf`: Unified export (replaces 2 tools). Formats: markdown, json.
+- `get_pdf_metadata(full=True)`: Extended metadata (replaces `get_full_metadata`).
+- Deprecated: `insert_text/edit_text/remove_text`, `extract_text_*`, `split_pdf_by_*`, `export_to_*`, `get_full_metadata`.
+
 ### Full tool list
 - **Forms**: `get_pdf_form_fields`, `fill_pdf_form`, `clear_pdf_form_fields`, `flatten_pdf`
 - **Text (managed FreeText)**: `insert_text`, `edit_text`, `remove_text`, `add_text_annotation`, `update_text_annotation`, `remove_text_annotation`
@@ -270,4 +277,4 @@ pdf-mcp-server/
 
 ---
 
-*Last updated: 2026-01-29 | Version: 0.5.2*
+*Last updated: 2026-01-28 | Version: 0.6.0*
