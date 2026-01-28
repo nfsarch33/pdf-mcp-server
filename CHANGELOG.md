@@ -6,6 +6,14 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 0.5.1 - 2026-01-28
+
+### Added
+- `sign_pdf`: digitally sign PDFs using PKCS#12/PFX certificates.
+- `sign_pdf_pem`: digitally sign PDFs using PEM key + cert chain.
+- Integration tests for certificate-based signing.
+- `cryptography` dependency for test certificate generation.
+
 ## 0.5.0 - 2026-01-28
 
 ### Added

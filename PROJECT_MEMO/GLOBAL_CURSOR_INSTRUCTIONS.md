@@ -150,6 +150,7 @@ With 300+ MCP tools available, use this quick guide:
 - Use feature branches off `main`
 - Keep PRs focused (single tool/capability + tests)
 - Delete merged branches and run `git fetch --prune`
+- Before releases, review/close outdated PRs and delete stale branches (keep active POCs/features)
 
 ### Tag-based release (SemVer)
 
@@ -266,4 +267,4 @@ pdf-mcp-server/
 
 ---
 
-*Last updated: 2026-01-28 | Version: 0.5.0*
+*Last updated: 2026-01-28 | Version: 0.5.1*

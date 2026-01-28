@@ -1,6 +1,6 @@
 # PDF MCP Server
 
-**Version 0.5.0** | MCP server for PDF form filling, editing, OCR text extraction, table extraction, image extraction, link extraction, and batch processing.
+**Version 0.5.1** | MCP server for PDF form filling, editing, OCR text extraction, table extraction, image extraction, link extraction, and batch processing.
 
 Built with Python, `pypdf`, `fillpdf`, and `pymupdf` (AGPL).
 
@@ -103,6 +103,7 @@ Restart Cursor after saving.
 | **Form Handling** | 6 tools | Fill, clear, flatten, and create PDF forms |
 | **Page Operations** | 6 tools | Merge, extract, rotate, reorder, insert, remove pages |
 | **Annotations** | 14 tools | Text, comments, watermarks, signatures, redaction, numbering, highlights |
+| **Signatures & Security** | 7 tools | Digital signing, verification, encryption |
 | **Export** | 2 tools | Export PDF content to Markdown or JSON |
 | **OCR & Text** | 8 tools | Type detection, native/OCR extraction, confidence scores |
 | **Table Extraction** | 1 tool | Extract tables as structured data |
@@ -152,6 +153,8 @@ Restart Cursor after saving.
 - `add_signature_image(input_path, output_path, page, image_path, rect)`: add signature image.
 - `update_signature_image(...)`: update or resize signature.
 - `remove_signature_image(...)`: remove signature image.
+- `sign_pdf(input_path, output_path, pfx_path, ...)`: digitally sign PDF using PKCS#12/PFX.
+- `sign_pdf_pem(input_path, output_path, key_path, cert_path, ...)`: digitally sign PDF using PEM key + cert chain.
 - `encrypt_pdf(input_path, output_path, user_password, ...)`: password-protect PDF.
 - `verify_digital_signatures(pdf_path)`: verify digital signatures.
 
@@ -250,7 +253,7 @@ make prepush
 ```
 
 ### Test Coverage
-- **164 tests** total (includes Tier 1/2 coverage)
+- **166 tests** total (includes Tier 1/2 coverage)
 - All tests pass with Tesseract installed
 - 3 tests skip when optional dependencies (Tesseract/pyzbar) are not available
 

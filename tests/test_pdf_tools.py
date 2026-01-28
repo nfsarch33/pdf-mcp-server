@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from typing import Dict
 
 import pymupdf
 import pytest
@@ -107,6 +108,52 @@ def _make_nonstandard_form_pdf(path: Path) -> Path:
     doc.save(str(path))
     doc.close()
     return path
+
+
+def _make_test_certificates(tmp_path: Path) -> Dict[str, Path]:
+    from datetime import datetime, timedelta, timezone
+
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from cryptography.hazmat.primitives.serialization import pkcs12
+    from cryptography.x509.oid import NameOID
+
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    subject = issuer = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "pdf-mcp-test")])
+    now = datetime.now(timezone.utc)
+    cert = (
+        x509.CertificateBuilder()
+        .subject_name(subject)
+        .issuer_name(issuer)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now - timedelta(days=1))
+        .not_valid_after(now + timedelta(days=365))
+        .add_extension(x509.BasicConstraints(ca=True, path_length=None), critical=True)
+        .sign(key, hashes.SHA256())
+    )
+
+    key_path = tmp_path / "test_key.pem"
+    cert_path = tmp_path / "test_cert.pem"
+    pfx_path = tmp_path / "test_cert.pfx"
+    password = b"test-pass"
+
+    key_path.write_bytes(
+        key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption(),
+        )
+    )
+    cert_path.write_bytes(cert.public_bytes(serialization.Encoding.PEM))
+    pfx_path.write_bytes(
+        pkcs12.serialize_key_and_certificates(
+            b"pdf-mcp-test", key, cert, None, serialization.BestAvailableEncryption(password)
+        )
+    )
+
+    return {"key": key_path, "cert": cert_path, "pfx": pfx_path, "password": password}
 
 
 def test_get_pdf_form_fields_empty(tmp_path: Path):
@@ -407,6 +454,48 @@ def test_verify_digital_signatures_empty(tmp_path: Path):
     assert res["verified"] == 0
 
 
+def test_sign_pdf_pkcs12(tmp_path: Path):
+    if not getattr(pdf_tools, "_HAS_PYHANKO", False):
+        pytest.skip("pyHanko not available")
+    certs = _make_test_certificates(tmp_path)
+    src = _make_pdf(tmp_path / "sign_src.pdf", pages=1)
+    out = tmp_path / "signed_pfx.pdf"
+
+    res = pdf_tools.sign_pdf(
+        input_path=str(src),
+        output_path=str(out),
+        pfx_path=str(certs["pfx"]),
+        pfx_password=certs["password"].decode("utf-8"),
+        certify=True,
+    )
+    assert Path(res["output_path"]).exists()
+
+    verify = pdf_tools.verify_digital_signatures(str(out))
+    assert len(verify["signatures"]) == 1
+    assert verify["signatures"][0].get("intact") is True
+
+
+def test_sign_pdf_pem(tmp_path: Path):
+    if not getattr(pdf_tools, "_HAS_PYHANKO", False):
+        pytest.skip("pyHanko not available")
+    certs = _make_test_certificates(tmp_path)
+    src = _make_pdf(tmp_path / "sign_src_pem.pdf", pages=1)
+    out = tmp_path / "signed_pem.pdf"
+
+    res = pdf_tools.sign_pdf_pem(
+        input_path=str(src),
+        output_path=str(out),
+        key_path=str(certs["key"]),
+        cert_path=str(certs["cert"]),
+        certify=True,
+    )
+    assert Path(res["output_path"]).exists()
+
+    verify = pdf_tools.verify_digital_signatures(str(out))
+    assert len(verify["signatures"]) == 1
+    assert verify["signatures"][0].get("intact") is True
+
+
 def test_get_full_metadata_includes_document_info(tmp_path: Path):
     src = _make_pdf(tmp_path / "meta.pdf", pages=2)
     meta = tmp_path / "meta_out.pdf"
@@ -437,6 +526,7 @@ def test_mcp_layer_can_call_all_tools(tmp_path: Path):
     nonstandard_src = _make_nonstandard_form_pdf(tmp_path / "mcp_nonstandard.pdf")
     blank_a = _make_pdf(tmp_path / "mcp_a.pdf", pages=2)
     blank_b = _make_pdf(tmp_path / "mcp_b.pdf", pages=1)
+    certs = _make_test_certificates(tmp_path)
 
     async def call(name: str, args: dict):
         _content, meta = await server.mcp.call_tool(name, args)
@@ -521,6 +611,39 @@ def test_mcp_layer_can_call_all_tools(tmp_path: Path):
     assert rr.is_encrypted is True
     assert rr.decrypt("pw") in (1, 2)
     assert len(rr.pages) >= 1
+
+    if getattr(pdf_tools, "_HAS_PYHANKO", False):
+        # sign_pdf (PKCS#12)
+        signed_pfx = tmp_path / "mcp_signed_pfx.pdf"
+        res = asyncio.run(
+            call(
+                "sign_pdf",
+                {
+                    "input_path": str(form_src),
+                    "output_path": str(signed_pfx),
+                    "pfx_path": str(certs["pfx"]),
+                    "pfx_password": certs["password"].decode("utf-8"),
+                    "certify": True,
+                },
+            )
+        )
+        assert Path(res["output_path"]).exists()
+
+        # sign_pdf_pem
+        signed_pem = tmp_path / "mcp_signed_pem.pdf"
+        res = asyncio.run(
+            call(
+                "sign_pdf_pem",
+                {
+                    "input_path": str(form_src),
+                    "output_path": str(signed_pem),
+                    "key_path": str(certs["key"]),
+                    "cert_path": str(certs["cert"]),
+                    "certify": True,
+                },
+            )
+        )
+        assert Path(res["output_path"]).exists()
 
     # flatten_pdf
     flat = tmp_path / "mcp_flat.pdf"

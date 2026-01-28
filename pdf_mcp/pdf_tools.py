@@ -11,15 +11,17 @@ This module provides PDF manipulation, OCR, and extraction capabilities:
 - Export: markdown and JSON export
 - PII detection: scan for common personal data patterns
 
-Version: 0.5.0
+Version: 0.5.1
 License: AGPL-3.0
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import re
 import secrets
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from dataclasses import dataclass
 from pathlib import Path
@@ -57,7 +59,8 @@ except ImportError:
 
 try:
     from pyhanko.pdf_utils.reader import PdfFileReader
-    from pyhanko.sign import validation
+    from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
+    from pyhanko.sign import fields, signers, validation
 
     _HAS_PYHANKO = True
 except ImportError:
@@ -1492,6 +1495,104 @@ def verify_digital_signatures(pdf_path: str) -> Dict[str, Any]:
             results.append(result)
 
     return {"pdf_path": str(src), "signatures": results, "verified": verified}
+
+
+def _sign_pdf(
+    input_path: str,
+    output_path: str,
+    signer: "signers.SimpleSigner",
+    field_name: str,
+    certify: bool,
+    reason: Optional[str],
+    location: Optional[str],
+) -> Dict[str, Any]:
+    src = _ensure_file(input_path)
+    dst = _prepare_output(output_path)
+
+    with src.open("rb") as inf:
+        pdf_out = IncrementalPdfFileWriter(inf)
+        writer = signers.PdfSigner(
+            signers.PdfSignatureMetadata(
+                field_name=field_name,
+                certify=certify,
+                reason=reason,
+                location=location,
+            ),
+            signer=signer,
+            new_field_spec=fields.SigFieldSpec(field_name),
+        )
+
+        def _sign() -> None:
+            with dst.open("wb") as outf:
+                asyncio.run(writer.async_sign_pdf(pdf_out, output=outf))
+
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            _sign()
+        else:
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                executor.submit(_sign).result()
+
+    return {"output_path": str(dst), "field_name": field_name, "certify": certify}
+
+
+def sign_pdf(
+    input_path: str,
+    output_path: str,
+    pfx_path: str,
+    pfx_password: Optional[str] = None,
+    field_name: str = "Signature1",
+    certify: bool = True,
+    reason: Optional[str] = None,
+    location: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Digitally sign a PDF using a PKCS#12/PFX certificate.
+    """
+    if not _HAS_PYHANKO:
+        raise PdfToolError("pyHanko not available. Install pyhanko to sign PDFs.")
+    pfx = _ensure_file(pfx_path)
+    password_bytes = None if pfx_password is None else pfx_password.encode("utf-8")
+    signer = signers.SimpleSigner.load_pkcs12(str(pfx), passphrase=password_bytes)
+    return _sign_pdf(input_path, output_path, signer, field_name, certify, reason, location)
+
+
+def sign_pdf_pem(
+    input_path: str,
+    output_path: str,
+    key_path: str,
+    cert_path: str,
+    chain_paths: Optional[List[str]] = None,
+    key_password: Optional[str] = None,
+    field_name: str = "Signature1",
+    certify: bool = True,
+    reason: Optional[str] = None,
+    location: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Digitally sign a PDF using PEM key + certificate chain.
+    """
+    if not _HAS_PYHANKO:
+        raise PdfToolError("pyHanko not available. Install pyhanko to sign PDFs.")
+    key = _ensure_file(key_path)
+    cert = _ensure_file(cert_path)
+    chain = [str(_ensure_file(p)) for p in (chain_paths or [])]
+    password_bytes = None if key_password is None else key_password.encode("utf-8")
+    other_certs: List[Any] = []
+    if chain:
+        if hasattr(signers, "load_certs_from_pemder"):
+            for path in chain:
+                other_certs.extend(signers.load_certs_from_pemder(Path(path).read_bytes()))
+        else:
+            raise PdfToolError("pyHanko does not support loading cert chains from PEM files")
+    signer = signers.SimpleSigner.load(
+        key_file=str(key),
+        cert_file=str(cert),
+        key_passphrase=password_bytes,
+        other_certs=other_certs or None,
+    )
+    return _sign_pdf(input_path, output_path, signer, field_name, certify, reason, location)
 
 
 def get_full_metadata(pdf_path: str) -> Dict[str, Any]:
