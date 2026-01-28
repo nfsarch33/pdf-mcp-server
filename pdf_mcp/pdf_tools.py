@@ -11,7 +11,7 @@ This module provides PDF manipulation, OCR, and extraction capabilities:
 - Export: markdown and JSON export
 - PII detection: scan for common personal data patterns
 
-Version: 0.5.2
+Version: 0.6.0
 License: AGPL-3.0
 """
 from __future__ import annotations
@@ -21,6 +21,7 @@ import json
 import os
 import re
 import secrets
+import warnings
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from dataclasses import dataclass
@@ -1165,7 +1166,8 @@ def remove_pages(input_path: str, pages: List[int], output_path: str) -> Dict:
     return {"output_path": str(dst), "removed": len(zero_based), "total_pages": len(writer.pages)}
 
 
-# Text insert/edit/remove: implemented via managed FreeText annotations.
+# Text insert/edit/remove: deprecated aliases for text annotation functions.
+# These will be removed in v0.7.0. Use add_text_annotation/update_text_annotation/remove_text_annotation instead.
 def insert_text(
     input_path: str,
     page: int,
@@ -1174,6 +1176,13 @@ def insert_text(
     rect: Optional[Sequence[float]] = None,
     text_id: Optional[str] = None,
 ) -> Dict:
+    """Deprecated: Use add_text_annotation instead. Will be removed in v0.7.0."""
+    warnings.warn(
+        "insert_text is deprecated and will be removed in v0.7.0. "
+        "Use add_text_annotation instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     return add_text_annotation(input_path, page, text, output_path, rect=rect, annotation_id=text_id)
 
 
@@ -1184,6 +1193,13 @@ def edit_text(
     text: str,
     pages: Optional[List[int]] = None,
 ) -> Dict:
+    """Deprecated: Use update_text_annotation instead. Will be removed in v0.7.0."""
+    warnings.warn(
+        "edit_text is deprecated and will be removed in v0.7.0. "
+        "Use update_text_annotation instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     return update_text_annotation(input_path, output_path, text_id, text, pages=pages)
 
 
@@ -1193,11 +1209,28 @@ def remove_text(
     text_id: str,
     pages: Optional[List[int]] = None,
 ) -> Dict:
+    """Deprecated: Use remove_text_annotation instead. Will be removed in v0.7.0."""
+    warnings.warn(
+        "remove_text is deprecated and will be removed in v0.7.0. "
+        "Use remove_text_annotation instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     return remove_text_annotation(input_path, output_path, text_id, pages=pages)
 
 
-def get_pdf_metadata(pdf_path: str) -> Dict[str, Any]:
-    """Return basic document metadata (title, author, etc.) if present."""
+def get_pdf_metadata(pdf_path: str, full: bool = False) -> Dict[str, Any]:
+    """
+    Return PDF document metadata.
+
+    Args:
+        pdf_path: Path to PDF file
+        full: If True, include extended document info (page count, encryption status, file size).
+              If False (default), return only basic metadata.
+
+    Returns:
+        Dict with metadata. When full=True, also includes 'document' key with extended info.
+    """
     path = _ensure_file(pdf_path)
     reader = PdfReader(str(path))
     md = reader.metadata or {}
@@ -1208,7 +1241,17 @@ def get_pdf_metadata(pdf_path: str) -> Dict[str, Any]:
         if key.startswith("/"):
             key = key[1:]
         normalized[key] = None if v is None else str(v)
-    return {"metadata": normalized}
+
+    result: Dict[str, Any] = {"metadata": normalized}
+
+    if full:
+        result["document"] = {
+            "page_count": len(reader.pages),
+            "is_encrypted": bool(reader.is_encrypted),
+            "file_size_bytes": os.path.getsize(path),
+        }
+
+    return result
 
 
 def set_pdf_metadata(
@@ -1337,6 +1380,13 @@ def export_to_json(
     dpi: int = 300,
     language: str = "eng",
 ) -> Dict[str, Any]:
+    """Deprecated: Use export_pdf(format='json') instead. Will be removed in v0.7.0."""
+    warnings.warn(
+        "export_to_json is deprecated and will be removed in v0.7.0. "
+        "Use export_pdf(pdf_path, output_path, format='json') instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     src = _ensure_file(pdf_path)
     dst = _prepare_output(output_path)
 
@@ -1366,6 +1416,13 @@ def export_to_markdown(
     dpi: int = 300,
     language: str = "eng",
 ) -> Dict[str, Any]:
+    """Deprecated: Use export_pdf(format='markdown') instead. Will be removed in v0.7.0."""
+    warnings.warn(
+        "export_to_markdown is deprecated and will be removed in v0.7.0. "
+        "Use export_pdf(pdf_path, output_path, format='markdown') instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     src = _ensure_file(pdf_path)
     dst = _prepare_output(output_path)
 
@@ -1675,16 +1732,14 @@ def sign_pdf_pem(
 
 
 def get_full_metadata(pdf_path: str) -> Dict[str, Any]:
-    path = _ensure_file(pdf_path)
-    reader = PdfReader(str(path))
-    return {
-        "metadata": get_pdf_metadata(str(path))["metadata"],
-        "document": {
-            "page_count": len(reader.pages),
-            "is_encrypted": bool(reader.is_encrypted),
-            "file_size_bytes": os.path.getsize(path),
-        },
-    }
+    """Deprecated: Use get_pdf_metadata(pdf_path, full=True) instead. Will be removed in v0.7.0."""
+    warnings.warn(
+        "get_full_metadata is deprecated and will be removed in v0.7.0. "
+        "Use get_pdf_metadata(pdf_path, full=True) instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return get_pdf_metadata(pdf_path, full=True)
 
 
 def add_text_watermark(
@@ -2062,8 +2117,16 @@ def extract_text_native(pdf_path: str, pages: Optional[List[int]] = None) -> Dic
     """
     Extract text from PDF using native text layer only (no OCR).
 
+    Deprecated: Use extract_text(engine="native") instead. Will be removed in v0.7.0.
+
     Uses PyMuPDF for robust text extraction with layout preservation.
     """
+    warnings.warn(
+        "extract_text_native is deprecated and will be removed in v0.7.0. "
+        "Use extract_text(pdf_path, engine='native') instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     path = _ensure_file(pdf_path)
     doc = pymupdf.open(str(path))
 
@@ -2116,6 +2179,8 @@ def extract_text_ocr(
     """
     Extract text from PDF with OCR support.
 
+    Deprecated: Use extract_text(engine=...) instead. Will be removed in v0.7.0.
+
     Engine options:
     - "auto": Try native extraction first; fall back to OCR if insufficient text
     - "native": Use only native text extraction (no OCR)
@@ -2132,6 +2197,12 @@ def extract_text_ocr(
     Returns:
         Dict with extracted text and metadata
     """
+    warnings.warn(
+        "extract_text_ocr is deprecated and will be removed in v0.7.0. "
+        "Use extract_text(pdf_path, engine=...) instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     path = _ensure_file(pdf_path)
 
     # Validate engine choice
@@ -2354,6 +2425,8 @@ def extract_text_with_confidence(
     """
     Extract text from PDF with OCR confidence scores.
 
+    Deprecated: Use extract_text(include_confidence=True) instead. Will be removed in v0.7.0.
+
     This function performs OCR and returns word-level confidence scores,
     allowing filtering of low-confidence text.
 
@@ -2367,6 +2440,12 @@ def extract_text_with_confidence(
     Returns:
         Dict with text, confidence scores, and word-level details
     """
+    warnings.warn(
+        "extract_text_with_confidence is deprecated and will be removed in v0.7.0. "
+        "Use extract_text(pdf_path, include_confidence=True) instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     if not _HAS_TESSERACT:
         raise PdfToolError(
             "Tesseract OCR not available. Install pytesseract and tesseract-ocr."
@@ -2786,6 +2865,8 @@ def extract_text_smart(
     """
     Smart text extraction with per-page method selection.
 
+    Deprecated: Use extract_text(engine="smart") instead. Will be removed in v0.7.0.
+
     For each page, decides whether to use native extraction or OCR based on
     the native text content. This provides optimal results for hybrid documents.
 
@@ -2799,6 +2880,12 @@ def extract_text_smart(
     Returns:
         Dict with extracted text and per-page method details
     """
+    warnings.warn(
+        "extract_text_smart is deprecated and will be removed in v0.7.0. "
+        "Use extract_text(pdf_path, engine='smart') instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     path = _ensure_file(pdf_path)
     doc = pymupdf.open(str(path))
 
@@ -3461,6 +3548,8 @@ def split_pdf_by_bookmarks(
     """
     Split a PDF by its bookmarks (table of contents).
 
+    Deprecated: Use split_pdf(mode="bookmarks") instead. Will be removed in v0.7.0.
+
     Each bookmark creates a separate PDF file containing pages
     from that bookmark to the next one.
 
@@ -3475,6 +3564,12 @@ def split_pdf_by_bookmarks(
         - total_bookmarks: Number of bookmarks found
         - files_created: List of created file details
     """
+    warnings.warn(
+        "split_pdf_by_bookmarks is deprecated and will be removed in v0.7.0. "
+        "Use split_pdf(pdf_path, output_dir, mode='bookmarks') instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     path = _ensure_file(pdf_path)
     out_dir = Path(output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -3543,6 +3638,8 @@ def split_pdf_by_pages(
     """
     Split a PDF into multiple files by page count.
 
+    Deprecated: Use split_pdf(mode="pages") instead. Will be removed in v0.7.0.
+
     Args:
         pdf_path: Path to the input PDF
         output_dir: Directory to save split PDFs
@@ -3554,6 +3651,12 @@ def split_pdf_by_pages(
         - output_dir: Output directory
         - files_created: List of created file details
     """
+    warnings.warn(
+        "split_pdf_by_pages is deprecated and will be removed in v0.7.0. "
+        "Use split_pdf(pdf_path, output_dir, mode='pages') instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     path = _ensure_file(pdf_path)
     out_dir = Path(output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -3778,3 +3881,128 @@ def batch_process(
         "failed": failed,
         "results": results,
     }
+
+
+# =============================================================================
+# Consolidated API (v0.6.0+)
+# These unified tools replace multiple specialized tools for cleaner API.
+# =============================================================================
+
+
+def extract_text(
+    pdf_path: str,
+    pages: Optional[List[int]] = None,
+    engine: str = "auto",
+    include_confidence: bool = False,
+    native_threshold: int = 100,
+    dpi: int = 300,
+    language: str = "eng",
+    min_confidence: int = 0,
+) -> Dict[str, Any]:
+    """
+    Unified text extraction with multiple engine options and optional confidence scores.
+
+    This consolidates extract_text_native, extract_text_ocr, extract_text_smart,
+    and extract_text_with_confidence into a single tool.
+
+    Args:
+        pdf_path: Path to PDF file
+        pages: Optional list of 1-based page numbers (default: all pages)
+        engine: Extraction engine selection:
+            - "native": Native text layer only (fast, no OCR)
+            - "auto": Try native first, fallback to OCR if insufficient
+            - "smart": Per-page method selection based on native_threshold
+            - "ocr" or "tesseract": Force OCR using Tesseract
+            - "force_ocr": Always use OCR even if native text exists
+        include_confidence: If True, return word-level OCR confidence scores
+        native_threshold: Min chars to prefer native extraction in "smart" mode (default: 100)
+        dpi: Resolution for OCR rendering (default: 300)
+        language: Tesseract language code (default: "eng"). Use "+" for multiple: "eng+fra"
+        min_confidence: Minimum confidence threshold 0-100 when include_confidence=True
+
+    Returns:
+        Dict with extracted text and metadata
+    """
+    # Route to appropriate implementation based on engine and options
+    if include_confidence:
+        # Force OCR with confidence - use extract_text_with_confidence
+        return extract_text_with_confidence(
+            pdf_path, pages=pages, language=language, dpi=dpi, min_confidence=min_confidence
+        )
+    elif engine == "native":
+        return extract_text_native(pdf_path, pages=pages)
+    elif engine == "smart":
+        return extract_text_smart(
+            pdf_path, pages=pages, native_threshold=native_threshold, ocr_dpi=dpi, language=language
+        )
+    else:
+        # auto, ocr, tesseract, force_ocr all go to extract_text_ocr
+        return extract_text_ocr(pdf_path, pages=pages, engine=engine, dpi=dpi, language=language)
+
+
+def split_pdf(
+    pdf_path: str,
+    output_dir: str,
+    mode: str = "pages",
+    pages_per_split: int = 1,
+) -> Dict[str, Any]:
+    """
+    Split a PDF into multiple files.
+
+    This consolidates split_pdf_by_bookmarks and split_pdf_by_pages.
+
+    Args:
+        pdf_path: Path to the input PDF
+        output_dir: Directory to save split PDFs
+        mode: Split mode:
+            - "pages": Split by page count (uses pages_per_split)
+            - "bookmarks": Split by table of contents/bookmarks
+        pages_per_split: Number of pages per output file (only for mode="pages")
+
+    Returns:
+        Dict with splitting results
+    """
+    if mode not in ("pages", "bookmarks"):
+        raise PdfToolError("mode must be 'pages' or 'bookmarks'")
+
+    if mode == "bookmarks":
+        return split_pdf_by_bookmarks(pdf_path, output_dir)
+    else:
+        return split_pdf_by_pages(pdf_path, output_dir, pages_per_split=pages_per_split)
+
+
+def export_pdf(
+    pdf_path: str,
+    output_path: str,
+    format: str = "markdown",
+    pages: Optional[List[int]] = None,
+    engine: str = "auto",
+    dpi: int = 300,
+    language: str = "eng",
+) -> Dict[str, Any]:
+    """
+    Export PDF content to different formats.
+
+    This consolidates export_to_markdown and export_to_json.
+
+    Args:
+        pdf_path: Path to the input PDF
+        output_path: Path for the output file
+        format: Export format:
+            - "markdown": Export as Markdown
+            - "json": Export as JSON with metadata
+        pages: Optional list of 1-based page numbers (default: all pages)
+        engine: Text extraction engine (see extract_text)
+        dpi: Resolution for OCR (default: 300)
+        language: Tesseract language code (default: "eng")
+
+    Returns:
+        Dict with export results
+    """
+    if format not in ("markdown", "json"):
+        raise PdfToolError("format must be 'markdown' or 'json'")
+
+    if format == "json":
+        return export_to_json(pdf_path, output_path, pages=pages, engine=engine, dpi=dpi, language=language)
+    else:
+        return export_to_markdown(pdf_path, output_path, pages=pages, engine=engine, dpi=dpi, language=language)

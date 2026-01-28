@@ -1,10 +1,10 @@
-# Project Status Prompt (v0.5.2)
+# Project Status Prompt (v0.6.0)
 
 Use this prompt to sync status and plan next moves for `pdf-mcp-server`.
 
 ---
 
-Review the status and plan next moves (main branch is now v0.5.2).
+Review the status and plan next moves (main branch is now v0.6.0).
 
 Context
 - Repo: https://github.com/nfsarch33/pdf-mcp-server
@@ -21,20 +21,22 @@ Hard requirements (must be fully working)
 - Digital certificate signing (`sign_pdf`, `sign_pdf_pem`) with timestamping, validation embedding, and DocMDP permissions.
 
 Expanded capabilities (current main)
-- OCR Phase 1/2: detect_pdf_type, extract_text_native/ocr/smart, confidence scoring.
+- OCR Phase 1/2: detect_pdf_type, unified `extract_text` with engine selection.
 - Table extraction, image extraction, form auto-detection.
 - Link extraction, optimization, barcode detection (optional pyzbar).
-- Splitting by bookmarks/pages, PDF comparison, batch processing.
+- Unified `split_pdf` (modes: pages, bookmarks), PDF comparison, batch processing.
+- Unified `export_pdf` (formats: markdown, json).
 - Form creation (`create_pdf_form`), label-based fill (`fill_pdf_form_any`).
 - Highlight annotations, date stamps, PII pattern detection.
 - Certificate-based signing with PKCS#12/PFX and PEM support.
 - Advanced signing options: timestamp_url, embed_validation_info, allow_fetching, docmdp_permissions.
+- Consolidated API (v0.6.0): `extract_text`, `split_pdf`, `export_pdf`, `get_pdf_metadata(full=True)`.
 
 Quality bar
 - Feature-ready with unit + E2E coverage before pushing.
 - Test every MCP tool end-to-end with dummy PDFs (multiple fixtures if needed).
 - Always verify outputs by re-opening PDFs and re-reading metadata/fields.
-- 168 tests passing, 3 skipped.
+- 180 tests passing, 3 skipped.
 
 Workflow expectations
 - Use safe git workflow (branching + PRs); never change main directly.
