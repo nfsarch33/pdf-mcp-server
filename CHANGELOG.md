@@ -6,6 +6,16 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 0.5.0 - 2026-01-28
+
+### Added
+- `create_pdf_form`: create PDF files with standard AcroForm fields.
+- `fill_pdf_form_any`: fill standard and non-standard forms using label detection.
+- `add_highlight`: add highlight annotations by text or rectangle.
+- `add_date_stamp`: add date stamps as FreeText annotations.
+- `detect_pii_patterns`: detect common PII patterns (email, phone, SSN, credit cards).
+- Release runbook: added PR/branch hygiene SOP.
+
 ## 0.4.1 - 2026-01-27
 
 ### Added
