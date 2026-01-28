@@ -71,6 +71,11 @@ Say "health check" in any conversation to verify:
 3. All MCP servers responsive
 4. System status is healthy or issues reported
 
+### Explicit Sync Trigger
+
+Say "daily memo sync" to trigger a manual run of:
+- `~/memo/tools/daily_refresh.sh`
+
 ## Repository Memory Sources
 
 - Canonical onboarding/runbooks are under `PROJECT_MEMO/`
@@ -81,6 +86,7 @@ Say "health check" in any conversation to verify:
 
 - `memory-sop.md` (routing rules and automation)
 - `sync-policy.md` (cross-machine sync and GitHub backup)
+- `agent-self-evaluation-sop.md` (self-check loop before final output)
 
 ## Professional Standards
 
