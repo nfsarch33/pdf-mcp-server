@@ -277,4 +277,4 @@ pdf-mcp-server/
 
 ---
 
-*Last updated: 2026-01-26 | Version: 0.7.0*
+*Last updated: 2026-01-28 | Version: 0.8.0*

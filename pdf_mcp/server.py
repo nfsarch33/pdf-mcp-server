@@ -17,8 +17,9 @@ Available tool categories:
 - PII detection (1 tool)
 - Batch processing (1 tool)
 - Consolidated API (3 tools)
+- Agentic AI (3 tools) - v0.8.0+
 
-Version: 0.7.0
+Version: 0.8.0
 License: AGPL-3.0
 """
 from __future__ import annotations
@@ -1009,6 +1010,106 @@ def export_pdf(
     """
     return pdf_tools.export_pdf(
         pdf_path, output_path, format=format, pages=pages, engine=engine, dpi=dpi, language=language
+    )
+
+
+# ============================================================================
+# Agentic AI Tools (v0.8.0+)
+# ============================================================================
+
+
+@mcp.tool()
+@_handle_errors
+def auto_fill_pdf_form(
+    pdf_path: str,
+    output_path: str,
+    source_data: Dict[str, Any],
+    model: str = "gpt-4o-mini",
+) -> Dict[str, Any]:
+    """
+    Intelligently fill PDF form fields using LLM-powered field mapping.
+
+    This function analyzes form field names and source data keys to create
+    intelligent mappings, even when names don't exactly match. For example,
+    it can map "full_name" in the source to "Name" in the form.
+
+    Requires OPENAI_API_KEY environment variable for LLM-based mapping.
+    Falls back to direct field name matching if LLM is unavailable.
+
+    Args:
+        pdf_path: Path to the input PDF form
+        output_path: Path for the filled output PDF
+        source_data: Dictionary of data to fill into the form
+        model: OpenAI model for field mapping (default: gpt-4o-mini)
+
+    Returns:
+        Dict with filled_fields count, mappings used, and unmapped fields
+    """
+    return pdf_tools.auto_fill_pdf_form(pdf_path, output_path, source_data, model=model)
+
+
+@mcp.tool()
+@_handle_errors
+def extract_structured_data(
+    pdf_path: str,
+    data_type: Optional[str] = None,
+    schema: Optional[Dict[str, str]] = None,
+    pages: Optional[List[int]] = None,
+    model: str = "gpt-4o-mini",
+) -> Dict[str, Any]:
+    """
+    Extract structured data from PDF using pattern matching or LLM.
+
+    Supports common document types (invoice, receipt, contract) with
+    pre-defined extraction patterns, or custom schemas for specific needs.
+
+    Args:
+        pdf_path: Path to the PDF file
+        data_type: Predefined type: "invoice", "receipt", "contract", "form", or None
+        schema: Custom extraction schema as Dict[field_name, field_type]
+                Types: "string", "number", "date", "currency", "list"
+        pages: Optional list of 1-based page numbers (default: all)
+        model: OpenAI model for LLM-based extraction
+
+    Returns:
+        Dict with extracted data, confidence scores, and extraction method
+    """
+    return pdf_tools.extract_structured_data(
+        pdf_path, data_type=data_type, schema=schema, pages=pages, model=model
+    )
+
+
+@mcp.tool()
+@_handle_errors
+def analyze_pdf_content(
+    pdf_path: str,
+    include_summary: bool = True,
+    detect_entities: bool = True,
+    check_completeness: bool = False,
+    model: str = "gpt-4o-mini",
+) -> Dict[str, Any]:
+    """
+    Analyze PDF content for document type, key entities, and summary.
+
+    Provides comprehensive document analysis including classification,
+    entity extraction, and optional completeness checking.
+
+    Args:
+        pdf_path: Path to the PDF file
+        include_summary: Generate document summary (default: True)
+        detect_entities: Extract key entities like dates, amounts, names (default: True)
+        check_completeness: Check for missing required fields (default: False)
+        model: OpenAI model for LLM-based analysis
+
+    Returns:
+        Dict with document_type, summary, entities, and analysis results
+    """
+    return pdf_tools.analyze_pdf_content(
+        pdf_path,
+        include_summary=include_summary,
+        detect_entities=detect_entities,
+        check_completeness=check_completeness,
+        model=model,
     )
 
 

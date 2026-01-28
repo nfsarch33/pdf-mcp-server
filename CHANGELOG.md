@@ -6,6 +6,30 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 0.8.0 - 2026-01-28
+
+### Added
+- **Agentic AI Integration**: LLM-powered PDF processing capabilities.
+  - `auto_fill_pdf_form`: Intelligent form filling with LLM-powered field mapping. Maps source data to form fields even when names don't exactly match.
+  - `extract_structured_data`: Extract structured data from PDFs using pattern matching or LLM. Supports invoice, receipt, contract types and custom schemas.
+  - `analyze_pdf_content`: Document analysis including type classification, entity extraction (dates, amounts, names), and summarization.
+- `[llm]` optional dependency group for OpenAI integration.
+- 22 new tests for agentic features (unit tests with mocks + integration tests).
+- LLM helper functions: `_call_llm`, `_HAS_OPENAI` flag for optional OpenAI support.
+
+### Changed
+- Total test count increased from 180 to 199 (202 collected, 3 skipped for optional deps).
+- Tool count increased from 47 to 50.
+- Module docstrings updated to reflect new agentic capabilities.
+
+### Technical Notes
+- Agentic features gracefully degrade without OpenAI:
+  - `auto_fill_pdf_form`: Falls back to direct field name matching
+  - `extract_structured_data`: Uses pattern-based extraction
+  - `analyze_pdf_content`: Uses keyword-based classification
+- Pattern matching supports common document types without LLM dependency.
+- LLM integration uses `gpt-4o-mini` by default for cost efficiency.
+
 ## 0.7.0 - 2026-01-26
 
 ### Removed

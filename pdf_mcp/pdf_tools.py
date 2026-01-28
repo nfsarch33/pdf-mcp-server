@@ -10,8 +10,9 @@ This module provides PDF manipulation, OCR, and extraction capabilities:
 - Form detection: auto-detect fields in non-AcroForm PDFs
 - Export: markdown and JSON export
 - PII detection: scan for common personal data patterns
+- Agentic AI: LLM-powered form filling, entity extraction, document analysis (v0.8.0+)
 
-Version: 0.7.0
+Version: 0.8.0
 License: AGPL-3.0
 """
 from __future__ import annotations
@@ -66,6 +67,13 @@ try:
     _HAS_PYHANKO = True
 except ImportError:
     _HAS_PYHANKO = False
+
+try:
+    import openai
+
+    _HAS_OPENAI = True
+except ImportError:
+    _HAS_OPENAI = False
 
 # Common Tesseract language codes
 TESSERACT_LANGUAGES = {
@@ -3678,3 +3686,509 @@ def export_pdf(
             parts.append("")
         dst.write_text("\n".join(parts), encoding="utf-8")
         return {"output_path": str(dst), "engine": engine, "pages": len(text_result.get("page_details", []))}
+
+
+# ============================================================================
+# Agentic AI Functions (v0.8.0+)
+# ============================================================================
+
+
+def _call_llm(
+    prompt: str,
+    system_prompt: Optional[str] = None,
+    model: str = "gpt-4o-mini",
+    temperature: float = 0.0,
+) -> Optional[str]:
+    """
+    Call OpenAI LLM with the given prompt.
+
+    Args:
+        prompt: The user prompt to send
+        system_prompt: Optional system prompt for context
+        model: OpenAI model to use (default: gpt-4o-mini for cost efficiency)
+        temperature: Sampling temperature (0.0 for deterministic)
+
+    Returns:
+        LLM response content or None if unavailable
+    """
+    if not _HAS_OPENAI:
+        return None
+
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        return None
+
+    try:
+        client = openai.OpenAI(api_key=api_key)
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+
+        response = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            temperature=temperature,
+        )
+        return response.choices[0].message.content
+    except Exception:
+        return None
+
+
+def auto_fill_pdf_form(
+    pdf_path: str,
+    output_path: str,
+    source_data: Dict[str, Any],
+    model: str = "gpt-4o-mini",
+) -> Dict[str, Any]:
+    """
+    Intelligently fill PDF form fields using LLM-powered field mapping.
+
+    This function analyzes form field names and source data keys to create
+    intelligent mappings, even when names don't exactly match. For example,
+    it can map "full_name" in the source to "Name" in the form.
+
+    Args:
+        pdf_path: Path to the input PDF form
+        output_path: Path for the filled output PDF
+        source_data: Dictionary of data to fill into the form
+        model: OpenAI model for field mapping (default: gpt-4o-mini)
+
+    Returns:
+        Dict with:
+            - filled_fields: Number of fields successfully filled
+            - mappings: Dict showing source->field mappings used
+            - unmapped_fields: List of form fields that couldn't be mapped
+            - output_path: Path to the output file
+
+    Example:
+        >>> source = {"name": "John Smith", "email_address": "john@example.com"}
+        >>> result = auto_fill_pdf_form("form.pdf", "filled.pdf", source)
+        >>> print(result["filled_fields"])  # May fill "Full Name" and "Email"
+    """
+    try:
+        src = _ensure_file(pdf_path)
+    except PdfToolError as e:
+        return {"error": str(e)}
+
+    # Get form fields
+    fields_result = get_pdf_form_fields(str(src))
+    if "error" in fields_result:
+        return fields_result
+
+    form_fields = fields_result.get("fields", {})
+    if not form_fields:
+        return {"error": "No form fields found in PDF"}
+
+    field_names = list(form_fields.keys())
+
+    # Try direct mapping first (exact or normalized matches)
+    direct_mappings = {}
+    for source_key, source_value in source_data.items():
+        normalized_source = _normalize_field_key(source_key)
+        for field_name in field_names:
+            normalized_field = _normalize_field_key(field_name)
+            if normalized_source == normalized_field:
+                direct_mappings[field_name] = str(source_value)
+                break
+
+    # If LLM available and there are unmapped fields, use LLM for intelligent mapping
+    llm_mappings = {}
+    unmapped_source_keys = [k for k in source_data.keys() if _normalize_field_key(k) not in 
+                           [_normalize_field_key(f) for f in direct_mappings.keys()]]
+    unmapped_fields = [f for f in field_names if f not in direct_mappings]
+
+    if unmapped_source_keys and unmapped_fields:
+        if not _HAS_OPENAI:
+            return {
+                "error": "OpenAI library not installed. Install with: pip install openai",
+                "hint": "Or use fill_pdf_form() with exact field names"
+            }
+
+        api_key = os.environ.get("OPENAI_API_KEY")
+        if not api_key:
+            return {
+                "error": "OPENAI_API_KEY environment variable not set",
+                "hint": "Set the API key or use fill_pdf_form() with exact field names",
+                "partial_mappings": direct_mappings
+            }
+
+        # Build LLM prompt for intelligent mapping
+        system_prompt = """You are a form field mapping assistant. Given source data keys and PDF form field names, 
+        determine the best mapping between them. Return ONLY a valid JSON object mapping form field names to values.
+        Only include fields where you're confident in the mapping. Be conservative - don't map if unsure."""
+
+        prompt = f"""Map the following source data to PDF form fields.
+
+Source data keys and values:
+{json.dumps({k: source_data[k] for k in unmapped_source_keys}, indent=2)}
+
+Available PDF form field names (unmapped):
+{json.dumps(unmapped_fields, indent=2)}
+
+Return a JSON object where keys are PDF form field names and values are the corresponding source values.
+Only include mappings you're confident about."""
+
+        llm_response = _call_llm(prompt, system_prompt, model=model)
+        if llm_response:
+            try:
+                # Extract JSON from response (handle markdown code blocks)
+                json_str = llm_response
+                if "```json" in json_str:
+                    json_str = json_str.split("```json")[1].split("```")[0]
+                elif "```" in json_str:
+                    json_str = json_str.split("```")[1].split("```")[0]
+                llm_mappings = json.loads(json_str.strip())
+            except json.JSONDecodeError:
+                pass  # Fall back to direct mappings only
+
+    # Combine mappings
+    all_mappings = {**direct_mappings, **llm_mappings}
+
+    if not all_mappings:
+        return {
+            "error": "Could not map any source data to form fields",
+            "form_fields": field_names,
+            "source_keys": list(source_data.keys())
+        }
+
+    # Fill the form
+    fill_result = fill_pdf_form(str(src), output_path, all_mappings, flatten=False)
+
+    return {
+        "output_path": output_path,
+        "filled_fields": fill_result.get("filled", 0),
+        "mappings": all_mappings,
+        "unmapped_fields": [f for f in field_names if f not in all_mappings],
+        "method": "llm" if llm_mappings else "direct"
+    }
+
+
+def extract_structured_data(
+    pdf_path: str,
+    data_type: Optional[str] = None,
+    schema: Optional[Dict[str, str]] = None,
+    pages: Optional[List[int]] = None,
+    model: str = "gpt-4o-mini",
+) -> Dict[str, Any]:
+    """
+    Extract structured data from PDF using pattern matching or LLM.
+
+    Supports common document types (invoice, receipt, contract) with
+    pre-defined extraction patterns, or custom schemas for specific needs.
+
+    Args:
+        pdf_path: Path to the PDF file
+        data_type: Predefined type: "invoice", "receipt", "contract", "form", or None
+        schema: Custom extraction schema as Dict[field_name, field_type]
+                Types: "string", "number", "date", "currency", "list"
+        pages: Optional list of 1-based page numbers (default: all)
+        model: OpenAI model for LLM-based extraction
+
+    Returns:
+        Dict with:
+            - data: Extracted structured data
+            - confidence: Extraction confidence scores
+            - method: "pattern" or "llm"
+            - page_count: Number of pages processed
+
+    Example:
+        >>> result = extract_structured_data("invoice.pdf", data_type="invoice")
+        >>> print(result["data"]["total"])  # Extracted total amount
+    """
+    try:
+        src = _ensure_file(pdf_path)
+    except PdfToolError as e:
+        return {"error": str(e)}
+
+    # Extract text from PDF
+    text_result = extract_text(str(src), pages=pages, engine="auto")
+    if "error" in text_result:
+        return text_result
+
+    full_text = text_result.get("text", "")
+    if not full_text.strip():
+        return {"error": "No text content found in PDF", "page_count": text_result.get("page_count", 0)}
+
+    # Define patterns for common data types
+    patterns = {
+        "invoice": {
+            "invoice_number": r"(?:invoice|inv)[\s#:]*([A-Z0-9-]+)",
+            "date": r"(?:date|dated?)[\s:]*(\d{1,2}[\s/-]\w+[\s/-]\d{2,4}|\w+\s+\d{1,2},?\s+\d{4})",
+            "total": r"(?:total|amount due|grand total)[\s:]*\$?([\d,]+\.?\d*)",
+            "subtotal": r"(?:subtotal|sub-total)[\s:]*\$?([\d,]+\.?\d*)",
+            "tax": r"(?:tax|vat|gst)[\s:]*\$?([\d,]+\.?\d*)",
+            "due_date": r"(?:due date|payment due|due by)[\s:]*(\d{1,2}[\s/-]\w+[\s/-]\d{2,4}|\w+\s+\d{1,2},?\s+\d{4})",
+        },
+        "receipt": {
+            "store_name": r"^([A-Z][A-Za-z\s&]+)(?:\n|$)",
+            "date": r"(?:date)[\s:]*(\d{1,2}[\s/-]\d{1,2}[\s/-]\d{2,4})",
+            "total": r"(?:total)[\s:]*\$?([\d,]+\.?\d*)",
+            "payment_method": r"(?:paid by|payment|card)[\s:]*(\w+)",
+        },
+        "contract": {
+            "effective_date": r"(?:effective date|dated)[\s:]*(\w+\s+\d{1,2},?\s+\d{4})",
+            "parties": r"(?:between|party)[\s:]*([A-Z][A-Za-z\s,]+)(?:and|&)",
+            "term": r"(?:term|duration)[\s:]*(\d+\s*(?:year|month|day)s?)",
+        },
+    }
+
+    extracted_data = {}
+    confidence = {}
+    method = "pattern"
+
+    # Try pattern-based extraction first
+    if data_type and data_type in patterns:
+        for field, pattern in patterns[data_type].items():
+            match = re.search(pattern, full_text, re.IGNORECASE | re.MULTILINE)
+            if match:
+                extracted_data[field] = match.group(1).strip()
+                confidence[field] = 0.7  # Pattern match confidence
+
+    # Try custom schema
+    if schema:
+        for field, field_type in schema.items():
+            if field not in extracted_data:
+                # Generate pattern based on field name and type
+                field_pattern = field.replace("_", "[\\s_]")
+                pattern = r"(?:" + field_pattern + r")[\s:]*"
+                if field_type == "number":
+                    pattern += r"([\d,]+\.?\d*)"
+                elif field_type == "currency":
+                    pattern += r"\$?([\d,]+\.?\d*)"
+                elif field_type == "date":
+                    pattern += r"(\d{1,2}[\s/-]\w+[\s/-]\d{2,4}|\w+\s+\d{1,2},?\s+\d{4})"
+                else:
+                    pattern += r"([^\n]+)"
+                
+                match = re.search(pattern, full_text, re.IGNORECASE)
+                if match:
+                    extracted_data[field] = match.group(1).strip()
+                    confidence[field] = 0.5  # Lower confidence for dynamic patterns
+
+    # If LLM available and we have a schema or data_type, enhance with LLM
+    if (not extracted_data or len(extracted_data) < 3) and _HAS_OPENAI and os.environ.get("OPENAI_API_KEY"):
+        target_schema = schema or patterns.get(data_type, {})
+        if target_schema:
+            system_prompt = """You are a document data extraction assistant. Extract structured data from the given text.
+            Return ONLY a valid JSON object with the requested fields. Use null for fields you cannot find."""
+
+            fields_to_extract = list(target_schema.keys()) if isinstance(target_schema, dict) else list(target_schema)
+            prompt = f"""Extract the following fields from this document text:
+            
+Fields to extract: {json.dumps(fields_to_extract)}
+
+Document text:
+{full_text[:4000]}  # Limit text length for API
+
+Return a JSON object with the extracted values."""
+
+            llm_response = _call_llm(prompt, system_prompt, model=model)
+            if llm_response:
+                try:
+                    json_str = llm_response
+                    if "```json" in json_str:
+                        json_str = json_str.split("```json")[1].split("```")[0]
+                    elif "```" in json_str:
+                        json_str = json_str.split("```")[1].split("```")[0]
+                    llm_data = json.loads(json_str.strip())
+                    
+                    # Merge LLM data with pattern data (patterns take precedence)
+                    for key, value in llm_data.items():
+                        if key not in extracted_data and value is not None:
+                            extracted_data[key] = value
+                            confidence[key] = 0.85  # LLM confidence
+                    method = "llm+pattern" if any(c == 0.7 for c in confidence.values()) else "llm"
+                except json.JSONDecodeError:
+                    pass
+
+    return {
+        "data": extracted_data,
+        "confidence": confidence,
+        "method": method,
+        "page_count": text_result.get("page_count", 0),
+        "data_type": data_type,
+    }
+
+
+def analyze_pdf_content(
+    pdf_path: str,
+    include_summary: bool = True,
+    detect_entities: bool = True,
+    check_completeness: bool = False,
+    model: str = "gpt-4o-mini",
+) -> Dict[str, Any]:
+    """
+    Analyze PDF content for document type, key entities, and summary.
+
+    Provides comprehensive document analysis including classification,
+    entity extraction, and optional completeness checking.
+
+    Args:
+        pdf_path: Path to the PDF file
+        include_summary: Generate document summary (default: True)
+        detect_entities: Extract key entities like dates, amounts, names (default: True)
+        check_completeness: Check for missing required fields (default: False)
+        model: OpenAI model for LLM-based analysis
+
+    Returns:
+        Dict with:
+            - document_type: Classified type (invoice, contract, form, letter, report, other)
+            - summary: Brief document summary (if requested)
+            - entities: Extracted key entities (if requested)
+            - completeness: Completeness analysis (if requested)
+            - page_count: Number of pages
+            - word_count: Approximate word count
+
+    Example:
+        >>> result = analyze_pdf_content("document.pdf")
+        >>> print(result["document_type"])  # "invoice"
+        >>> print(result["summary"])  # "Invoice #12345 for $162.00..."
+    """
+    try:
+        src = _ensure_file(pdf_path)
+    except PdfToolError as e:
+        return {"error": str(e)}
+
+    # Extract text
+    text_result = extract_text(str(src), engine="auto")
+    if "error" in text_result:
+        return text_result
+
+    full_text = text_result.get("text", "")
+    page_count = text_result.get("page_count", 0)
+    word_count = len(full_text.split())
+
+    # Basic document classification using patterns
+    doc_type_patterns = {
+        "invoice": r"(?:invoice|bill|statement)",
+        "receipt": r"(?:receipt|paid|payment received)",
+        "contract": r"(?:agreement|contract|terms and conditions|hereby agree)",
+        "form": r"(?:please fill|form|application|submit)",
+        "letter": r"(?:dear|sincerely|regards|to whom)",
+        "report": r"(?:report|analysis|findings|conclusion|executive summary)",
+        "resume": r"(?:experience|education|skills|employment|curriculum vitae|cv)",
+    }
+
+    document_type = "other"
+    type_confidence = 0.0
+    text_lower = full_text.lower()
+
+    for doc_type, pattern in doc_type_patterns.items():
+        matches = len(re.findall(pattern, text_lower, re.IGNORECASE))
+        if matches > 0:
+            conf = min(0.9, 0.3 + matches * 0.15)
+            if conf > type_confidence:
+                document_type = doc_type
+                type_confidence = conf
+
+    result = {
+        "document_type": document_type,
+        "type_confidence": round(type_confidence, 2),
+        "page_count": page_count,
+        "word_count": word_count,
+    }
+
+    # Entity detection using patterns
+    if detect_entities:
+        entities = {}
+        
+        # Dates
+        date_pattern = r"\b(\d{1,2}[\s/-]\w+[\s/-]\d{2,4}|\w+\s+\d{1,2},?\s+\d{4}|\d{4}-\d{2}-\d{2})\b"
+        dates = re.findall(date_pattern, full_text)
+        if dates:
+            entities["dates"] = list(set(dates[:10]))  # Limit to 10 unique dates
+
+        # Currency amounts
+        currency_pattern = r"\$[\d,]+\.?\d*|\d+\.\d{2}\s*(?:USD|EUR|GBP)"
+        amounts = re.findall(currency_pattern, full_text)
+        if amounts:
+            entities["amounts"] = list(set(amounts[:10]))
+
+        # Email addresses
+        email_pattern = r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
+        emails = re.findall(email_pattern, full_text)
+        if emails:
+            entities["emails"] = list(set(emails[:5]))
+
+        # Phone numbers
+        phone_pattern = r"\b(?:\+?1[-.\s]?)?\(?[0-9]{3}\)?[-.\s]?[0-9]{3}[-.\s]?[0-9]{4}\b"
+        phones = re.findall(phone_pattern, full_text)
+        if phones:
+            entities["phones"] = list(set(phones[:5]))
+
+        # Names (simple pattern - capitalized words)
+        name_pattern = r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b"
+        names = re.findall(name_pattern, full_text)
+        if names:
+            # Filter common non-names
+            filtered_names = [n for n in names if n.lower() not in 
+                           ["new york", "los angeles", "united states", "january", "february"]]
+            entities["names"] = list(set(filtered_names[:10]))
+
+        result["entities"] = entities
+
+    # LLM-based summary and enhanced analysis
+    if (include_summary or check_completeness) and _HAS_OPENAI and os.environ.get("OPENAI_API_KEY"):
+        system_prompt = """You are a document analysis assistant. Analyze the given document and provide:
+        1. A brief 1-2 sentence summary
+        2. Document classification confirmation
+        3. Key findings or notable items
+        Return as a JSON object with keys: summary, document_type, key_findings (list)"""
+
+        prompt = f"""Analyze this {document_type} document:
+
+{full_text[:4000]}
+
+Provide a JSON response with summary, document_type, and key_findings."""
+
+        llm_response = _call_llm(prompt, system_prompt, model=model)
+        if llm_response:
+            try:
+                json_str = llm_response
+                if "```json" in json_str:
+                    json_str = json_str.split("```json")[1].split("```")[0]
+                elif "```" in json_str:
+                    json_str = json_str.split("```")[1].split("```")[0]
+                analysis = json.loads(json_str.strip())
+                
+                if include_summary and "summary" in analysis:
+                    result["summary"] = analysis["summary"]
+                if "document_type" in analysis:
+                    result["document_type"] = analysis["document_type"]
+                    result["type_confidence"] = 0.9
+                if "key_findings" in analysis:
+                    result["key_findings"] = analysis["key_findings"]
+            except json.JSONDecodeError:
+                # Fallback: use raw response as summary
+                if include_summary:
+                    result["summary"] = llm_response[:500]
+    elif include_summary:
+        # Simple extractive summary without LLM
+        sentences = re.split(r'[.!?]+', full_text)
+        sentences = [s.strip() for s in sentences if len(s.strip()) > 20]
+        result["summary"] = ". ".join(sentences[:3]) + "." if sentences else "Unable to generate summary."
+
+    # Completeness check
+    if check_completeness:
+        completeness = {"score": 1.0, "missing_fields": []}
+        
+        # Check for common required elements based on document type
+        required_elements = {
+            "invoice": ["date", "total", "invoice number"],
+            "contract": ["date", "signature", "parties"],
+            "form": ["date", "signature"],
+        }
+        
+        if document_type in required_elements:
+            for element in required_elements[document_type]:
+                if element not in text_lower:
+                    completeness["missing_fields"].append(element)
+                    completeness["score"] -= 0.2
+            completeness["score"] = max(0, completeness["score"])
+        
+        result["completeness"] = completeness
+
+    result["analysis_method"] = "llm+pattern" if "summary" in result and _HAS_OPENAI else "pattern"
+    
+    return result
