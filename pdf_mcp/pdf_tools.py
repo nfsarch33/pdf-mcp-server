@@ -11,7 +11,7 @@ This module provides PDF manipulation, OCR, and extraction capabilities:
 - Export: markdown and JSON export
 - PII detection: scan for common personal data patterns
 
-Version: 0.5.1
+Version: 0.5.2
 License: AGPL-3.0
 """
 from __future__ import annotations
@@ -61,6 +61,7 @@ try:
     from pyhanko.pdf_utils.reader import PdfFileReader
     from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
     from pyhanko.sign import fields, signers, validation
+    from pyhanko.sign.timestamps.requests_client import HTTPTimeStamper
 
     _HAS_PYHANKO = True
 except ImportError:
@@ -1497,6 +1498,36 @@ def verify_digital_signatures(pdf_path: str) -> Dict[str, Any]:
     return {"pdf_path": str(src), "signatures": results, "verified": verified}
 
 
+def _parse_docmdp_permissions(value: Optional[str]):
+    if value is None:
+        return None
+    normalized = value.strip().lower()
+    mapping = {
+        "no_changes": fields.MDPPerm.NO_CHANGES,
+        "fill_forms": fields.MDPPerm.FILL_FORMS,
+        "annotate": fields.MDPPerm.ANNOTATE,
+    }
+    if normalized in mapping:
+        return mapping[normalized]
+    raise PdfToolError("docmdp_permissions must be one of: no_changes, fill_forms, annotate")
+
+
+def _build_validation_context(
+    signer: "signers.SimpleSigner",
+    allow_fetching: bool,
+    embed_validation_info: bool,
+):
+    if not allow_fetching and not embed_validation_info:
+        return None
+    trust_roots = None
+    try:
+        if signer.signing_cert is not None:
+            trust_roots = [signer.signing_cert]
+    except Exception:
+        trust_roots = None
+    return validation.ValidationContext(allow_fetching=allow_fetching, trust_roots=trust_roots)
+
+
 def _sign_pdf(
     input_path: str,
     output_path: str,
@@ -1505,9 +1536,21 @@ def _sign_pdf(
     certify: bool,
     reason: Optional[str],
     location: Optional[str],
+    timestamp_url: Optional[str],
+    embed_validation_info: bool,
+    allow_fetching: bool,
+    docmdp_permissions: Optional[str],
 ) -> Dict[str, Any]:
     src = _ensure_file(input_path)
     dst = _prepare_output(output_path)
+
+    mdp_perm = _parse_docmdp_permissions(docmdp_permissions)
+    validation_context = _build_validation_context(
+        signer,
+        allow_fetching=allow_fetching,
+        embed_validation_info=embed_validation_info,
+    )
+    timestamper = HTTPTimeStamper(timestamp_url) if timestamp_url else None
 
     with src.open("rb") as inf:
         pdf_out = IncrementalPdfFileWriter(inf)
@@ -1517,8 +1560,12 @@ def _sign_pdf(
                 certify=certify,
                 reason=reason,
                 location=location,
+                embed_validation_info=embed_validation_info,
+                validation_context=validation_context,
+                docmdp_permissions=mdp_perm,
             ),
             signer=signer,
+            timestamper=timestamper,
             new_field_spec=fields.SigFieldSpec(field_name),
         )
 
@@ -1546,6 +1593,10 @@ def sign_pdf(
     certify: bool = True,
     reason: Optional[str] = None,
     location: Optional[str] = None,
+    timestamp_url: Optional[str] = None,
+    embed_validation_info: bool = False,
+    allow_fetching: bool = False,
+    docmdp_permissions: Optional[str] = "fill_forms",
 ) -> Dict[str, Any]:
     """
     Digitally sign a PDF using a PKCS#12/PFX certificate.
@@ -1555,7 +1606,19 @@ def sign_pdf(
     pfx = _ensure_file(pfx_path)
     password_bytes = None if pfx_password is None else pfx_password.encode("utf-8")
     signer = signers.SimpleSigner.load_pkcs12(str(pfx), passphrase=password_bytes)
-    return _sign_pdf(input_path, output_path, signer, field_name, certify, reason, location)
+    return _sign_pdf(
+        input_path,
+        output_path,
+        signer,
+        field_name,
+        certify,
+        reason,
+        location,
+        timestamp_url,
+        embed_validation_info,
+        allow_fetching,
+        docmdp_permissions,
+    )
 
 
 def sign_pdf_pem(
@@ -1569,6 +1632,10 @@ def sign_pdf_pem(
     certify: bool = True,
     reason: Optional[str] = None,
     location: Optional[str] = None,
+    timestamp_url: Optional[str] = None,
+    embed_validation_info: bool = False,
+    allow_fetching: bool = False,
+    docmdp_permissions: Optional[str] = "fill_forms",
 ) -> Dict[str, Any]:
     """
     Digitally sign a PDF using PEM key + certificate chain.
@@ -1592,7 +1659,19 @@ def sign_pdf_pem(
         key_passphrase=password_bytes,
         other_certs=other_certs or None,
     )
-    return _sign_pdf(input_path, output_path, signer, field_name, certify, reason, location)
+    return _sign_pdf(
+        input_path,
+        output_path,
+        signer,
+        field_name,
+        certify,
+        reason,
+        location,
+        timestamp_url,
+        embed_validation_info,
+        allow_fetching,
+        docmdp_permissions,
+    )
 
 
 def get_full_metadata(pdf_path: str) -> Dict[str, Any]:

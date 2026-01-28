@@ -17,7 +17,7 @@ Available tool categories:
 - PII detection (1 tool)
  - PII detection (1 tool)
 
-Version: 0.5.1
+Version: 0.5.2
 License: AGPL-3.0
 """
 from __future__ import annotations
@@ -479,6 +479,10 @@ def sign_pdf(
     certify: bool = True,
     reason: Optional[str] = None,
     location: Optional[str] = None,
+    timestamp_url: Optional[str] = None,
+    embed_validation_info: bool = False,
+    allow_fetching: bool = False,
+    docmdp_permissions: Optional[str] = "fill_forms",
 ) -> Dict[str, Any]:
     """Digitally sign a PDF using a PKCS#12/PFX certificate."""
     return pdf_tools.sign_pdf(
@@ -490,6 +494,10 @@ def sign_pdf(
         certify=certify,
         reason=reason,
         location=location,
+        timestamp_url=timestamp_url,
+        embed_validation_info=embed_validation_info,
+        allow_fetching=allow_fetching,
+        docmdp_permissions=docmdp_permissions,
     )
 
 
@@ -506,6 +514,10 @@ def sign_pdf_pem(
     certify: bool = True,
     reason: Optional[str] = None,
     location: Optional[str] = None,
+    timestamp_url: Optional[str] = None,
+    embed_validation_info: bool = False,
+    allow_fetching: bool = False,
+    docmdp_permissions: Optional[str] = "fill_forms",
 ) -> Dict[str, Any]:
     """Digitally sign a PDF using PEM key + cert chain."""
     return pdf_tools.sign_pdf_pem(
@@ -519,6 +531,10 @@ def sign_pdf_pem(
         certify=certify,
         reason=reason,
         location=location,
+        timestamp_url=timestamp_url,
+        embed_validation_info=embed_validation_info,
+        allow_fetching=allow_fetching,
+        docmdp_permissions=docmdp_permissions,
     )
 
 

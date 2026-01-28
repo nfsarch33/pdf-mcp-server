@@ -131,6 +131,20 @@ def _make_test_certificates(tmp_path: Path) -> Dict[str, Path]:
         .not_valid_before(now - timedelta(days=1))
         .not_valid_after(now + timedelta(days=365))
         .add_extension(x509.BasicConstraints(ca=True, path_length=None), critical=True)
+        .add_extension(
+            x509.KeyUsage(
+                digital_signature=True,
+                content_commitment=True,
+                key_encipherment=False,
+                data_encipherment=False,
+                key_agreement=False,
+                key_cert_sign=True,
+                crl_sign=True,
+                encipher_only=False,
+                decipher_only=False,
+            ),
+            critical=True,
+        )
         .sign(key, hashes.SHA256())
     )
 
@@ -153,7 +167,14 @@ def _make_test_certificates(tmp_path: Path) -> Dict[str, Path]:
         )
     )
 
-    return {"key": key_path, "cert": cert_path, "pfx": pfx_path, "password": password}
+    return {
+        "key": key_path,
+        "cert": cert_path,
+        "pfx": pfx_path,
+        "password": password,
+        "key_obj": key,
+        "cert_obj": cert,
+    }
 
 
 def test_get_pdf_form_fields_empty(tmp_path: Path):
@@ -488,6 +509,111 @@ def test_sign_pdf_pem(tmp_path: Path):
         key_path=str(certs["key"]),
         cert_path=str(certs["cert"]),
         certify=True,
+    )
+    assert Path(res["output_path"]).exists()
+
+    verify = pdf_tools.verify_digital_signatures(str(out))
+    assert len(verify["signatures"]) == 1
+    assert verify["signatures"][0].get("intact") is True
+
+
+def test_sign_pdf_with_timestamp_and_docmdp(tmp_path: Path, monkeypatch):
+    if not getattr(pdf_tools, "_HAS_PYHANKO", False):
+        pytest.skip("pyHanko not available")
+    certs = _make_test_certificates(tmp_path)
+    src = _make_pdf(tmp_path / "sign_src_ts.pdf", pages=1)
+    out = tmp_path / "signed_ts.pdf"
+
+    from datetime import datetime, timedelta, timezone
+
+    from asn1crypto import keys as asn1_keys
+    from asn1crypto import x509 as asn1_x509
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
+    from pyhanko.sign.timestamps.dummy_client import DummyTimeStamper
+
+    tsa_key_obj = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    tsa_subject = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "pdf-mcp-tsa")])
+    now = datetime.now(timezone.utc)
+    tsa_cert_obj = (
+        x509.CertificateBuilder()
+        .subject_name(tsa_subject)
+        .issuer_name(tsa_subject)
+        .public_key(tsa_key_obj.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now - timedelta(days=1))
+        .not_valid_after(now + timedelta(days=365))
+        .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
+        .add_extension(
+            x509.KeyUsage(
+                digital_signature=True,
+                content_commitment=True,
+                key_encipherment=False,
+                data_encipherment=False,
+                key_agreement=False,
+                key_cert_sign=False,
+                crl_sign=False,
+                encipher_only=False,
+                decipher_only=False,
+            ),
+            critical=True,
+        )
+        .add_extension(
+            x509.ExtendedKeyUsage([ExtendedKeyUsageOID.TIME_STAMPING]),
+            critical=True,
+        )
+        .sign(tsa_key_obj, hashes.SHA256())
+    )
+
+    key_der = tsa_key_obj.private_bytes(
+        encoding=serialization.Encoding.DER,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+    cert_der = tsa_cert_obj.public_bytes(serialization.Encoding.DER)
+    tsa_key = asn1_keys.PrivateKeyInfo.load(key_der)
+    tsa_cert = asn1_x509.Certificate.load(cert_der)
+
+    def fake_timestamper(url, https=False, timeout=5, auth=None, headers=None):
+        return DummyTimeStamper(tsa_cert=tsa_cert, tsa_key=tsa_key)
+
+    monkeypatch.setattr(pdf_tools, "HTTPTimeStamper", fake_timestamper)
+
+    res = pdf_tools.sign_pdf(
+        input_path=str(src),
+        output_path=str(out),
+        pfx_path=str(certs["pfx"]),
+        pfx_password=certs["password"].decode("utf-8"),
+        certify=True,
+        timestamp_url="https://tsa.example.test",
+        embed_validation_info=False,
+        allow_fetching=False,
+        docmdp_permissions="no_changes",
+    )
+    assert Path(res["output_path"]).exists()
+
+    verify = pdf_tools.verify_digital_signatures(str(out))
+    assert len(verify["signatures"]) == 1
+    assert verify["signatures"][0].get("intact") is True
+
+
+def test_sign_pdf_with_validation_info(tmp_path: Path):
+    if not getattr(pdf_tools, "_HAS_PYHANKO", False):
+        pytest.skip("pyHanko not available")
+    certs = _make_test_certificates(tmp_path)
+    src = _make_pdf(tmp_path / "sign_src_vi.pdf", pages=1)
+    out = tmp_path / "signed_vi.pdf"
+
+    res = pdf_tools.sign_pdf(
+        input_path=str(src),
+        output_path=str(out),
+        pfx_path=str(certs["pfx"]),
+        pfx_password=certs["password"].decode("utf-8"),
+        certify=True,
+        embed_validation_info=True,
+        allow_fetching=False,
     )
     assert Path(res["output_path"]).exists()
 

@@ -1,6 +1,6 @@
 # PDF MCP Server
 
-**Version 0.5.1** | MCP server for PDF form filling, editing, OCR text extraction, table extraction, image extraction, link extraction, and batch processing.
+**Version 0.5.2** | MCP server for PDF form filling, editing, OCR text extraction, table extraction, image extraction, link extraction, and batch processing.
 
 Built with Python, `pypdf`, `fillpdf`, and `pymupdf` (AGPL).
 
@@ -153,8 +153,8 @@ Restart Cursor after saving.
 - `add_signature_image(input_path, output_path, page, image_path, rect)`: add signature image.
 - `update_signature_image(...)`: update or resize signature.
 - `remove_signature_image(...)`: remove signature image.
-- `sign_pdf(input_path, output_path, pfx_path, ...)`: digitally sign PDF using PKCS#12/PFX.
-- `sign_pdf_pem(input_path, output_path, key_path, cert_path, ...)`: digitally sign PDF using PEM key + cert chain.
+- `sign_pdf(input_path, output_path, pfx_path, ...)`: sign with PKCS#12/PFX, optional `timestamp_url`, `embed_validation_info`, `allow_fetching`, `docmdp_permissions`.
+- `sign_pdf_pem(input_path, output_path, key_path, cert_path, ...)`: sign with PEM key + cert chain, supports timestamping, revocation checks, DocMDP.
 - `encrypt_pdf(input_path, output_path, user_password, ...)`: password-protect PDF.
 - `verify_digital_signatures(pdf_path)`: verify digital signatures.
 
@@ -253,7 +253,7 @@ make prepush
 ```
 
 ### Test Coverage
-- **166 tests** total (includes Tier 1/2 coverage)
+- **168 tests** total (includes Tier 1/2 coverage)
 - All tests pass with Tesseract installed
 - 3 tests skip when optional dependencies (Tesseract/pyzbar) are not available
 

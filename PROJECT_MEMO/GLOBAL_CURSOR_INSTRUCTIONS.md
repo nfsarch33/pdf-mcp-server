@@ -36,6 +36,9 @@ Restart Cursor after saving.
 | Signature image CRUD | `add_signature_image`, `update_signature_image`, `remove_signature_image` |
 | Sign + protect workflow | `add_signature_image` → `encrypt_pdf` |
 
+### Signing options (0.5.2)
+- `sign_pdf` and `sign_pdf_pem` support `timestamp_url`, `embed_validation_info`, `allow_fetching`, `docmdp_permissions`.
+
 ### Full tool list
 - **Forms**: `get_pdf_form_fields`, `fill_pdf_form`, `clear_pdf_form_fields`, `flatten_pdf`
 - **Text (managed FreeText)**: `insert_text`, `edit_text`, `remove_text`, `add_text_annotation`, `update_text_annotation`, `remove_text_annotation`
@@ -267,4 +270,4 @@ pdf-mcp-server/
 
 ---
 
-*Last updated: 2026-01-28 | Version: 0.5.1*
+*Last updated: 2026-01-29 | Version: 0.5.2*

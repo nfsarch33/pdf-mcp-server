@@ -6,6 +6,14 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 0.5.2 - 2026-01-29
+
+### Added
+- Signature timestamping via `timestamp_url` for `sign_pdf` and `sign_pdf_pem`.
+- Revocation checks and validation embedding controls for signing.
+- DocMDP permission selection (`no_changes`, `fill_forms`, `annotate`) for signed PDFs.
+- Integration test coverage for timestamped and DocMDP-signed PDFs.
+
 ## 0.5.1 - 2026-01-28
 
 ### Added
