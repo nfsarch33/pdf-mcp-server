@@ -1,6 +1,6 @@
 # PDF MCP Server
 
-**Version 0.4.1** | MCP server for PDF form filling, editing, OCR text extraction, table extraction, image extraction, link extraction, and batch processing.
+**Version 0.5.0** | MCP server for PDF form filling, editing, OCR text extraction, table extraction, image extraction, link extraction, and batch processing.
 
 Built with Python, `pypdf`, `fillpdf`, and `pymupdf` (AGPL).
 
@@ -100,14 +100,15 @@ Restart Cursor after saving.
 
 | Category | Tools | Description |
 |----------|-------|-------------|
-| **Form Handling** | 4 tools | Fill, clear, flatten PDF forms |
+| **Form Handling** | 6 tools | Fill, clear, flatten, and create PDF forms |
 | **Page Operations** | 6 tools | Merge, extract, rotate, reorder, insert, remove pages |
-| **Annotations** | 12 tools | Text, comments, watermarks, signatures, redaction, numbering |
+| **Annotations** | 14 tools | Text, comments, watermarks, signatures, redaction, numbering, highlights |
 | **Export** | 2 tools | Export PDF content to Markdown or JSON |
 | **OCR & Text** | 8 tools | Type detection, native/OCR extraction, confidence scores |
 | **Table Extraction** | 1 tool | Extract tables as structured data |
 | **Image Extraction** | 2 tools | Extract/analyze embedded images |
 | **Form Detection** | 1 tool | Auto-detect form fields in non-AcroForm PDFs |
+| **PII Detection** | 1 tool | Detect common PII patterns (email, phone, SSN, credit cards) |
 | **Link Extraction** | 1 tool | Extract URLs, hyperlinks, internal references |
 | **PDF Optimization** | 1 tool | Compress/reduce PDF file size |
 | **Barcode/QR Detection** | 1 tool | Detect and decode barcodes and QR codes |
@@ -120,8 +121,10 @@ Restart Cursor after saving.
 ### Form Handling
 - `get_pdf_form_fields(pdf_path)`: list fields and count.
 - `fill_pdf_form(input_path, output_path, data, flatten=False)`: fill fields; optional flatten.
+- `fill_pdf_form_any(input_path, output_path, data, flatten=False)`: fill standard or non-standard forms using label detection when needed.
 - `clear_pdf_form_fields(input_path, output_path, fields=None)`: clear values while keeping fields fillable.
 - `flatten_pdf(input_path, output_path)`: flatten forms/annotations.
+- `create_pdf_form(output_path, fields, page_size=None, pages=1)`: create a new PDF with AcroForm fields.
 
 ### Page Operations
 - `merge_pdfs(pdf_list, output_path)`: merge multiple PDFs.
@@ -139,6 +142,8 @@ Restart Cursor after saving.
 - `insert_text` / `edit_text` / `remove_text`: managed text via FreeText annotations.
 - `redact_text_regex(input_path, output_path, pattern, ...)`: redact text using a regex pattern.
 - `add_text_watermark(input_path, output_path, text, ...)`: add text watermark/stamp.
+- `add_highlight(input_path, output_path, page, text=None, rect=None)`: add highlight annotations.
+- `add_date_stamp(input_path, output_path, ...)`: add a date stamp.
 - `add_page_numbers(input_path, output_path, ...)`: add page numbers as annotations.
 - `add_bates_numbering(input_path, output_path, ...)`: add Bates numbering as annotations.
 - `add_comment` / `update_comment` / `remove_comment`: PDF comments (sticky notes).
@@ -180,6 +185,9 @@ Restart Cursor after saving.
 
 ### Form Auto-Detection
 - `detect_form_fields(pdf_path, pages=None)`: detect potential form fields in non-AcroForm PDFs using text pattern analysis (labels, checkboxes, underlines).
+
+### PII Detection
+- `detect_pii_patterns(pdf_path, pages=None)`: detect common PII patterns (email, phone, SSN, credit cards).
 
 ### Link Extraction (Phase 3)
 - `extract_links(pdf_path, pages=None)`: extract URLs, hyperlinks, and internal references with type categorization.
@@ -242,7 +250,7 @@ make prepush
 ```
 
 ### Test Coverage
-- **159 tests** total (includes Tier 1/2 coverage)
+- **164 tests** total (includes Tier 1/2 coverage)
 - All tests pass with Tesseract installed
 - 3 tests skip when optional dependencies (Tesseract/pyzbar) are not available
 

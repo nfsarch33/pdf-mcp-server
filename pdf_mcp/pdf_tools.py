@@ -2,15 +2,16 @@
 PDF Tools - Core functionality for the PDF MCP Server.
 
 This module provides PDF manipulation, OCR, and extraction capabilities:
-- Form handling: fill, clear, flatten PDF forms
+- Form handling: fill, clear, flatten, create PDF forms
 - Page operations: merge, extract, rotate, reorder, insert, remove
-- Annotations: text, comments, watermarks, signatures, redaction, numbering
+- Annotations: text, comments, watermarks, signatures, redaction, numbering, highlights, date stamps
 - OCR: text extraction with Tesseract support, confidence scores
 - Extraction: tables, images, text blocks with positions
 - Form detection: auto-detect fields in non-AcroForm PDFs
 - Export: markdown and JSON export
+- PII detection: scan for common personal data patterns
 
-Version: 0.4.1
+Version: 0.5.0
 License: AGPL-3.0
 """
 from __future__ import annotations
@@ -19,6 +20,7 @@ import json
 import os
 import re
 import secrets
+from datetime import date
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence
@@ -216,6 +218,155 @@ def _apply_form_field_values(writer: PdfWriter, data: Dict[str, str]) -> int:
     return updated
 
 
+def _normalize_field_key(value: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", value.lower())
+
+
+def _is_truthy(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    return str(value).strip().lower() in {"1", "true", "yes", "y", "on", "checked", "x"}
+
+
+def _find_nearest_underline(label_bbox: Sequence[float], underlines: List[Dict[str, Any]]) -> Optional[Sequence[float]]:
+    if not label_bbox:
+        return None
+    x1, y1, x2, y2 = label_bbox
+    best = None
+    best_score = None
+    for underline in underlines:
+        rect = underline.get("bbox") or []
+        if len(rect) != 4:
+            continue
+        ux1, uy1, ux2, uy2 = rect
+        if uy1 < y1 - 8 or uy1 > y2 + 12:
+            continue
+        if ux1 < x2 - 10:
+            continue
+        score = abs(uy1 - y2) + abs(ux1 - x2)
+        if best_score is None or score < best_score:
+            best_score = score
+            best = rect
+    return best
+
+
+def _rect_for_label(label_bbox: Sequence[float], width: float = 200, height: float = 18) -> Sequence[float]:
+    x1, y1, x2, y2 = label_bbox
+    target_x1 = x2 + 6
+    target_y1 = max(0, y1 - 2)
+    return [target_x1, target_y1, target_x1 + width, target_y1 + height]
+
+
+def create_pdf_form(
+    output_path: str,
+    fields: List[Dict[str, Any]],
+    page_size: Optional[Sequence[float]] = None,
+    pages: int = 1,
+) -> Dict[str, Any]:
+    """
+    Create a new PDF with AcroForm fields.
+
+    Fields format:
+    - name (str, required)
+    - type (str, "text" or "checkbox", default "text")
+    - rect (list[float], required) in PDF coordinates [x1, y1, x2, y2]
+    - page (int, 1-based, default 1)
+    - value (str/bool, optional)
+    - multiline (bool, optional, text only)
+    """
+    if not fields:
+        raise PdfToolError("fields must include at least one field definition")
+    if pages < 1:
+        raise PdfToolError("pages must be >= 1")
+
+    width, height = (595.0, 842.0) if page_size is None else (float(page_size[0]), float(page_size[1]))
+    writer = PdfWriter()
+    for _ in range(pages):
+        writer.add_blank_page(width=width, height=height)
+
+    field_refs = ArrayObject()
+    for field_def in fields:
+        name = field_def.get("name")
+        if not name:
+            raise PdfToolError("Each field must include a name")
+        field_type = (field_def.get("type") or "text").lower()
+        rect = _ensure_rect(field_def.get("rect"))
+        page_index = int(field_def.get("page", 1)) - 1
+        if page_index < 0 or page_index >= len(writer.pages):
+            raise PdfToolError(f"Field page out of range: {field_def.get('page')}")
+
+        if field_type not in {"text", "checkbox"}:
+            raise PdfToolError("field type must be 'text' or 'checkbox'")
+
+        if field_type == "text":
+            field = DictionaryObject(
+                {
+                    NameObject("/FT"): NameObject("/Tx"),
+                    NameObject("/T"): TextStringObject(str(name)),
+                    NameObject("/Ff"): NumberObject(4096 if field_def.get("multiline") else 0),
+                    NameObject("/V"): TextStringObject(str(field_def.get("value", ""))),
+                }
+            )
+        else:
+            checked = _is_truthy(field_def.get("value"))
+            state = NameObject("/Yes") if checked else NameObject("/Off")
+            field = DictionaryObject(
+                {
+                    NameObject("/FT"): NameObject("/Btn"),
+                    NameObject("/T"): TextStringObject(str(name)),
+                    NameObject("/V"): state,
+                    NameObject("/AS"): state,
+                }
+            )
+
+        field_ref = writer._add_object(field)  # type: ignore[attr-defined]
+        field_refs.append(field_ref)
+
+        widget = DictionaryObject(
+            {
+                NameObject("/Type"): NameObject("/Annot"),
+                NameObject("/Subtype"): NameObject("/Widget"),
+                NameObject("/Rect"): rect,
+                NameObject("/F"): NumberObject(4),
+                NameObject("/Parent"): field_ref,
+            }
+        )
+        widget_ref = writer._add_object(widget)  # type: ignore[attr-defined]
+        field[NameObject("/Kids")] = ArrayObject([widget_ref])
+
+        page_obj = writer.pages[page_index]
+        existing = page_obj.get("/Annots")
+        if existing is None:
+            annots = ArrayObject()
+        else:
+            existing_obj = existing.get_object() if hasattr(existing, "get_object") else existing
+            annots = ArrayObject(list(existing_obj))
+        annots.append(widget_ref)
+        page_obj[NameObject("/Annots")] = annots
+
+    acro_form = DictionaryObject(
+        {
+            NameObject("/Fields"): field_refs,
+            NameObject("/NeedAppearances"): BooleanObject(True),
+            NameObject("/DA"): TextStringObject("/Helv 12 Tf 0 g"),
+        }
+    )
+    writer._root_object.update({NameObject("/AcroForm"): writer._add_object(acro_form)})  # type: ignore[attr-defined]
+
+    dst = _prepare_output(output_path)
+    with dst.open("wb") as f:
+        writer.write(f)
+
+    return {
+        "output_path": str(dst),
+        "pages": pages,
+        "fields_created": len(field_refs),
+        "field_names": [f.get("name") for f in fields],
+    }
+
+
 def get_pdf_form_fields(pdf_path: str) -> Dict:
     path = _ensure_file(pdf_path)
     reader = PdfReader(str(path))
@@ -287,6 +438,93 @@ def fill_pdf_form(
         writer.write(output_file)
 
     return {"output_path": str(dst), "flattened": flatten, "filled_with": "pypdf"}
+
+
+def fill_pdf_form_any(
+    input_path: str,
+    output_path: str,
+    data: Dict[str, Any],
+    flatten: bool = False,
+) -> Dict[str, Any]:
+    """
+    Fill standard (AcroForm) PDFs and attempt best-effort filling for non-standard forms.
+
+    If the PDF has AcroForm fields, this defers to fill_pdf_form.
+    Otherwise, it detects field-like labels and writes FreeText annotations near them.
+    """
+    src = _ensure_file(input_path)
+    dst = _prepare_output(output_path)
+    reader = PdfReader(str(src))
+    has_fields = bool(reader.get_fields())
+
+    if has_fields:
+        result = fill_pdf_form(str(src), str(dst), {str(k): str(v) for k, v in data.items()}, flatten=flatten)
+        result["method"] = "acroform"
+        return result
+
+    detection = detect_form_fields(str(src))
+    detected = detection.get("detected_fields") or []
+    if not detected:
+        raise PdfToolError("No form fields detected for non-standard form filling")
+
+    normalized_labels = []
+    for entry in detected:
+        label = entry.get("text", "")
+        if label:
+            normalized_labels.append((_normalize_field_key(label), entry))
+
+    writer = PdfWriter()
+    writer.clone_document_from_reader(reader)
+
+    filled = 0
+    missing = []
+    page_analysis = {p["page"]: p for p in detection.get("page_analysis", [])}
+    for key, value in data.items():
+        normalized_key = _normalize_field_key(str(key))
+        match = next((entry for n, entry in normalized_labels if n == normalized_key or normalized_key in n), None)
+        if match is None:
+            missing.append(str(key))
+            continue
+
+        page_num = match.get("page", 1)
+        page_index = int(page_num) - 1
+        if page_index < 0 or page_index >= len(writer.pages):
+            continue
+
+        label_bbox = match.get("bbox") or []
+        underline_rect = None
+        analysis = page_analysis.get(page_num, {})
+        underlines = analysis.get("detected_underlines", [])
+        if label_bbox:
+            underline_rect = _find_nearest_underline(label_bbox, underlines)
+
+        if underline_rect:
+            rect = _ensure_rect(underline_rect)
+        elif label_bbox:
+            rect = _ensure_rect(_rect_for_label(label_bbox))
+        else:
+            missing.append(str(key))
+            continue
+
+        text_value = "X" if match.get("type") == "checkbox" and _is_truthy(value) else str(value)
+        annotation_id = secrets.token_hex(8)
+        _add_freetext_annotation(writer, writer.pages[page_index], text_value, rect, annotation_id)
+        filled += 1
+
+    if flatten:
+        _flatten_writer(writer)
+
+    with dst.open("wb") as output_file:
+        writer.write(output_file)
+
+    return {
+        "output_path": str(dst),
+        "method": "detected_labels",
+        "fields_filled": filled,
+        "missing_fields": missing,
+        "flattened": flatten,
+        "detected_fields": len(detected),
+    }
 
 
 def clear_pdf_form_fields(
@@ -2658,7 +2896,7 @@ def _form_recommendation(has_acroform: bool, detected_count: int) -> str:
     if detected_count > 0:
         return (
             f"Detected {detected_count} potential form fields. "
-            "Consider using add_text_annotation to fill fields at detected positions."
+            "Consider using fill_pdf_form_any to fill fields at detected positions."
         )
     return "No form fields detected. PDF may not be a form."
 
@@ -2666,6 +2904,149 @@ def _form_recommendation(has_acroform: bool, detected_count: int) -> str:
 # =============================================================================
 # Phase 3 Features
 # =============================================================================
+
+
+def add_highlight(
+    input_path: str,
+    output_path: str,
+    page: int,
+    text: Optional[str] = None,
+    rect: Optional[Sequence[float]] = None,
+) -> Dict[str, Any]:
+    """
+    Add highlight annotations by text search or by rectangle.
+    """
+    if text is None and rect is None:
+        raise PdfToolError("Provide either text or rect to highlight")
+
+    src = _ensure_file(input_path)
+    dst = _prepare_output(output_path)
+    doc = pymupdf.open(str(src))
+
+    try:
+        page_index = page - 1
+        if page_index < 0 or page_index >= doc.page_count:
+            raise PdfToolError(f"Page {page} is out of range")
+        page_obj = doc.load_page(page_index)
+
+        rects = []
+        if text:
+            rects = page_obj.search_for(text)
+        elif rect is not None:
+            if len(rect) != 4:
+                raise PdfToolError("rect must contain exactly 4 numbers: [x1, y1, x2, y2]")
+            rects = [pymupdf.Rect(rect)]
+
+        added = 0
+        for r in rects:
+            page_obj.add_highlight_annot(r)
+            added += 1
+
+        doc.save(str(dst))
+        return {"output_path": str(dst), "added": added}
+    finally:
+        doc.close()
+
+
+def add_date_stamp(
+    input_path: str,
+    output_path: str,
+    pages: Optional[List[int]] = None,
+    position: str = "bottom-right",
+    margin: float = 20,
+    width: float = 120,
+    height: float = 20,
+    date_text: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Add a date stamp as a FreeText annotation.
+    """
+    if position not in ("bottom-left", "bottom-center", "bottom-right"):
+        raise PdfToolError("position must be bottom-left, bottom-center, or bottom-right")
+
+    src = _ensure_file(input_path)
+    dst = _prepare_output(output_path)
+    reader = PdfReader(str(src))
+    total = len(reader.pages)
+    page_indices = _to_zero_based_pages(pages, total) if pages else list(range(total))
+    if not page_indices:
+        raise PdfToolError("No pages selected for date stamp")
+
+    writer = PdfWriter()
+    writer.clone_document_from_reader(reader)
+
+    stamp_text = date_text or date.today().isoformat()
+    added = 0
+    for idx in page_indices:
+        page_obj = writer.pages[idx]
+        rect = _freetext_rect_for_position(page_obj, position, margin, width, height)
+        annotation_id = f"pdf-mcp-date-stamp-{idx + 1}"
+        _add_freetext_annotation(writer, page_obj, stamp_text, rect, annotation_id)
+        added += 1
+
+    with dst.open("wb") as output_file:
+        writer.write(output_file)
+
+    return {"output_path": str(dst), "added": added, "date": stamp_text}
+
+
+def _luhn_check(value: str) -> bool:
+    digits = [int(ch) for ch in value if ch.isdigit()]
+    if len(digits) < 12:
+        return False
+    checksum = 0
+    parity = len(digits) % 2
+    for idx, digit in enumerate(digits):
+        if idx % 2 == parity:
+            digit *= 2
+            if digit > 9:
+                digit -= 9
+        checksum += digit
+    return checksum % 10 == 0
+
+
+def detect_pii_patterns(
+    pdf_path: str,
+    pages: Optional[List[int]] = None,
+) -> Dict[str, Any]:
+    """
+    Detect common PII patterns (email, phone, SSN, credit card) using regex.
+    """
+    src = _ensure_file(pdf_path)
+    doc = pymupdf.open(str(src))
+
+    email_re = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+    phone_re = re.compile(r"\b(?:\+?1[-.\s]?)?(?:\(?\d{3}\)?[-.\s]?)\d{3}[-.\s]?\d{4}\b")
+    ssn_re = re.compile(r"\b\d{3}-\d{2}-\d{4}\b")
+    cc_re = re.compile(r"\b(?:\d[ -]*?){13,19}\b")
+
+    try:
+        total_pages = doc.page_count
+        page_indices = _to_zero_based_pages(pages, total_pages) if pages else list(range(total_pages))
+        matches: List[Dict[str, Any]] = []
+
+        for idx in page_indices:
+            page = doc.load_page(idx)
+            text = page.get_text()
+            for m in email_re.findall(text):
+                matches.append({"type": "email", "value": m, "page": idx + 1})
+            for m in phone_re.findall(text):
+                matches.append({"type": "phone", "value": m, "page": idx + 1})
+            for m in ssn_re.findall(text):
+                matches.append({"type": "ssn", "value": m, "page": idx + 1})
+            for m in cc_re.findall(text):
+                cleaned = re.sub(r"[^0-9]", "", m)
+                if _luhn_check(cleaned):
+                    matches.append({"type": "credit_card", "value": cleaned, "page": idx + 1})
+
+        return {
+            "pdf_path": str(src),
+            "pages_scanned": len(page_indices),
+            "total_matches": len(matches),
+            "matches": matches,
+        }
+    finally:
+        doc.close()
 
 # Optional pyzbar for barcode detection
 try:

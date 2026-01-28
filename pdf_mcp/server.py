@@ -5,17 +5,19 @@ This module exposes PDF tools via the MCP protocol for use with AI assistants.
 Run with: python -m pdf_mcp.server
 
 Available tool categories:
-- Form handling (4 tools)
+- Form handling (6 tools)
 - Page operations (6 tools)
-- Annotations & text (12 tools)
+- Annotations & text (14 tools)
 - Signatures & security (5 tools)
 - Metadata (4 tools)
 - Export (2 tools)
 - OCR & text extraction (8 tools)
 - Table/image extraction (3 tools)
 - Form detection (1 tool)
+- PII detection (1 tool)
+ - PII detection (1 tool)
 
-Version: 0.4.1
+Version: 0.5.0
 License: AGPL-3.0
 """
 from __future__ import annotations
@@ -69,6 +71,30 @@ def fill_pdf_form(
 ) -> Dict[str, Any]:
     """Fill a PDF form with provided data. Optionally flatten to make non-editable."""
     return pdf_tools.fill_pdf_form(input_path, output_path, data, flatten)
+
+
+@mcp.tool()
+@_handle_errors
+def fill_pdf_form_any(
+    input_path: str,
+    output_path: str,
+    data: Dict[str, Any],
+    flatten: bool = False,
+) -> Dict[str, Any]:
+    """Fill standard or non-standard forms using label detection when needed."""
+    return pdf_tools.fill_pdf_form_any(input_path, output_path, data, flatten)
+
+
+@mcp.tool()
+@_handle_errors
+def create_pdf_form(
+    output_path: str,
+    fields: List[Dict[str, Any]],
+    page_size: Optional[Sequence[float]] = None,
+    pages: int = 1,
+) -> Dict[str, Any]:
+    """Create a new PDF with AcroForm fields."""
+    return pdf_tools.create_pdf_form(output_path, fields, page_size=page_size, pages=pages)
 
 
 @mcp.tool()
@@ -465,6 +491,50 @@ def add_text_watermark(
 
 @mcp.tool()
 @_handle_errors
+def add_highlight(
+    input_path: str,
+    output_path: str,
+    page: int,
+    text: Optional[str] = None,
+    rect: Optional[Sequence[float]] = None,
+) -> Dict[str, Any]:
+    """Add highlight annotations by text search or rectangle."""
+    return pdf_tools.add_highlight(
+        input_path=input_path,
+        output_path=output_path,
+        page=page,
+        text=text,
+        rect=rect,
+    )
+
+
+@mcp.tool()
+@_handle_errors
+def add_date_stamp(
+    input_path: str,
+    output_path: str,
+    pages: Optional[List[int]] = None,
+    position: str = "bottom-right",
+    margin: float = 20,
+    width: float = 120,
+    height: float = 20,
+    date_text: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Add a date stamp as a FreeText annotation."""
+    return pdf_tools.add_date_stamp(
+        input_path=input_path,
+        output_path=output_path,
+        pages=pages,
+        position=position,
+        margin=margin,
+        width=width,
+        height=height,
+        date_text=date_text,
+    )
+
+
+@mcp.tool()
+@_handle_errors
 def add_comment(
     input_path: str,
     output_path: str,
@@ -818,6 +888,18 @@ def detect_form_fields(
     Useful for PDFs that appear to be forms but don't have AcroForm fields.
     """
     return pdf_tools.detect_form_fields(pdf_path, pages=pages)
+
+
+@mcp.tool()
+@_handle_errors
+def detect_pii_patterns(
+    pdf_path: str,
+    pages: Optional[List[int]] = None,
+) -> Dict[str, Any]:
+    """
+    Detect common PII patterns (email, phone, SSN, credit card) in a PDF.
+    """
+    return pdf_tools.detect_pii_patterns(pdf_path, pages=pages)
 
 
 # =============================================================================

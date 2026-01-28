@@ -98,6 +98,17 @@ def _make_text_pdf(path: Path, lines: list[str]) -> Path:
     return path
 
 
+def _make_nonstandard_form_pdf(path: Path) -> Path:
+    doc = pymupdf.open()
+    page = doc.new_page(width=300, height=200)
+    page.insert_text((50, 100), "Name:", fontsize=12)
+    page.draw_line((110, 102), (240, 102))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    doc.save(str(path))
+    doc.close()
+    return path
+
+
 def test_get_pdf_form_fields_empty(tmp_path: Path):
     src = _make_pdf(tmp_path / "blank.pdf", pages=1)
     result = pdf_tools.get_pdf_form_fields(str(src))
@@ -130,6 +141,40 @@ def test_fill_updates_real_form_field(tmp_path: Path):
     fields = reader.get_fields() or {}
     assert "Name" in fields
     assert str(fields["Name"].get("/V")) == "Test User"
+
+
+def test_create_pdf_form_and_fill(tmp_path: Path):
+    out = tmp_path / "created_form.pdf"
+    result = pdf_tools.create_pdf_form(
+        output_path=str(out),
+        fields=[
+            {"name": "Name", "type": "text", "rect": [50, 100, 250, 130]},
+            {"name": "Agree", "type": "checkbox", "rect": [50, 60, 70, 80], "value": True},
+        ],
+        pages=1,
+    )
+    assert Path(result["output_path"]).exists()
+
+    fields = pdf_tools.get_pdf_form_fields(str(out))
+    assert fields["count"] >= 2
+
+    filled = tmp_path / "created_form_filled.pdf"
+    res = pdf_tools.fill_pdf_form(str(out), str(filled), {"Name": "Created User"}, flatten=False)
+    assert Path(res["output_path"]).exists()
+
+
+def test_fill_pdf_form_any_nonstandard(tmp_path: Path):
+    src = _make_nonstandard_form_pdf(tmp_path / "nonstandard.pdf")
+    out = tmp_path / "nonstandard_filled.pdf"
+    result = pdf_tools.fill_pdf_form_any(str(src), str(out), {"Name": "Nonstandard User"}, flatten=False)
+    assert Path(result["output_path"]).exists()
+    assert result["fields_filled"] >= 1
+
+    doc = pymupdf.open(str(out))
+    page = doc.load_page(0)
+    annots = list(page.annots() or [])
+    doc.close()
+    assert len(annots) >= 1
 
 
 def test_fill_pdf_form_falls_back_on_pdfrw_object_stream_failure(tmp_path: Path):
@@ -389,6 +434,7 @@ def test_mcp_layer_can_call_all_tools(tmp_path: Path):
     from pypdf import PdfReader
 
     form_src = _make_form_pdf(tmp_path / "mcp_form.pdf")
+    nonstandard_src = _make_nonstandard_form_pdf(tmp_path / "mcp_nonstandard.pdf")
     blank_a = _make_pdf(tmp_path / "mcp_a.pdf", pages=2)
     blank_b = _make_pdf(tmp_path / "mcp_b.pdf", pages=1)
 
@@ -403,6 +449,20 @@ def test_mcp_layer_can_call_all_tools(tmp_path: Path):
     # get_pdf_form_fields
     res = asyncio.run(call("get_pdf_form_fields", {"pdf_path": str(form_src)}))
     assert res["count"] >= 1
+
+    # create_pdf_form
+    created_form = tmp_path / "mcp_created_form.pdf"
+    res = asyncio.run(
+        call(
+            "create_pdf_form",
+            {
+                "output_path": str(created_form),
+                "fields": [{"name": "Name", "type": "text", "rect": [50, 100, 250, 130]}],
+                "pages": 1,
+            },
+        )
+    )
+    assert Path(res["output_path"]).exists()
 
     # fill_pdf_form (no flatten)
     filled = tmp_path / "mcp_filled.pdf"
@@ -420,6 +480,21 @@ def test_mcp_layer_can_call_all_tools(tmp_path: Path):
     assert Path(res["output_path"]).exists()
     fields = (PdfReader(str(filled)).get_fields() or {})
     assert str(fields["Name"].get("/V")) == "MCP User"
+
+    # fill_pdf_form_any (non-standard form)
+    nonstandard_filled = tmp_path / "mcp_nonstandard_filled.pdf"
+    res = asyncio.run(
+        call(
+            "fill_pdf_form_any",
+            {
+                "input_path": str(nonstandard_src),
+                "output_path": str(nonstandard_filled),
+                "data": {"Name": "Nonstandard"},
+                "flatten": False,
+            },
+        )
+    )
+    assert Path(res["output_path"]).exists()
 
     # clear_pdf_form_fields
     cleared = tmp_path / "mcp_cleared.pdf"
@@ -515,6 +590,32 @@ def test_mcp_layer_can_call_all_tools(tmp_path: Path):
     redacted_text = "".join((page.extract_text() or "") for page in PdfReader(str(redacted)).pages)
     assert "Secret" not in redacted_text
     assert "Public" in redacted_text
+
+    # add_highlight
+    highlighted = tmp_path / "mcp_highlighted.pdf"
+    res = asyncio.run(
+        call(
+            "add_highlight",
+            {"input_path": str(text_src), "output_path": str(highlighted), "page": 1, "text": "Secret"},
+        )
+    )
+    assert Path(res["output_path"]).exists()
+    assert res["added"] >= 1
+
+    # add_date_stamp
+    stamped = tmp_path / "mcp_stamped.pdf"
+    res = asyncio.run(
+        call("add_date_stamp", {"input_path": str(text_src), "output_path": str(stamped), "pages": [1]})
+    )
+    assert Path(res["output_path"]).exists()
+
+    # detect_pii_patterns
+    pii_src = _make_text_pdf(
+        tmp_path / "mcp_pii.pdf",
+        ["Email: test@example.com", "SSN: 123-45-6789", "Card: 4111 1111 1111 1111"],
+    )
+    res = asyncio.run(call("detect_pii_patterns", {"pdf_path": str(pii_src)}))
+    assert res["total_matches"] >= 2
 
     # export_to_json
     export_json = tmp_path / "mcp_export.json"
@@ -1448,6 +1549,37 @@ def test_text_watermark_adds_annotations(tmp_path: Path):
                 assert str(obj.get("/Contents")) == "WATERMARK"
                 found = True
         assert found
+
+
+def test_add_highlight_by_text(tmp_path: Path):
+    src = _make_text_pdf(tmp_path / "highlight.pdf", ["Hello world"])
+    out = tmp_path / "highlight_out.pdf"
+
+    res = pdf_tools.add_highlight(str(src), str(out), page=1, text="Hello")
+    assert Path(res["output_path"]).exists()
+    assert res["added"] >= 1
+
+
+def test_add_date_stamp(tmp_path: Path):
+    src = _make_pdf(tmp_path / "date.pdf", pages=1)
+    out = tmp_path / "date_out.pdf"
+
+    res = pdf_tools.add_date_stamp(str(src), str(out), pages=[1])
+    assert Path(res["output_path"]).exists()
+    assert res["added"] == 1
+
+
+def test_detect_pii_patterns(tmp_path: Path):
+    src = _make_text_pdf(
+        tmp_path / "pii.pdf",
+        ["Email: test@example.com", "Phone: 555-123-4567", "SSN: 123-45-6789", "Card: 4111 1111 1111 1111"],
+    )
+    res = pdf_tools.detect_pii_patterns(str(src))
+    types = {m["type"] for m in res["matches"]}
+    assert "email" in types
+    assert "phone" in types
+    assert "ssn" in types
+    assert "credit_card" in types
 
 
 def _write_test_png(path: Path) -> Path:
