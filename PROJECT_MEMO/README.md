@@ -20,6 +20,7 @@ PROJECT_MEMO/
 ├──
 ├── STRATEGY/                              # Business & strategic planning
 │  └── next-steps-sprint-plan.md           # 4-week sprint plan + business context
+│  └── next-release-plan-v0.9.5.md         # Next release scope + QA plan
 │  └── [future strategy docs...]           # Commercial models, GTM, etc.
 ├──
 ├── OPERATIONS/                            # Operational/execution documents

@@ -5,41 +5,54 @@ Check LLM backend status and print formatted output.
 Usage: python scripts/check_llm_status.py
 """
 
-from pdf_mcp import pdf_tools
+from pdf_mcp import llm_setup, pdf_tools
 
-# ANSI color codes
-GREEN = "\033[1;32m"
-RED = "\033[1;31m"
-YELLOW = "\033[1;33m"
-RESET = "\033[0m"
+
+def _status_label(available: bool) -> str:
+    return "OK" if available else "NO"
 
 
 def main():
     info = pdf_tools.get_llm_backend_info()
-    
-    current = info["current_backend"] or "None"
-    current_color = GREEN if info["current_backend"] else RED
-    print(f"Current Backend: {current_color}{current}{RESET}")
+    current = info["current_backend"] or "none"
+
+    print("LLM BACKEND STATUS")
+    print("-" * 60)
+    print(f"current_backend: {current}")
     print()
-    print("Available Backends:")
-    
+    print("backends:")
+
+    ollama_model = llm_setup.get_ollama_model_name()
+    ollama_installed = llm_setup.ollama_is_installed()
+    ollama_models = llm_setup.ollama_list_models() if ollama_installed else set()
+
     for name, data in info["backends"].items():
         available = data.get("available", False)
-        status = f"{GREEN}✓ Available{RESET}" if available else f"{RED}✗ Not Available{RESET}"
-        cost = f"{YELLOW}{data.get('cost', 'unknown')}{RESET}"
-        print(f"  • {name:8} {status:30} ({cost})")
-        
-        # Show setup instructions if not available
-        if not available:
-            if name == "local":
-                print("             └─ Start: cd ~/agentic-ai-research && uv run python -m services.model_server.cli serve")
-            elif name == "ollama":
-                print("             └─ Install: curl -fsSL https://ollama.ai/install.sh | sh")
-            elif name == "openai":
-                print("             └─ Set: export OPENAI_API_KEY=your-key")
-    
+        cost = data.get("cost", "unknown")
+        print(f"- {name:8} status={_status_label(available)} cost={cost}")
+
+        if name == "local":
+            print(f"  url={data.get('url')} model={data.get('model')}")
+            if not available:
+                print("  start: cd ~/agentic-ai-research && uv run python -m services.model_server.cli serve --port 8100")
+
+        if name == "ollama":
+            if not ollama_installed:
+                print("  install: curl -fsSL https://ollama.ai/install.sh | sh")
+            elif not ollama_models:
+                print("  note: ollama list failed or no models found (is the service running?)")
+            elif ollama_model in ollama_models:
+                print(f"  model: {ollama_model} (installed)")
+            else:
+                print(f"  model: {ollama_model} (missing)")
+                print(f"  install: ollama pull {ollama_model}")
+
+        if name == "openai" and not available:
+            print("  set: export OPENAI_API_KEY=your-key")
+
     print()
-    print("Override: export PDF_MCP_LLM_BACKEND=local|ollama|openai")
+    print("override backend: export PDF_MCP_LLM_BACKEND=local|ollama|openai")
+    print(f"override ollama model: export {llm_setup.OLLAMA_MODEL_ENV}=model:tag")
     print()
 
 

@@ -1,10 +1,10 @@
-# Project Status Prompt (v0.6.0)
+# Project Status Prompt (v0.9.4)
 
 Use this prompt to sync status and plan next moves for `pdf-mcp-server`.
 
 ---
 
-Review the status and plan next moves (main branch is now v0.6.0).
+Review the status and plan next moves (main branch is now v0.9.4).
 
 Context
 - Repo: https://github.com/nfsarch33/pdf-mcp-server
@@ -21,6 +21,8 @@ Hard requirements (must be fully working)
 - Digital certificate signing (`sign_pdf`, `sign_pdf_pem`) with timestamping, validation embedding, and DocMDP permissions.
 
 Expanded capabilities (current main)
+- Agentic AI integration (v0.8.0+): `auto_fill_pdf_form`, `extract_structured_data`, `analyze_pdf_content`.
+- Local VLM integration (v0.9.0+): zero-cost local backend with priority local > ollama > openai.
 - OCR Phase 1/2: detect_pdf_type, unified `extract_text` with engine selection.
 - Table extraction, image extraction, form auto-detection.
 - Link extraction, optimization, barcode detection (optional pyzbar).
@@ -36,7 +38,7 @@ Quality bar
 - Feature-ready with unit + E2E coverage before pushing.
 - Test every MCP tool end-to-end with dummy PDFs (multiple fixtures if needed).
 - Always verify outputs by re-opening PDFs and re-reading metadata/fields.
-- 180 tests passing, 3 skipped.
+- 262 tests collected; skips depend on optional backends and OCR availability.
 
 Workflow expectations
 - Use safe git workflow (branching + PRs); never change main directly.
@@ -68,3 +70,7 @@ Suggested tests (current main):
 - make test-ocr (if tesseract installed)
 - make test-quick (fast check)
 - make prepush (lint + format + test + smoke)
+- make check-llm
+- make install-llm-models
+- make test-llm
+- make test-e2e  # requires local server at localhost:8100

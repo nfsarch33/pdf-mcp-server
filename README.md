@@ -1,6 +1,6 @@
 # PDF MCP Server
 
-**Version 0.9.3** | MCP server for PDF form filling, editing, OCR text extraction, table extraction, image extraction, link extraction, and batch processing.
+**Version 0.9.4** | MCP server for PDF form filling, editing, OCR text extraction, table extraction, image extraction, link extraction, and batch processing.
 
 Built with Python, `pypdf`, `fillpdf`, and `pymupdf` (AGPL).
 
@@ -255,7 +255,12 @@ uv run python -m services.model_server.cli serve --port 8100
 ```bash
 # Install Ollama
 curl -fsSL https://ollama.ai/install.sh | sh
-ollama pull qwen2.5:7b
+# Install model (skips download if already present)
+make install-llm-models
+```
+Optional override:
+```bash
+export PDF_MCP_OLLAMA_MODEL="qwen2.5:7b"
 ```
 
 **Or use OpenAI (paid):**
@@ -344,15 +349,18 @@ make check-llm
 
 # Install LLM dependencies
 make install-llm
+
+# Ensure Ollama model is present (no duplicate installs)
+make install-llm-models
 ```
 
 **E2E Test Requirements:**
 - **Local VLM**: Start server at `~/agentic-ai-research` with `uv run python -m services.model_server.cli serve --port 8100`
-- **Ollama**: Install with `curl -fsSL https://ollama.ai/install.sh | sh` and pull a model
+- **Ollama**: Install with `curl -fsSL https://ollama.ai/install.sh | sh`, then `make install-llm-models`
 - **OpenAI**: Set `OPENAI_API_KEY` environment variable (costs money!)
 
 ### Test Coverage
-- **255 tests** total (includes Tier 1/2 coverage + agentic features + multi-backend + e2e tests)
+- **262 tests** total (includes Tier 1/2 coverage + agentic features + multi-backend + e2e tests)
 - All tests pass with Tesseract installed
 - 12-18 tests skip depending on which optional dependencies/backends are available
 

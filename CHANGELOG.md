@@ -6,6 +6,22 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 0.9.4 - 2026-01-29
+
+### Added
+- `pdf_mcp/llm_setup.py` helpers for Ollama model detection
+- `scripts/ensure_ollama_model.py` to avoid duplicate model installs
+- `make install-llm-models` target for safe model setup
+
+### Changed
+- `scripts/check_llm_status.py` output now reports model status and uses ASCII formatting
+- README LLM setup now uses `make install-llm-models` (skips duplicate downloads)
+- Test count: 262 total (7 new llm setup tests)
+
+### Verified (Manual Testing)
+- Local VLM: `make check-llm` shows local available
+- E2E: `make test-e2e` passed for local backend (Ollama/OpenAI skipped)
+
 ## 0.9.3 - 2026-01-29
 
 ### Added

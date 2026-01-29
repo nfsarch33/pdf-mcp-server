@@ -41,6 +41,7 @@ git push origin main --tags
 6. GitHub Release:
 - Create a release for tag `vX.Y.Z`
 - Paste the `CHANGELOG.md` section for `X.Y.Z`
+- Use GitHub MCP tools (github-official) instead of gh CLI
 
 ## PR + branch hygiene (required before release)
 

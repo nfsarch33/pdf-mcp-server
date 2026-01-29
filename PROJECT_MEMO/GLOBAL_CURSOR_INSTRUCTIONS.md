@@ -18,12 +18,20 @@ Zero-cost local VLM support with multi-backend:
 # Check backend status
 make check-llm
 
+# Ensure Ollama model is present (skips duplicate downloads)
+make install-llm-models
+
 # Start local model server (FREE!)
 cd ~/agentic-ai-research
 uv run python -m services.model_server.cli serve --port 8100
 ```
 
 **Backend Priority**: local > ollama > openai (free first!)
+
+**Ollama model override**:
+```bash
+export PDF_MCP_OLLAMA_MODEL="qwen2.5:7b"
+```
 
 **Agentic AI Tools**:
 - `get_llm_backend_info()` - Check available backends
@@ -296,4 +304,4 @@ pdf-mcp-server/
 
 ---
 
-*Last updated: 2026-01-29 | Version: 0.9.3*
+*Last updated: 2026-01-29 | Version: 0.9.4*

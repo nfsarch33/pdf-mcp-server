@@ -3,7 +3,7 @@ VENV ?= .venv
 PY ?= $(VENV)/bin/python
 PIP ?= $(UV) pip
 
-.PHONY: venv install install-ocr install-llm test test-ocr test-quick test-llm test-e2e clean
+.PHONY: venv install install-ocr install-llm install-llm-models test test-ocr test-quick test-llm test-e2e clean
 .PHONY: smoke prepush
 .PHONY: lint format-check
 .PHONY: check-tesseract check-llm
@@ -57,6 +57,10 @@ install-llm: install
 	@echo "For local VLM (free), start the model server:"
 	@echo "  cd ~/agentic-ai-research && uv run python -m services.model_server.cli serve --port 8100"
 	@echo "For Ollama (free), install: curl -fsSL https://ollama.ai/install.sh | sh"
+	@echo "For Ollama model setup: make install-llm-models"
+
+install-llm-models: install
+	. $(VENV)/bin/activate && $(PY) scripts/ensure_ollama_model.py
 
 test-llm: install
 	. $(VENV)/bin/activate && PYTHONWARNINGS=default pytest tests/test_agentic_features.py -v
@@ -67,9 +71,9 @@ test-e2e: install
 
 check-llm:
 	@echo ""
-	@echo "═══════════════════════════════════════════════════════════════"
+	@echo "==============================================================="
 	@echo "              LLM Backend Status Check"
-	@echo "═══════════════════════════════════════════════════════════════"
+	@echo "==============================================================="
 	@echo ""
 	@$(PY) scripts/check_llm_status.py 2>/dev/null || echo "pdf_mcp not installed. Run: make install"
 
