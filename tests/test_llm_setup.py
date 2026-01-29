@@ -66,27 +66,22 @@ def test_ollama_model_installed_detects_model(monkeypatch):
 
 def test_get_local_server_health_returns_none_when_unavailable(monkeypatch):
     """get_local_server_health returns None if server not running."""
-    # Patch requests to raise connection error
-    class FakeRequests:
-        @staticmethod
-        def get(*_args, **_kwargs):
-            raise ConnectionError("server not running")
+    from unittest.mock import patch
 
-    monkeypatch.setattr(llm_setup, "requests", FakeRequests, raising=False)
-    result = llm_setup.get_local_server_health()
-    assert result is None
+    with patch("requests.get") as mock_get:
+        mock_get.side_effect = ConnectionError("server not running")
+        result = llm_setup.get_local_server_health()
+        assert result is None
 
 
 def test_get_local_server_models_returns_none_when_unavailable(monkeypatch):
     """get_local_server_models returns None if server not running."""
-    class FakeRequests:
-        @staticmethod
-        def get(*_args, **_kwargs):
-            raise ConnectionError("server not running")
+    from unittest.mock import patch
 
-    monkeypatch.setattr(llm_setup, "requests", FakeRequests, raising=False)
-    result = llm_setup.get_local_server_models()
-    assert result is None
+    with patch("requests.get") as mock_get:
+        mock_get.side_effect = ConnectionError("server not running")
+        result = llm_setup.get_local_server_models()
+        assert result is None
 
 
 def test_local_model_server_url_default():

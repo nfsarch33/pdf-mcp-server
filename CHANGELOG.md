@@ -6,6 +6,19 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 0.9.7 - 2026-01-29
+
+### Fixed
+- `check_llm_status.py` now handles models returned as list of dicts (not just strings)
+- Test mocking for `get_local_server_health/models` uses `unittest.mock.patch` correctly
+- Updated start command to use `.venv/bin/activate` instead of `uv run`
+
+### Verified (E2E with Real LLM)
+- Local VLM server running at localhost:8100 with 13 models available
+- All 6 E2E local VLM tests passed
+- `make check-llm` shows correct model list
+- 256 passed, 12 skipped
+
 ## 0.9.6 - 2026-01-29
 
 ### Changed

@@ -41,13 +41,18 @@ def main():
                 if local_models:
                     models_list = local_models.get("models", local_models.get("available", []))
                     if models_list:
-                        print(f"  loaded_models: {', '.join(models_list) if isinstance(models_list, list) else models_list}")
+                        # Handle both list of strings and list of dicts
+                        if isinstance(models_list, list):
+                            names = [m.get("name", str(m)) if isinstance(m, dict) else str(m) for m in models_list]
+                            print(f"  loaded_models: {', '.join(names)}")
+                        else:
+                            print(f"  loaded_models: {models_list}")
                     else:
                         print("  loaded_models: (endpoint returned no model list)")
                 else:
                     print("  loaded_models: (no /models endpoint)")
             else:
-                print("  start: cd ~/agentic-ai-research && uv run python -m services.model_server.cli serve --port 8100")
+                print("  start: cd ~/agentic-ai-research && source .venv/bin/activate && python -m services.model_server.cli serve --port 8100")
 
         if name == "ollama":
             if not ollama_installed:
