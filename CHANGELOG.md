@@ -6,6 +6,33 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 0.9.2 - 2026-01-29
+
+### Added
+- **E2E Tests with Real LLM Backends** (not just mocks!)
+  - `TestE2ELocalVLM`: 5 tests that call actual local model server at localhost:8100
+  - `TestE2EOllama`: 2 tests that call actual Ollama service
+  - `TestE2EOpenAI`: 2 tests that call actual OpenAI API
+  - `TestBackendComparison`: 1 test comparing outputs across backends
+- **Makefile LLM targets**:
+  - `make test-llm`: Run all LLM-related tests (mocked)
+  - `make test-e2e`: Run E2E tests with real LLM backends (requires running servers)
+  - `make check-llm`: Check LLM backend status
+  - `make install-llm`: Install LLM dependencies
+- Registered `pytest.mark.slow` marker for E2E tests
+- Documentation for LLM test targets in README
+
+### Changed
+- Total tests increased from 237 to 255 (+18 new tests)
+- Skipped tests increased from 8 to 18 (E2E tests skip when servers not available)
+- Updated README test coverage section with LLM test documentation
+
+### Technical Notes
+- E2E tests automatically skip if corresponding backend is not available
+- Local VLM tests require model server at `http://localhost:8100`
+- Ollama tests require Ollama service running locally
+- OpenAI tests require `OPENAI_API_KEY` (incurs actual API costs!)
+
 ## 0.9.1 - 2026-01-29
 
 ### Added

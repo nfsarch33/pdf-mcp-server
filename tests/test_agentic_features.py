@@ -850,3 +850,230 @@ class TestMCPToolRegistrationV090:
         # Check analyze_pdf_content
         sig = inspect.signature(pdf_tools.analyze_pdf_content)
         assert "backend" in sig.parameters
+
+
+# ============================================================================
+# E2E Tests with Real LLM (v0.9.2+)
+# These tests actually call the local model server when available
+# Mark with pytest.mark.slow for CI/CD to optionally skip
+# ============================================================================
+
+def _is_local_server_running() -> bool:
+    """Check if local model server is running at localhost:8100."""
+    try:
+        import requests
+        response = requests.get(f"{pdf_tools.LOCAL_MODEL_SERVER_URL}/health", timeout=2)
+        return response.status_code == 200
+    except Exception:
+        return False
+
+
+@pytest.mark.slow
+class TestE2ELocalVLM:
+    """
+    End-to-end tests with REAL local model server (not mocked).
+    
+    These tests require the local model server to be running:
+        cd ~/agentic-ai-research
+        uv run python -m services.model_server.cli serve --port 8100
+    
+    Tests are skipped if server is not available.
+    """
+
+    @pytest.fixture(autouse=True)
+    def skip_if_no_server(self):
+        """Skip all tests in this class if local server not running."""
+        if not _is_local_server_running():
+            pytest.skip("Local model server not running at localhost:8100")
+
+    def test_e2e_get_llm_backend_info_detects_local(self):
+        """With server running, should detect local backend."""
+        result = pdf_tools.get_llm_backend_info()
+        
+        assert result["backends"]["local"]["available"] is True
+        # Local should be selected as current backend (highest priority)
+        assert result["current_backend"] == "local"
+
+    def test_e2e_call_local_llm_returns_response(self):
+        """With server running, should get actual LLM response."""
+        result = pdf_tools._call_local_llm(
+            "What is 2+2? Reply with just the number."
+        )
+        
+        assert result is not None
+        assert len(result) > 0
+        # Response should contain "4" somewhere
+        assert "4" in result
+
+    def test_e2e_extract_structured_data_with_local_llm(self, sample_text_pdf):
+        """E2E test: extract_structured_data with real local LLM."""
+        result = pdf_tools.extract_structured_data(
+            sample_text_pdf,
+            data_type="invoice",
+            backend="local"
+        )
+        
+        assert isinstance(result, dict)
+        assert "error" not in result
+        assert "data" in result
+        # With real LLM, backend should be "local"
+        assert result.get("backend") == "local"
+
+    def test_e2e_analyze_pdf_content_with_local_llm(self, sample_text_pdf):
+        """E2E test: analyze_pdf_content with real local LLM."""
+        result = pdf_tools.analyze_pdf_content(
+            sample_text_pdf,
+            include_summary=True,
+            detect_entities=True,
+            backend="local"
+        )
+        
+        assert isinstance(result, dict)
+        assert "error" not in result
+        assert "document_type" in result
+        # With real LLM, should have a summary
+        if "summary" in result:
+            assert len(result["summary"]) > 10
+        # Backend should be "local"
+        assert result.get("backend") == "local"
+
+    def test_e2e_local_llm_timeout_handling(self):
+        """E2E test: local LLM should handle requests without hanging."""
+        import time
+        
+        start = time.time()
+        result = pdf_tools._call_local_llm(
+            "Reply with a single word: hello"
+        )
+        elapsed = time.time() - start
+        
+        # Should complete within reasonable time (2 min max for slow first load)
+        assert elapsed < 120
+        assert result is not None
+
+
+@pytest.mark.slow
+class TestE2EOllama:
+    """
+    End-to-end tests with REAL Ollama (not mocked).
+    
+    Requires Ollama installed and a model pulled:
+        ollama pull qwen2.5:7b
+    """
+
+    @pytest.fixture(autouse=True)
+    def skip_if_no_ollama(self):
+        """Skip all tests if Ollama not available."""
+        if not pdf_tools._HAS_OLLAMA:
+            pytest.skip("Ollama library not installed")
+        
+        # Also check if Ollama service is running
+        try:
+            import ollama
+            ollama.list()
+        except Exception:
+            pytest.skip("Ollama service not running")
+
+    def test_e2e_ollama_llm_returns_response(self):
+        """With Ollama running, should get actual LLM response."""
+        result = pdf_tools._call_ollama_llm(
+            "What is 2+2? Reply with just the number.",
+            model="qwen2.5:1.5b"  # Use smaller model for speed
+        )
+        
+        assert result is not None
+        assert len(result) > 0
+
+    def test_e2e_extract_structured_data_with_ollama(self, sample_text_pdf):
+        """E2E test: extract_structured_data with real Ollama."""
+        result = pdf_tools.extract_structured_data(
+            sample_text_pdf,
+            data_type="invoice",
+            backend="ollama"
+        )
+        
+        assert isinstance(result, dict)
+
+
+@pytest.mark.slow
+class TestE2EOpenAI:
+    """
+    End-to-end tests with REAL OpenAI API (not mocked).
+    
+    Requires OPENAI_API_KEY environment variable.
+    WARNING: These tests incur actual API costs!
+    """
+
+    @pytest.fixture(autouse=True)
+    def skip_if_no_openai(self):
+        """Skip all tests if OpenAI not available."""
+        if not pdf_tools._HAS_OPENAI:
+            pytest.skip("OpenAI library not installed")
+        if not os.environ.get("OPENAI_API_KEY"):
+            pytest.skip("OPENAI_API_KEY not set")
+
+    def test_e2e_openai_llm_returns_response(self):
+        """With OpenAI API key, should get actual response."""
+        result = pdf_tools._call_openai_llm(
+            "What is 2+2? Reply with just the number.",
+            model="gpt-4o-mini"
+        )
+        
+        assert result is not None
+        assert "4" in result
+
+    def test_e2e_analyze_pdf_content_with_openai(self, sample_text_pdf):
+        """E2E test: analyze_pdf_content with real OpenAI."""
+        result = pdf_tools.analyze_pdf_content(
+            sample_text_pdf,
+            include_summary=True,
+            backend="openai"
+        )
+        
+        assert isinstance(result, dict)
+        assert "document_type" in result
+
+
+# ============================================================================
+# Backend Comparison Tests (v0.9.2+)
+# ============================================================================
+
+@pytest.mark.slow
+class TestBackendComparison:
+    """Compare outputs across different backends."""
+
+    def test_all_backends_return_consistent_structure(self, sample_text_pdf):
+        """All backends should return same result structure."""
+        backends_to_test = []
+        
+        # Check which backends are available
+        if _is_local_server_running():
+            backends_to_test.append("local")
+        if pdf_tools._HAS_OLLAMA:
+            try:
+                import ollama
+                ollama.list()
+                backends_to_test.append("ollama")
+            except Exception:
+                pass
+        if pdf_tools._HAS_OPENAI and os.environ.get("OPENAI_API_KEY"):
+            backends_to_test.append("openai")
+        
+        if not backends_to_test:
+            pytest.skip("No LLM backends available for comparison")
+        
+        results = {}
+        for backend in backends_to_test:
+            result = pdf_tools.extract_structured_data(
+                sample_text_pdf,
+                data_type="invoice",
+                backend=backend
+            )
+            results[backend] = result
+        
+        # All results should have same structure
+        for backend, result in results.items():
+            assert "data" in result, f"{backend} missing 'data' field"
+            assert "confidence" in result, f"{backend} missing 'confidence' field"
+            assert "method" in result, f"{backend} missing 'method' field"
+            assert "backend" in result, f"{backend} missing 'backend' field"

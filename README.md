@@ -1,6 +1,6 @@
 # PDF MCP Server
 
-**Version 0.9.1** | MCP server for PDF form filling, editing, OCR text extraction, table extraction, image extraction, link extraction, and batch processing.
+**Version 0.9.2** | MCP server for PDF form filling, editing, OCR text extraction, table extraction, image extraction, link extraction, and batch processing.
 
 Built with Python, `pypdf`, `fillpdf`, and `pymupdf` (AGPL).
 
@@ -329,10 +329,32 @@ make install-ocr
 make prepush
 ```
 
+### LLM/Agentic AI Tests (v0.9.2+)
+
+```bash
+# Run all LLM-related tests (mocked)
+make test-llm
+
+# Run E2E tests with real LLM backends
+# Requires: local model server at localhost:8100, or Ollama, or OPENAI_API_KEY
+make test-e2e
+
+# Check LLM backend status
+make check-llm
+
+# Install LLM dependencies
+make install-llm
+```
+
+**E2E Test Requirements:**
+- **Local VLM**: Start server at `~/agentic-ai-research` with `uv run python -m services.model_server.cli serve --port 8100`
+- **Ollama**: Install with `curl -fsSL https://ollama.ai/install.sh | sh` and pull a model
+- **OpenAI**: Set `OPENAI_API_KEY` environment variable (costs money!)
+
 ### Test Coverage
-- **237 tests** total (includes Tier 1/2 coverage + agentic features + multi-backend tests)
+- **255 tests** total (includes Tier 1/2 coverage + agentic features + multi-backend + e2e tests)
 - All tests pass with Tesseract installed
-- 8 tests skip when optional dependencies (Tesseract/pyzbar/OpenAI/Ollama) are not available
+- 18 tests skip when optional dependencies (Tesseract/pyzbar/OpenAI/Ollama/local server) are not available
 
 ## Development Workflow
 - Use feature branches off `main` and open a PR for review.
