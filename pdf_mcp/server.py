@@ -19,7 +19,7 @@ Available tool categories:
 - Consolidated API (3 tools)
 - Agentic AI (4 tools) - v0.8.0+, local VLM support v0.9.0+
 
-Version: 0.9.4
+Version: 0.9.5
 License: AGPL-3.0
 """
 from __future__ import annotations

@@ -6,6 +6,23 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 0.9.5 - 2026-01-29
+
+### Added
+- `get_local_server_health()` and `get_local_server_models()` for local server diagnostics
+- Enhanced Ollama E2E test skips with specific model presence checks
+- Recommended model info in `make check-llm` output (Qwen3-VL-30B-A3B)
+- 5 new tests for local server diagnostics (total: 267 tests)
+
+### Changed
+- Ollama E2E tests now show clear skip reasons (missing CLI, service, or model)
+- `check_llm_status.py` reports loaded models when available
+
+### Technical Notes
+- Research-backed recommendation: Qwen3-VL-30B-A3B for best DocVQA (95.7%)
+- MoE architecture: 30B params but only ~8B active per token
+- Local server at localhost:8100 preferred (free, no API costs)
+
 ## 0.9.4 - 2026-01-29
 
 ### Added

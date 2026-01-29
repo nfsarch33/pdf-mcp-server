@@ -965,6 +965,15 @@ class TestE2ELocalVLM:
         assert result is not None
 
 
+def _ollama_model_available(model: str) -> bool:
+    """Check if specific Ollama model is available."""
+    from pdf_mcp import llm_setup
+    if not llm_setup.ollama_is_installed():
+        return False
+    models = llm_setup.ollama_list_models()
+    return model in models
+
+
 @pytest.mark.slow
 class TestE2EOllama:
     """
@@ -978,20 +987,43 @@ class TestE2EOllama:
     def skip_if_no_ollama(self):
         """Skip all tests if Ollama not available."""
         if not pdf_tools._HAS_OLLAMA:
-            pytest.skip("Ollama library not installed")
+            pytest.skip("Ollama library not installed (pip install ollama)")
         
-        # Also check if Ollama service is running
+        from pdf_mcp import llm_setup
+        
+        # Check if Ollama CLI is installed
+        if not llm_setup.ollama_is_installed():
+            pytest.skip("Ollama CLI not found (install: curl -fsSL https://ollama.ai/install.sh | sh)")
+        
+        # Check if Ollama service is running
         try:
             import ollama
             ollama.list()
-        except Exception:
-            pytest.skip("Ollama service not running")
+        except Exception as e:
+            pytest.skip(f"Ollama service not running: {e}")
+        
+        # Check if any model is available
+        models = llm_setup.ollama_list_models()
+        if not models:
+            pytest.skip("No Ollama models found (run: ollama pull qwen2.5:1.5b)")
 
     def test_e2e_ollama_llm_returns_response(self):
         """With Ollama running, should get actual LLM response."""
+        # Try smaller models first for speed
+        test_models = ["qwen2.5:1.5b", "qwen2.5:7b", "llama3.2:1b"]
+        model_to_use = None
+        
+        for model in test_models:
+            if _ollama_model_available(model):
+                model_to_use = model
+                break
+        
+        if model_to_use is None:
+            pytest.skip(f"None of {test_models} found; pull one: ollama pull qwen2.5:1.5b")
+        
         result = pdf_tools._call_ollama_llm(
             "What is 2+2? Reply with just the number.",
-            model="qwen2.5:1.5b"  # Use smaller model for speed
+            model=model_to_use
         )
         
         assert result is not None

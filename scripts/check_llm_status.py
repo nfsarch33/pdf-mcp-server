@@ -26,14 +26,27 @@ def main():
     ollama_installed = llm_setup.ollama_is_installed()
     ollama_models = llm_setup.ollama_list_models() if ollama_installed else set()
 
+    # Query local server for model info
+    local_health = llm_setup.get_local_server_health()
+    local_models = llm_setup.get_local_server_models()
+
     for name, data in info["backends"].items():
         available = data.get("available", False)
         cost = data.get("cost", "unknown")
         print(f"- {name:8} status={_status_label(available)} cost={cost}")
 
         if name == "local":
-            print(f"  url={data.get('url')} model={data.get('model')}")
-            if not available:
+            print(f"  url={data.get('url')} config_model={data.get('model')}")
+            if available:
+                if local_models:
+                    models_list = local_models.get("models", local_models.get("available", []))
+                    if models_list:
+                        print(f"  loaded_models: {', '.join(models_list) if isinstance(models_list, list) else models_list}")
+                    else:
+                        print("  loaded_models: (endpoint returned no model list)")
+                else:
+                    print("  loaded_models: (no /models endpoint)")
+            else:
                 print("  start: cd ~/agentic-ai-research && uv run python -m services.model_server.cli serve --port 8100")
 
         if name == "ollama":
@@ -50,6 +63,8 @@ def main():
         if name == "openai" and not available:
             print("  set: export OPENAI_API_KEY=your-key")
 
+    print()
+    print("recommended model: Qwen3-VL-30B-A3B (95.7% DocVQA, MoE architecture)")
     print()
     print("override backend: export PDF_MCP_LLM_BACKEND=local|ollama|openai")
     print(f"override ollama model: export {llm_setup.OLLAMA_MODEL_ENV}=model:tag")

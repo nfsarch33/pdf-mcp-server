@@ -1,6 +1,6 @@
 # PDF MCP Server
 
-**Version 0.9.4** | MCP server for PDF form filling, editing, OCR text extraction, table extraction, image extraction, link extraction, and batch processing.
+**Version 0.9.5** | MCP server for PDF form filling, editing, OCR text extraction, table extraction, image extraction, link extraction, and batch processing.
 
 Built with Python, `pypdf`, `fillpdf`, and `pymupdf` (AGPL).
 
@@ -360,7 +360,7 @@ make install-llm-models
 - **OpenAI**: Set `OPENAI_API_KEY` environment variable (costs money!)
 
 ### Test Coverage
-- **262 tests** total (includes Tier 1/2 coverage + agentic features + multi-backend + e2e tests)
+- **267 tests** total (includes Tier 1/2 coverage + agentic features + multi-backend + e2e tests)
 - All tests pass with Tesseract installed
 - 12-18 tests skip depending on which optional dependencies/backends are available
 

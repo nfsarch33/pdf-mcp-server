@@ -57,3 +57,50 @@ def test_ollama_model_installed_detects_model(monkeypatch):
 
     assert llm_setup.ollama_model_installed("qwen2.5:7b", run=fake_run) is True
     assert llm_setup.ollama_model_installed("missing", run=fake_run) is False
+
+
+# ============================================================================
+# Tests for local server diagnostics (v0.9.5+)
+# ============================================================================
+
+
+def test_get_local_server_health_returns_none_when_unavailable(monkeypatch):
+    """get_local_server_health returns None if server not running."""
+    # Patch requests to raise connection error
+    class FakeRequests:
+        @staticmethod
+        def get(*_args, **_kwargs):
+            raise ConnectionError("server not running")
+
+    monkeypatch.setattr(llm_setup, "requests", FakeRequests, raising=False)
+    result = llm_setup.get_local_server_health()
+    assert result is None
+
+
+def test_get_local_server_models_returns_none_when_unavailable(monkeypatch):
+    """get_local_server_models returns None if server not running."""
+    class FakeRequests:
+        @staticmethod
+        def get(*_args, **_kwargs):
+            raise ConnectionError("server not running")
+
+    monkeypatch.setattr(llm_setup, "requests", FakeRequests, raising=False)
+    result = llm_setup.get_local_server_models()
+    assert result is None
+
+
+def test_local_model_server_url_default():
+    """LOCAL_MODEL_SERVER_URL should default to localhost:8100."""
+    assert "localhost:8100" in llm_setup.LOCAL_MODEL_SERVER_URL
+
+
+def test_get_local_server_health_exists():
+    """get_local_server_health function should exist."""
+    assert hasattr(llm_setup, "get_local_server_health")
+    assert callable(llm_setup.get_local_server_health)
+
+
+def test_get_local_server_models_exists():
+    """get_local_server_models function should exist."""
+    assert hasattr(llm_setup, "get_local_server_models")
+    assert callable(llm_setup.get_local_server_models)

@@ -1,10 +1,10 @@
-# Project Status Prompt (v0.9.4)
+# Project Status Prompt (v0.9.5)
 
 Use this prompt to sync status and plan next moves for `pdf-mcp-server`.
 
 ---
 
-Review the status and plan next moves (main branch is now v0.9.4).
+Review the status and plan next moves (main branch is now v0.9.5).
 
 Context
 - Repo: https://github.com/nfsarch33/pdf-mcp-server
@@ -38,7 +38,7 @@ Quality bar
 - Feature-ready with unit + E2E coverage before pushing.
 - Test every MCP tool end-to-end with dummy PDFs (multiple fixtures if needed).
 - Always verify outputs by re-opening PDFs and re-reading metadata/fields.
-- 262 tests collected; skips depend on optional backends and OCR availability.
+- 267 tests collected; skips depend on optional backends and OCR availability.
 
 Workflow expectations
 - Use safe git workflow (branching + PRs); never change main directly.
