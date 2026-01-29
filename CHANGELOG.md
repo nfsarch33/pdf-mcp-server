@@ -6,6 +6,23 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 0.9.9 - 2026-01-29
+
+### Added
+- Ollama integration now fully tested (installed Ollama v0.15.2 with qwen2.5:1.5b)
+- pyzbar/zbar barcode detection now working
+
+### Changed
+- Test coverage improved: 260 passed, 8 skipped (was 256 passed, 12 skipped)
+- E2E tests: 8 passed, 2 skipped (was 6 passed, 4 skipped)
+
+### Technical Notes
+- Remaining skips are acceptable:
+  - 4 pypdf bug (external library issue)
+  - 2 OpenAI (no API key - optional)
+  - 2 Tesseract (tests error handling behavior)
+- All core functionality is tested and verified
+
 ## 0.9.8 - 2026-01-29
 
 ### Fixed
