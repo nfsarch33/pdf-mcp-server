@@ -6,6 +6,35 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 0.9.0 - 2026-01-29
+
+### Added
+- **Local VLM Support**: Cost-free local model integration for agentic AI features.
+  - Multi-backend support: `local` (localhost:8100), `ollama`, and `openai`
+  - Backend auto-detection with priority: local > ollama > openai
+  - `get_llm_backend_info()`: Check available backends and current selection
+  - Environment variable `PDF_MCP_LLM_BACKEND` for backend override
+  - Environment variable `LOCAL_MODEL_SERVER_URL` for custom server URL
+- New helper functions:
+  - `_check_local_model_server()`: Health check for local server
+  - `_call_local_llm()`: Call local model server
+  - `_call_ollama_llm()`: Call Ollama models
+  - `_get_llm_backend()`: Auto-select best available backend
+- 18 new tests for multi-backend support (local VLM, Ollama, OpenAI)
+
+### Changed
+- All agentic functions now support `backend` parameter to force specific backend
+- Default model changed from `gpt-4o-mini` to `auto` (auto-selects based on backend)
+- Agentic functions return `backend` field indicating which LLM was used
+- Total test count increased from 199 to 217
+- Tool count increased from 50 to 51
+
+### Technical Notes
+- **Zero cost option**: Local VLM using Qwen3-VL-30B-A3B at localhost:8100
+- **Best VLM for Mac**: Qwen3-VL-30B-A3B (MoE, 95.7% DocVQA, 16.5GB memory)
+- **Cross-platform**: Ollama support for easy deployment anywhere
+- All backends gracefully degrade - pattern matching works without any LLM
+
 ## 0.8.0 - 2026-01-28
 
 ### Added

@@ -1,6 +1,6 @@
 # PDF MCP Server
 
-**Version 0.8.0** | MCP server for PDF form filling, editing, OCR text extraction, table extraction, image extraction, link extraction, and batch processing.
+**Version 0.9.0** | MCP server for PDF form filling, editing, OCR text extraction, table extraction, image extraction, link extraction, and batch processing.
 
 Built with Python, `pypdf`, `fillpdf`, and `pymupdf` (AGPL).
 
@@ -96,7 +96,7 @@ Edit `~/.cursor/mcp.json`:
 ```
 Restart Cursor after saving.
 
-## Features Overview (50 tools)
+## Features Overview (51 tools)
 
 | Category | Tools | Description |
 |----------|-------|-------------|
@@ -116,7 +116,7 @@ Restart Cursor after saving.
 | **Page Splitting** | 1 tool | Split by bookmarks or page count (unified API) |
 | **PDF Comparison** | 1 tool | Compare two PDFs and find differences |
 | **Batch Processing** | 1 tool | Process multiple PDFs at once |
-| **Agentic AI** | 3 tools | LLM-powered form filling, entity extraction, document analysis (v0.8.0+) |
+| **Agentic AI** | 4 tools | LLM-powered form filling, entity extraction, document analysis + local VLM (v0.9.0+) |
 
 ## Available Tools
 
@@ -230,27 +230,53 @@ export_pdf(pdf_path, output_path, format="markdown", engine="auto", ...)
 get_pdf_metadata(pdf_path, full=False)  # Set full=True for document info
 ```
 
-### Agentic AI (v0.8.0+)
+### Agentic AI (v0.8.0+) with Local VLM Support (v0.9.0+)
 
-LLM-powered tools for intelligent PDF processing. Requires `OPENAI_API_KEY` environment variable.
+LLM-powered tools for intelligent PDF processing. **Uses local VLM by default (free, no API costs!)** Falls back to Ollama or OpenAI.
 
-- `auto_fill_pdf_form(pdf_path, output_path, source_data, model="gpt-4o-mini")`: Intelligently fill form fields with LLM-powered field mapping. Maps source data keys to form field names even when they don't exactly match.
-- `extract_structured_data(pdf_path, data_type=None, schema=None, pages=None)`: Extract structured data using pattern matching or LLM. Supports "invoice", "receipt", "contract" types or custom schemas.
-- `analyze_pdf_content(pdf_path, include_summary=True, detect_entities=True)`: Analyze PDF for document type classification, entity extraction (dates, amounts, names), and optional summarization.
+- `get_llm_backend_info()`: Check which LLM backends are available (local, ollama, openai).
+- `auto_fill_pdf_form(pdf_path, output_path, source_data, backend=None)`: Intelligently fill form fields with LLM-powered field mapping.
+- `extract_structured_data(pdf_path, data_type=None, schema=None, backend=None)`: Extract structured data using pattern matching or LLM.
+- `analyze_pdf_content(pdf_path, include_summary=True, detect_entities=True, backend=None)`: Analyze PDF for document type classification, entity extraction, and summarization.
 
-**Install LLM support:**
+**Backend Priority (v0.9.0+):**
+1. **local** (free): Local model server at `localhost:8100` using Qwen3-VL
+2. **ollama** (free): Local Ollama models
+3. **openai** (paid): OpenAI API (requires `OPENAI_API_KEY`)
+
+**Start local model server (recommended):**
+```bash
+# From agentic-ai-research project
+cd ~/agentic-ai-research
+uv run python -m services.model_server.cli serve --port 8100
+```
+
+**Or use Ollama:**
+```bash
+# Install Ollama
+curl -fsSL https://ollama.ai/install.sh | sh
+ollama pull qwen2.5:7b
+```
+
+**Or use OpenAI (paid):**
 ```bash
 pip install -e ".[llm]"
 export OPENAI_API_KEY="your-api-key"
+export PDF_MCP_LLM_BACKEND="openai"  # Force OpenAI
 ```
 
 **Example:**
 ```python
-# Intelligent form filling
+# Check available backends
+info = get_llm_backend_info()
+print(info["current_backend"])  # "local", "ollama", or "openai"
+
+# Intelligent form filling (uses local VLM by default)
 result = auto_fill_pdf_form("form.pdf", "filled.pdf", {
     "name": "John Smith",  # Maps to "Full Name" field
     "email_address": "john@example.com"  # Maps to "Email" field
 })
+print(result["backend"])  # Which backend was used
 
 # Extract invoice data
 result = extract_structured_data("invoice.pdf", data_type="invoice")
@@ -304,7 +330,7 @@ make prepush
 ```
 
 ### Test Coverage
-- **199 tests** total (includes Tier 1/2 coverage + agentic features)
+- **217 tests** total (includes Tier 1/2 coverage + agentic features + multi-backend tests)
 - All tests pass with Tesseract installed
 - 6 tests skip when optional dependencies (Tesseract/pyzbar/OpenAI) are not available
 

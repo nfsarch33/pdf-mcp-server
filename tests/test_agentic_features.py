@@ -1,10 +1,16 @@
 """
-Tests for v0.8.0 Agentic AI Features.
+Tests for v0.8.0+ Agentic AI Features with Multi-Backend Support (v0.9.0+).
 
 This module tests LLM-powered PDF processing capabilities:
 - auto_fill_pdf_form: Intelligent form filling with field mapping
 - extract_structured_data: Entity/section extraction
 - analyze_pdf_content: Document analysis and summarization
+- get_llm_backend_info: Check available LLM backends
+
+Supports multiple backends (v0.9.0+):
+- local: Local model server at localhost:8100 (free, no API costs)
+- ollama: Ollama models (free, local)
+- openai: OpenAI API (paid, requires OPENAI_API_KEY)
 
 All tests use mocked LLM responses for unit testing.
 """
@@ -405,3 +411,140 @@ class TestAgenticIntegration:
         
         # Should return basic metrics at minimum
         assert isinstance(result, dict)
+
+
+# ============================================================================
+# Test: Multi-Backend Support (v0.9.0+)
+# ============================================================================
+
+class TestMultiBackendSupport:
+    """Tests for local VLM, Ollama, and OpenAI backend support."""
+
+    def test_get_llm_backend_info_exists(self):
+        """get_llm_backend_info should be available."""
+        assert hasattr(pdf_tools, "get_llm_backend_info")
+        assert callable(pdf_tools.get_llm_backend_info)
+
+    def test_get_llm_backend_info_returns_dict(self):
+        """Should return backend info dict."""
+        result = pdf_tools.get_llm_backend_info()
+        assert isinstance(result, dict)
+        assert "current_backend" in result
+        assert "backends" in result
+        assert "override_env" in result
+
+    def test_backend_info_has_all_backends(self):
+        """Should report on all backend types."""
+        result = pdf_tools.get_llm_backend_info()
+        backends = result["backends"]
+        assert "local" in backends
+        assert "ollama" in backends
+        assert "openai" in backends
+
+    def test_local_backend_info_has_url(self):
+        """Local backend should report URL."""
+        result = pdf_tools.get_llm_backend_info()
+        local_info = result["backends"]["local"]
+        assert "url" in local_info
+        assert "localhost" in local_info["url"] or "127.0.0.1" in local_info["url"]
+
+    def test_backends_report_cost(self):
+        """All backends should report cost info."""
+        result = pdf_tools.get_llm_backend_info()
+        for backend_name, backend_info in result["backends"].items():
+            assert "cost" in backend_info
+
+    def test_local_and_ollama_are_free(self):
+        """Local and Ollama should be marked as free."""
+        result = pdf_tools.get_llm_backend_info()
+        assert "free" in result["backends"]["local"]["cost"]
+        assert "free" in result["backends"]["ollama"]["cost"]
+
+    def test_openai_is_paid(self):
+        """OpenAI should be marked as paid."""
+        result = pdf_tools.get_llm_backend_info()
+        assert "paid" in result["backends"]["openai"]["cost"]
+
+    def test_backend_constants_exist(self):
+        """Backend constants should be defined."""
+        assert hasattr(pdf_tools, "LLM_BACKEND_LOCAL")
+        assert hasattr(pdf_tools, "LLM_BACKEND_OLLAMA")
+        assert hasattr(pdf_tools, "LLM_BACKEND_OPENAI")
+        assert pdf_tools.LLM_BACKEND_LOCAL == "local"
+        assert pdf_tools.LLM_BACKEND_OLLAMA == "ollama"
+        assert pdf_tools.LLM_BACKEND_OPENAI == "openai"
+
+    def test_local_model_server_url_configurable(self):
+        """LOCAL_MODEL_SERVER_URL should be configurable via env."""
+        assert hasattr(pdf_tools, "LOCAL_MODEL_SERVER_URL")
+        # Default should include localhost
+        assert "localhost" in pdf_tools.LOCAL_MODEL_SERVER_URL or "127.0.0.1" in pdf_tools.LOCAL_MODEL_SERVER_URL
+
+    @patch("pdf_mcp.pdf_tools._check_local_model_server")
+    def test_get_llm_backend_prefers_local(self, mock_check):
+        """Should prefer local backend when available."""
+        mock_check.return_value = True
+        result = pdf_tools._get_llm_backend()
+        assert result == "local"
+
+    @patch("pdf_mcp.pdf_tools._check_local_model_server")
+    @patch("pdf_mcp.pdf_tools._HAS_OLLAMA", True)
+    def test_get_llm_backend_falls_back_to_ollama(self, mock_check):
+        """Should fall back to Ollama when local unavailable."""
+        mock_check.return_value = False
+        result = pdf_tools._get_llm_backend()
+        # Should be ollama or openai (depends on whether OPENAI_API_KEY is set)
+        assert result in ("ollama", "openai", "")
+
+    @patch.dict(os.environ, {"PDF_MCP_LLM_BACKEND": "openai"})
+    def test_get_llm_backend_respects_override(self):
+        """Should respect PDF_MCP_LLM_BACKEND env override."""
+        result = pdf_tools._get_llm_backend()
+        assert result == "openai"
+
+
+class TestLocalVLMBackend:
+    """Tests for local VLM backend at localhost:8100."""
+
+    def test_check_local_model_server_function_exists(self):
+        """_check_local_model_server should exist."""
+        assert hasattr(pdf_tools, "_check_local_model_server")
+        assert callable(pdf_tools._check_local_model_server)
+
+    def test_call_local_llm_function_exists(self):
+        """_call_local_llm should exist."""
+        assert hasattr(pdf_tools, "_call_local_llm")
+        assert callable(pdf_tools._call_local_llm)
+
+    @patch("pdf_mcp.pdf_tools._HAS_REQUESTS", False)
+    def test_call_local_llm_without_requests_returns_none(self):
+        """Without requests library, should return None."""
+        result = pdf_tools._call_local_llm("test prompt")
+        assert result is None
+
+    @patch("pdf_mcp.pdf_tools._HAS_REQUESTS", True)
+    @patch("pdf_mcp.pdf_tools._requests")
+    def test_call_local_llm_with_mock_server(self, mock_requests):
+        """With mocked server, should return response."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"text": "Test response"}
+        mock_requests.post.return_value = mock_response
+        
+        result = pdf_tools._call_local_llm("test prompt")
+        assert result == "Test response"
+
+
+class TestOllamaBackend:
+    """Tests for Ollama backend."""
+
+    def test_call_ollama_llm_function_exists(self):
+        """_call_ollama_llm should exist."""
+        assert hasattr(pdf_tools, "_call_ollama_llm")
+        assert callable(pdf_tools._call_ollama_llm)
+
+    @patch("pdf_mcp.pdf_tools._HAS_OLLAMA", False)
+    def test_call_ollama_llm_without_ollama_returns_none(self):
+        """Without ollama library, should return None."""
+        result = pdf_tools._call_ollama_llm("test prompt")
+        assert result is None

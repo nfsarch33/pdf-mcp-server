@@ -11,8 +11,9 @@ This module provides PDF manipulation, OCR, and extraction capabilities:
 - Export: markdown and JSON export
 - PII detection: scan for common personal data patterns
 - Agentic AI: LLM-powered form filling, entity extraction, document analysis (v0.8.0+)
+- Local VLM: Cost-free local model integration via Qwen3-VL (v0.9.0+)
 
-Version: 0.8.0
+Version: 0.9.0
 License: AGPL-3.0
 """
 from __future__ import annotations
@@ -74,6 +75,30 @@ try:
     _HAS_OPENAI = True
 except ImportError:
     _HAS_OPENAI = False
+
+try:
+    import requests as _requests
+
+    _HAS_REQUESTS = True
+except ImportError:
+    _HAS_REQUESTS = False
+
+try:
+    import ollama as _ollama
+
+    _HAS_OLLAMA = True
+except ImportError:
+    _HAS_OLLAMA = False
+
+# LLM Backend Configuration
+# Priority: local > ollama > openai (local is free, no API costs)
+LLM_BACKEND_LOCAL = "local"
+LLM_BACKEND_OLLAMA = "ollama"
+LLM_BACKEND_OPENAI = "openai"
+
+# Default local model server URL
+LOCAL_MODEL_SERVER_URL = os.environ.get("LOCAL_MODEL_SERVER_URL", "http://localhost:8100")
+LOCAL_VLM_MODEL = os.environ.get("LOCAL_VLM_MODEL", "qwen3-vl-30b-a3b")
 
 # Common Tesseract language codes
 TESSERACT_LANGUAGES = {
@@ -3689,11 +3714,122 @@ def export_pdf(
 
 
 # ============================================================================
-# Agentic AI Functions (v0.8.0+)
+# Agentic AI Functions (v0.8.0+) with Local VLM Support (v0.9.0+)
 # ============================================================================
 
 
-def _call_llm(
+def _check_local_model_server() -> bool:
+    """Check if local model server is available at localhost:8100."""
+    if not _HAS_REQUESTS:
+        return False
+    try:
+        response = _requests.get(f"{LOCAL_MODEL_SERVER_URL}/health", timeout=2)
+        return response.status_code == 200
+    except Exception:
+        return False
+
+
+def _get_llm_backend() -> str:
+    """
+    Determine which LLM backend to use.
+    
+    Priority: local > ollama > openai (local is free, no API costs)
+    Can be overridden with PDF_MCP_LLM_BACKEND environment variable.
+    """
+    # Check for explicit override
+    override = os.environ.get("PDF_MCP_LLM_BACKEND", "").lower()
+    if override in (LLM_BACKEND_LOCAL, LLM_BACKEND_OLLAMA, LLM_BACKEND_OPENAI):
+        return override
+    
+    # Auto-detect: prefer local (free) over paid APIs
+    if _check_local_model_server():
+        return LLM_BACKEND_LOCAL
+    
+    if _HAS_OLLAMA:
+        return LLM_BACKEND_OLLAMA
+    
+    if _HAS_OPENAI and os.environ.get("OPENAI_API_KEY"):
+        return LLM_BACKEND_OPENAI
+    
+    return ""  # No backend available
+
+
+def _call_local_llm(
+    prompt: str,
+    system_prompt: Optional[str] = None,
+    model: Optional[str] = None,
+) -> Optional[str]:
+    """
+    Call local model server at localhost:8100.
+    
+    Args:
+        prompt: The user prompt to send
+        system_prompt: Optional system prompt (prepended to prompt)
+        model: Model to use (default: from LOCAL_VLM_MODEL env var)
+    
+    Returns:
+        LLM response content or None if unavailable
+    """
+    if not _HAS_REQUESTS:
+        return None
+    
+    full_prompt = prompt
+    if system_prompt:
+        full_prompt = f"{system_prompt}\n\n{prompt}"
+    
+    try:
+        response = _requests.post(
+            f"{LOCAL_MODEL_SERVER_URL}/generate",
+            json={
+                "prompt": full_prompt,
+                "model": model or LOCAL_VLM_MODEL,
+                "max_tokens": 1024,
+            },
+            timeout=120,  # Local models can be slow on first load
+        )
+        if response.status_code == 200:
+            return response.json().get("text", "")
+        return None
+    except Exception:
+        return None
+
+
+def _call_ollama_llm(
+    prompt: str,
+    system_prompt: Optional[str] = None,
+    model: str = "qwen2.5:7b",
+) -> Optional[str]:
+    """
+    Call Ollama LLM with the given prompt.
+    
+    Args:
+        prompt: The user prompt to send
+        system_prompt: Optional system prompt for context
+        model: Ollama model to use (default: qwen2.5:7b)
+    
+    Returns:
+        LLM response content or None if unavailable
+    """
+    if not _HAS_OLLAMA:
+        return None
+    
+    try:
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+        
+        response = _ollama.chat(
+            model=model,
+            messages=messages,
+            stream=False,
+        )
+        return response.get("message", {}).get("content", "")
+    except Exception:
+        return None
+
+
+def _call_openai_llm(
     prompt: str,
     system_prompt: Optional[str] = None,
     model: str = "gpt-4o-mini",
@@ -3735,11 +3871,79 @@ def _call_llm(
         return None
 
 
+def _call_llm(
+    prompt: str,
+    system_prompt: Optional[str] = None,
+    model: str = "auto",
+    temperature: float = 0.0,
+    backend: Optional[str] = None,
+) -> Optional[str]:
+    """
+    Call LLM using the best available backend.
+    
+    Priority: local > ollama > openai (local is free, no API costs)
+    
+    Args:
+        prompt: The user prompt to send
+        system_prompt: Optional system prompt for context
+        model: Model to use (default: auto-select based on backend)
+        temperature: Sampling temperature (0.0 for deterministic, OpenAI only)
+        backend: Force specific backend (local, ollama, openai)
+
+    Returns:
+        LLM response content or None if unavailable
+    """
+    selected_backend = backend or _get_llm_backend()
+    
+    if selected_backend == LLM_BACKEND_LOCAL:
+        return _call_local_llm(prompt, system_prompt, model if model != "auto" else None)
+    
+    if selected_backend == LLM_BACKEND_OLLAMA:
+        ollama_model = model if model != "auto" else "qwen2.5:7b"
+        return _call_ollama_llm(prompt, system_prompt, ollama_model)
+    
+    if selected_backend == LLM_BACKEND_OPENAI:
+        openai_model = model if model != "auto" else "gpt-4o-mini"
+        return _call_openai_llm(prompt, system_prompt, openai_model, temperature)
+    
+    return None
+
+
+def get_llm_backend_info() -> Dict[str, Any]:
+    """
+    Get information about available LLM backends.
+    
+    Returns:
+        Dict with backend availability and current selection
+    """
+    return {
+        "current_backend": _get_llm_backend(),
+        "backends": {
+            "local": {
+                "available": _check_local_model_server(),
+                "url": LOCAL_MODEL_SERVER_URL,
+                "model": LOCAL_VLM_MODEL,
+                "cost": "free",
+            },
+            "ollama": {
+                "available": _HAS_OLLAMA,
+                "cost": "free",
+            },
+            "openai": {
+                "available": _HAS_OPENAI and bool(os.environ.get("OPENAI_API_KEY")),
+                "cost": "paid (per token)",
+            },
+        },
+        "override_env": "PDF_MCP_LLM_BACKEND",
+    }
+
+
 def auto_fill_pdf_form(
     pdf_path: str,
     output_path: str,
     source_data: Dict[str, Any],
-    model: str = "gpt-4o-mini",
+    model: str = "auto",
+    backend: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Intelligently fill PDF form fields using LLM-powered field mapping.
@@ -3747,12 +3951,15 @@ def auto_fill_pdf_form(
     This function analyzes form field names and source data keys to create
     intelligent mappings, even when names don't exactly match. For example,
     it can map "full_name" in the source to "Name" in the form.
+    
+    Uses local VLM by default (free, no API costs). Falls back to Ollama or OpenAI.
 
     Args:
         pdf_path: Path to the input PDF form
         output_path: Path for the filled output PDF
         source_data: Dictionary of data to fill into the form
-        model: OpenAI model for field mapping (default: gpt-4o-mini)
+        model: Model to use (default: auto-select based on backend)
+        backend: Force specific backend: "local", "ollama", or "openai" (default: auto)
 
     Returns:
         Dict with:
@@ -3760,6 +3967,7 @@ def auto_fill_pdf_form(
             - mappings: Dict showing source->field mappings used
             - unmapped_fields: List of form fields that couldn't be mapped
             - output_path: Path to the output file
+            - backend: Which LLM backend was used
 
     Example:
         >>> source = {"name": "John Smith", "email_address": "john@example.com"}
@@ -3798,18 +4006,14 @@ def auto_fill_pdf_form(
                            [_normalize_field_key(f) for f in direct_mappings.keys()]]
     unmapped_fields = [f for f in field_names if f not in direct_mappings]
 
+    used_backend = None
     if unmapped_source_keys and unmapped_fields:
-        if not _HAS_OPENAI:
+        # Check for available LLM backend
+        selected_backend = backend or _get_llm_backend()
+        if not selected_backend:
             return {
-                "error": "OpenAI library not installed. Install with: pip install openai",
-                "hint": "Or use fill_pdf_form() with exact field names"
-            }
-
-        api_key = os.environ.get("OPENAI_API_KEY")
-        if not api_key:
-            return {
-                "error": "OPENAI_API_KEY environment variable not set",
-                "hint": "Set the API key or use fill_pdf_form() with exact field names",
+                "error": "No LLM backend available. Options: start local model server, install ollama, or set OPENAI_API_KEY",
+                "hint": "Start local server: cd ~/agentic-ai-research && uv run python -m services.model_server.cli serve",
                 "partial_mappings": direct_mappings
             }
 
@@ -3829,7 +4033,8 @@ Available PDF form field names (unmapped):
 Return a JSON object where keys are PDF form field names and values are the corresponding source values.
 Only include mappings you're confident about."""
 
-        llm_response = _call_llm(prompt, system_prompt, model=model)
+        llm_response = _call_llm(prompt, system_prompt, model=model, backend=selected_backend)
+        used_backend = selected_backend
         if llm_response:
             try:
                 # Extract JSON from response (handle markdown code blocks)
@@ -3860,7 +4065,8 @@ Only include mappings you're confident about."""
         "filled_fields": fill_result.get("filled", 0),
         "mappings": all_mappings,
         "unmapped_fields": [f for f in field_names if f not in all_mappings],
-        "method": "llm" if llm_mappings else "direct"
+        "method": "llm" if llm_mappings else "direct",
+        "backend": used_backend,
     }
 
 
@@ -3869,13 +4075,16 @@ def extract_structured_data(
     data_type: Optional[str] = None,
     schema: Optional[Dict[str, str]] = None,
     pages: Optional[List[int]] = None,
-    model: str = "gpt-4o-mini",
+    model: str = "auto",
+    backend: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Extract structured data from PDF using pattern matching or LLM.
 
     Supports common document types (invoice, receipt, contract) with
     pre-defined extraction patterns, or custom schemas for specific needs.
+    
+    Uses local VLM by default (free, no API costs). Falls back to Ollama or OpenAI.
 
     Args:
         pdf_path: Path to the PDF file
@@ -3883,14 +4092,16 @@ def extract_structured_data(
         schema: Custom extraction schema as Dict[field_name, field_type]
                 Types: "string", "number", "date", "currency", "list"
         pages: Optional list of 1-based page numbers (default: all)
-        model: OpenAI model for LLM-based extraction
+        model: Model to use (default: auto-select based on backend)
+        backend: Force specific backend: "local", "ollama", or "openai" (default: auto)
 
     Returns:
         Dict with:
             - data: Extracted structured data
             - confidence: Extraction confidence scores
-            - method: "pattern" or "llm"
+            - method: "pattern" or "llm" or "llm+pattern"
             - page_count: Number of pages processed
+            - backend: Which LLM backend was used (if any)
 
     Example:
         >>> result = extract_structured_data("invoice.pdf", data_type="invoice")
@@ -3967,7 +4178,9 @@ def extract_structured_data(
                     confidence[field] = 0.5  # Lower confidence for dynamic patterns
 
     # If LLM available and we have a schema or data_type, enhance with LLM
-    if (not extracted_data or len(extracted_data) < 3) and _HAS_OPENAI and os.environ.get("OPENAI_API_KEY"):
+    used_backend = None
+    selected_backend = backend or _get_llm_backend()
+    if (not extracted_data or len(extracted_data) < 3) and selected_backend:
         target_schema = schema or patterns.get(data_type, {})
         if target_schema:
             system_prompt = """You are a document data extraction assistant. Extract structured data from the given text.
@@ -3979,11 +4192,12 @@ def extract_structured_data(
 Fields to extract: {json.dumps(fields_to_extract)}
 
 Document text:
-{full_text[:4000]}  # Limit text length for API
+{full_text[:4000]}
 
 Return a JSON object with the extracted values."""
 
-            llm_response = _call_llm(prompt, system_prompt, model=model)
+            llm_response = _call_llm(prompt, system_prompt, model=model, backend=selected_backend)
+            used_backend = selected_backend
             if llm_response:
                 try:
                     json_str = llm_response
@@ -4008,6 +4222,7 @@ Return a JSON object with the extracted values."""
         "method": method,
         "page_count": text_result.get("page_count", 0),
         "data_type": data_type,
+        "backend": used_backend,
     }
 
 
@@ -4016,20 +4231,24 @@ def analyze_pdf_content(
     include_summary: bool = True,
     detect_entities: bool = True,
     check_completeness: bool = False,
-    model: str = "gpt-4o-mini",
+    model: str = "auto",
+    backend: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Analyze PDF content for document type, key entities, and summary.
 
     Provides comprehensive document analysis including classification,
     entity extraction, and optional completeness checking.
+    
+    Uses local VLM by default (free, no API costs). Falls back to Ollama or OpenAI.
 
     Args:
         pdf_path: Path to the PDF file
         include_summary: Generate document summary (default: True)
         detect_entities: Extract key entities like dates, amounts, names (default: True)
         check_completeness: Check for missing required fields (default: False)
-        model: OpenAI model for LLM-based analysis
+        model: Model to use (default: auto-select based on backend)
+        backend: Force specific backend: "local", "ollama", or "openai" (default: auto)
 
     Returns:
         Dict with:
@@ -4039,6 +4258,7 @@ def analyze_pdf_content(
             - completeness: Completeness analysis (if requested)
             - page_count: Number of pages
             - word_count: Approximate word count
+            - backend: Which LLM backend was used (if any)
 
     Example:
         >>> result = analyze_pdf_content("document.pdf")
@@ -4129,7 +4349,9 @@ def analyze_pdf_content(
         result["entities"] = entities
 
     # LLM-based summary and enhanced analysis
-    if (include_summary or check_completeness) and _HAS_OPENAI and os.environ.get("OPENAI_API_KEY"):
+    used_backend = None
+    selected_backend = backend or _get_llm_backend()
+    if (include_summary or check_completeness) and selected_backend:
         system_prompt = """You are a document analysis assistant. Analyze the given document and provide:
         1. A brief 1-2 sentence summary
         2. Document classification confirmation
@@ -4142,7 +4364,8 @@ def analyze_pdf_content(
 
 Provide a JSON response with summary, document_type, and key_findings."""
 
-        llm_response = _call_llm(prompt, system_prompt, model=model)
+        llm_response = _call_llm(prompt, system_prompt, model=model, backend=selected_backend)
+        used_backend = selected_backend
         if llm_response:
             try:
                 json_str = llm_response
@@ -4189,6 +4412,7 @@ Provide a JSON response with summary, document_type, and key_findings."""
         
         result["completeness"] = completeness
 
-    result["analysis_method"] = "llm+pattern" if "summary" in result and _HAS_OPENAI else "pattern"
+    result["analysis_method"] = "llm+pattern" if used_backend else "pattern"
+    result["backend"] = used_backend
     
     return result
