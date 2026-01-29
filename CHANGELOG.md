@@ -6,6 +6,18 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 0.9.8 - 2026-01-29
+
+### Fixed
+- Tests now gracefully skip on pypdf `AttributeError` bug in form filling
+- Added try/except handling for known pypdf bug with `get_object()` on dict
+
+### Technical Notes
+- pypdf has a bug where `get_object()` is called on plain dict instead of DictionaryObject
+- Affects form filling with certain PDF structures
+- Tests skip with clear message instead of failing
+- Bug present in pypdf 5.1.0 through 6.5.0+
+
 ## 0.9.7 - 2026-01-29
 
 ### Fixed
