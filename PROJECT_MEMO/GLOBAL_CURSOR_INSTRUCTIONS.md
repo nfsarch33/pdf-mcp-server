@@ -10,7 +10,26 @@
 ## Part 1: pdf-handler MCP Server
 
 ### What it is
-A local MCP server for PDF manipulation built with Python, `pypdf`, `fillpdf`, and `pymupdf`. It provides 25+ tools for form filling, text/comment/signature editing, page operations, and encryption.
+A local MCP server for PDF manipulation built with Python, `pypdf`, `fillpdf`, and `pymupdf`. It provides **51 tools** for form filling, text/comment/signature editing, page operations, encryption, OCR, and **LLM-powered agentic AI features**.
+
+### LLM Integration (v0.9.0+)
+Zero-cost local VLM support with multi-backend:
+```bash
+# Check backend status
+make check-llm
+
+# Start local model server (FREE!)
+cd ~/agentic-ai-research
+uv run python -m services.model_server.cli serve --port 8100
+```
+
+**Backend Priority**: local > ollama > openai (free first!)
+
+**Agentic AI Tools**:
+- `get_llm_backend_info()` - Check available backends
+- `auto_fill_pdf_form()` - Intelligent form filling
+- `extract_structured_data()` - Entity extraction
+- `analyze_pdf_content()` - Document analysis/summarization
 
 ### Registration (per machine)
 Edit `~/.cursor/mcp.json`:
