@@ -13,7 +13,7 @@ This module provides PDF manipulation, OCR, and extraction capabilities:
 - Agentic AI: LLM-powered form filling, entity extraction, document analysis (v0.8.0+)
 - Local VLM: Cost-free local model integration via Qwen3-VL (v0.9.0+)
 
-Version: 0.9.5
+Version: 0.9.6
 License: AGPL-3.0
 """
 from __future__ import annotations
@@ -96,9 +96,8 @@ LLM_BACKEND_LOCAL = "local"
 LLM_BACKEND_OLLAMA = "ollama"
 LLM_BACKEND_OPENAI = "openai"
 
-# Default local model server URL
-LOCAL_MODEL_SERVER_URL = os.environ.get("LOCAL_MODEL_SERVER_URL", "http://localhost:8100")
-LOCAL_VLM_MODEL = os.environ.get("LOCAL_VLM_MODEL", "qwen3-vl-30b-a3b")
+# Import LLM configuration from llm_setup (DRY - single source of truth)
+from pdf_mcp.llm_setup import LOCAL_MODEL_SERVER_URL, LOCAL_VLM_MODEL
 
 # Common Tesseract language codes
 TESSERACT_LANGUAGES = {

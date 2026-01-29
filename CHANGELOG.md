@@ -6,6 +6,17 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 0.9.6 - 2026-01-29
+
+### Changed
+- **DRY cleanup**: Consolidated `LOCAL_MODEL_SERVER_URL` and `LOCAL_VLM_MODEL` into `llm_setup.py`
+- `pdf_tools.py` now imports LLM config from `llm_setup.py` (single source of truth)
+- Test count: 268 total (1 new test for LOCAL_VLM_MODEL)
+
+### Technical Notes
+- Follows DRY/KISS/SOLID principles for cleaner, more maintainable code
+- No functional changes - refactoring only
+
 ## 0.9.5 - 2026-01-29
 
 ### Added

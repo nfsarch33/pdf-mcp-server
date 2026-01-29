@@ -5,9 +5,13 @@ import shutil
 import subprocess
 from typing import Any, Dict, Optional, Set
 
+# Ollama configuration
 DEFAULT_OLLAMA_MODEL = "qwen2.5:7b"
 OLLAMA_MODEL_ENV = "PDF_MCP_OLLAMA_MODEL"
+
+# Local model server configuration
 LOCAL_MODEL_SERVER_URL = os.environ.get("LOCAL_MODEL_SERVER_URL", "http://localhost:8100")
+LOCAL_VLM_MODEL = os.environ.get("LOCAL_VLM_MODEL", "qwen3-vl-30b-a3b")
 
 
 def get_ollama_model_name() -> str:

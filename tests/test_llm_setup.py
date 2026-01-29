@@ -104,3 +104,9 @@ def test_get_local_server_models_exists():
     """get_local_server_models function should exist."""
     assert hasattr(llm_setup, "get_local_server_models")
     assert callable(llm_setup.get_local_server_models)
+
+
+def test_local_vlm_model_default():
+    """LOCAL_VLM_MODEL should default to qwen3-vl-30b-a3b."""
+    assert hasattr(llm_setup, "LOCAL_VLM_MODEL")
+    assert "qwen" in llm_setup.LOCAL_VLM_MODEL.lower()
