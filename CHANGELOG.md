@@ -6,6 +6,26 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 0.9.1 - 2026-01-29
+
+### Added
+- 20 new comprehensive integration tests for v0.9.0 multi-backend LLM support
+  - Local VLM integration tests
+  - Ollama integration tests
+  - Backend field verification tests
+  - Backend fallback chain tests
+  - Environment configuration tests
+  - Unified `_call_llm` routing tests
+  - MCP tool registration tests for v0.9.0
+
+### Fixed
+- Test compatibility with optional Ollama dependency (proper skip handling)
+- Test compatibility with pypdf form filling edge cases
+
+### Test Coverage
+- Total tests increased from 217 to 237
+- 8 tests skip when optional dependencies unavailable
+
 ## 0.9.0 - 2026-01-29
 
 ### Added

@@ -1,6 +1,6 @@
 # PDF MCP Server
 
-**Version 0.9.0** | MCP server for PDF form filling, editing, OCR text extraction, table extraction, image extraction, link extraction, and batch processing.
+**Version 0.9.1** | MCP server for PDF form filling, editing, OCR text extraction, table extraction, image extraction, link extraction, and batch processing.
 
 Built with Python, `pypdf`, `fillpdf`, and `pymupdf` (AGPL).
 
@@ -330,9 +330,9 @@ make prepush
 ```
 
 ### Test Coverage
-- **217 tests** total (includes Tier 1/2 coverage + agentic features + multi-backend tests)
+- **237 tests** total (includes Tier 1/2 coverage + agentic features + multi-backend tests)
 - All tests pass with Tesseract installed
-- 6 tests skip when optional dependencies (Tesseract/pyzbar/OpenAI) are not available
+- 8 tests skip when optional dependencies (Tesseract/pyzbar/OpenAI/Ollama) are not available
 
 ## Development Workflow
 - Use feature branches off `main` and open a PR for review.
