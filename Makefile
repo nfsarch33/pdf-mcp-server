@@ -66,8 +66,12 @@ test-e2e: install
 	@echo "Note: E2E tests require local model server running at localhost:8100"
 
 check-llm:
-	@echo "=== LLM Backend Status ==="
-	@$(PY) -c "from pdf_mcp import pdf_tools; import json; print(json.dumps(pdf_tools.get_llm_backend_info(), indent=2))" 2>/dev/null || echo "pdf_mcp not installed. Run: make install"
+	@echo ""
+	@echo "═══════════════════════════════════════════════════════════════"
+	@echo "              LLM Backend Status Check"
+	@echo "═══════════════════════════════════════════════════════════════"
+	@echo ""
+	@$(PY) scripts/check_llm_status.py 2>/dev/null || echo "pdf_mcp not installed. Run: make install"
 
 clean:
 	rm -rf $(VENV) .pytest_cache **/__pycache__

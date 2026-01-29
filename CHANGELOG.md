@@ -6,6 +6,31 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 0.9.3 - 2026-01-29
+
+### Added
+- New `scripts/check_llm_status.py` script for formatted LLM status output
+- `backend_available` field in `extract_structured_data` response for transparency
+- Improved `make check-llm` output with colored status and setup instructions
+
+### Fixed
+- Tests now properly handle when real LLM backends are running
+  - `test_auto_fill_without_any_llm_returns_error` - patches all backends
+  - `test_call_llm_without_any_backend_returns_none` - patches all backends
+- E2E test assertions now allow pattern matching success (no LLM needed)
+
+### Changed
+- Test count: 243 passed, 12 skipped (with local server running)
+- Improved test isolation for LLM backend availability
+
+### Verified (Manual Testing)
+- ✅ Local VLM backend working correctly at localhost:8100
+- ✅ `get_llm_backend_info()` detects local server
+- ✅ `_call_local_llm()` returns valid responses (2+2=4, capital of France=Paris)
+- ✅ `extract_structured_data()` correctly extracts invoice data
+- ✅ `analyze_pdf_content()` generates summaries with local LLM
+- ✅ E2E tests pass with real local backend
+
 ## 0.9.2 - 2026-01-29
 
 ### Added

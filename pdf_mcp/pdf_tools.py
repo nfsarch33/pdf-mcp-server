@@ -13,7 +13,7 @@ This module provides PDF manipulation, OCR, and extraction capabilities:
 - Agentic AI: LLM-powered form filling, entity extraction, document analysis (v0.8.0+)
 - Local VLM: Cost-free local model integration via Qwen3-VL (v0.9.0+)
 
-Version: 0.9.2
+Version: 0.9.3
 License: AGPL-3.0
 """
 from __future__ import annotations
@@ -4223,6 +4223,7 @@ Return a JSON object with the extracted values."""
         "page_count": text_result.get("page_count", 0),
         "data_type": data_type,
         "backend": used_backend,
+        "backend_available": selected_backend if selected_backend else None,
     }
 
 
