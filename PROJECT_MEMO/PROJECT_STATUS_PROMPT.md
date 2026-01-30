@@ -1,10 +1,10 @@
-# Project Status Prompt (v1.0.1)
+# Project Status Prompt (v1.0.2)
 
 Use this prompt to sync status and plan next moves for `pdf-mcp-server`.
 
 ---
 
-Review the status and plan next moves (main branch is now v1.0.1 with Agent Skills, Subagents, and Hooks).
+Review the status and plan next moves (main branch is now v1.0.2 with documented Agent Extensions).
 
 Context
 - Repo: https://github.com/nfsarch33/pdf-mcp-server

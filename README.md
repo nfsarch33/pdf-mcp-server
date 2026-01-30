@@ -1,6 +1,6 @@
 # PDF MCP Server
 
-**Version 1.0.1** | MCP server for PDF form filling, editing, OCR text extraction, table extraction, image extraction, link extraction, and batch processing.
+**Version 1.0.2** | MCP server for PDF form filling, editing, OCR text extraction, table extraction, image extraction, link extraction, and batch processing.
 
 Built with Python, `pypdf`, `fillpdf`, and `pymupdf` (AGPL).
 
@@ -362,7 +362,53 @@ make install-llm-models
 ### Test Coverage
 - **268 tests** total (includes Tier 1/2 coverage + agentic features + multi-backend + e2e tests)
 - All tests pass with Tesseract installed
-- 12-18 tests skip depending on which optional dependencies/backends are available
+- 8 tests skip depending on which optional dependencies/backends are available
+
+## Agent Extensions (v1.0.1+)
+
+This project includes Agent Skills, Subagents, and Hooks for Cursor IDE integration.
+
+### Skills (`.cursor/skills/`)
+
+Skills are portable packages that teach agents domain-specific tasks. Invoke with `/skill-name` in Agent chat.
+
+| Skill | Description |
+|-------|-------------|
+| `release-sop` | End-to-end release checklist automation |
+| `llm-e2e-qa` | LLM E2E test and manual QA procedures |
+| `memo-kb-sync` | Bi-directional memory sync instructions |
+
+### Subagents (`.cursor/agents/`)
+
+Subagents are specialized AI assistants that handle specific types of work. Invoke with `/agent-name` or mention naturally.
+
+| Subagent | Description |
+|----------|-------------|
+| `verifier` | Validates completed work, runs tests, checks edge cases |
+| `debugger` | Root cause analysis specialist for errors |
+| `test-runner` | Proactive test automation expert |
+
+### Hooks (`.cursor/hooks.json`)
+
+Hooks observe and control agent behavior. This project includes:
+
+| Hook | Event | Purpose |
+|------|-------|---------|
+| `block-destructive.sh` | `beforeShellExecution` | Blocks dangerous commands (git reset --hard, rm -rf) |
+
+**Usage:**
+```bash
+# Skills are auto-discovered when Cursor starts
+# Invoke explicitly:
+/release-sop
+/llm-e2e-qa
+
+# Subagents can be invoked:
+/verifier confirm the tests pass
+/debugger investigate this error
+
+# Hooks run automatically based on their events
+```
 
 ## Development Workflow
 - Use feature branches off `main` and open a PR for review.

@@ -6,6 +6,15 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 1.0.2 - 2026-01-30
+
+### Added
+- README documentation for Agent Extensions (Skills, Subagents, Hooks)
+- Usage examples for skills, subagents, and hooks in README
+
+### Changed
+- Updated skipped test count from 12-18 to 8 (accurate after Tesseract install)
+
 ## 1.0.1 - 2026-01-30
 
 ### Added
