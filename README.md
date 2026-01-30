@@ -236,7 +236,7 @@ LLM-powered tools for intelligent PDF processing. **Uses local VLM by default (f
 
 - `get_llm_backend_info()`: Check which LLM backends are available (local, ollama, openai).
 - `auto_fill_pdf_form(pdf_path, output_path, source_data, backend=None)`: Intelligently fill form fields with LLM-powered field mapping.
-- `extract_structured_data(pdf_path, data_type=None, schema=None, backend=None)`: Extract structured data using pattern matching or LLM.
+- `extract_structured_data(pdf_path, data_type=None, schema=None, backend=None)`: Extract structured data using pattern matching or LLM (includes non-LLM `passport` extraction via MRZ + labels).
 - `analyze_pdf_content(pdf_path, include_summary=True, detect_entities=True, backend=None)`: Analyze PDF for document type classification, entity extraction, and summarization.
 
 **Backend Priority (v0.9.0+):**

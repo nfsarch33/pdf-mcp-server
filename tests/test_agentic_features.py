@@ -81,6 +81,30 @@ def sample_text_pdf(tmp_path):
 
 
 @pytest.fixture
+def sample_passport_pdf(tmp_path):
+    """Create a PDF with passport-like MRZ and labels for extraction."""
+    import pymupdf
+    output = tmp_path / "passport.pdf"
+    doc = pymupdf.open()
+    page = doc.new_page()
+    text = """
+    Passport
+    Surname: ERIKSSON
+    Given Names: ANNA MARIA
+    Nationality: UTO
+    Date of Issue: 01 Jan 2015
+    Issuing Authority: UTOPIA
+
+    P<UTOERIKSSON<<ANNA<MARIA<<<<<<<<<<<<<<<<<<<
+    L898902C36UTO7408122F1204159ZE184226B<<<<<10
+    """
+    page.insert_text((72, 72), text, fontsize=11)
+    doc.save(str(output))
+    doc.close()
+    return str(output)
+
+
+@pytest.fixture
 def mock_openai_response():
     """Create a mock OpenAI response."""
     def _create_mock(content):
@@ -425,6 +449,26 @@ class TestAgenticIntegration:
         
         # Should attempt pattern-based extraction
         assert isinstance(result, dict)
+
+    def test_extract_structured_data_passport_mrz(self, sample_passport_pdf):
+        """Should extract key passport fields from MRZ and labels."""
+        result = pdf_tools.extract_structured_data(
+            sample_passport_pdf,
+            data_type="passport"
+        )
+
+        assert isinstance(result, dict)
+        data = result.get("data", {})
+        assert data.get("passport_number") == "L898902C3"
+        assert data.get("nationality") == "UTO"
+        assert data.get("birth_date") == "1974-08-12"
+        assert data.get("expiry_date") == "2012-04-15"
+        assert data.get("sex") == "F"
+        assert data.get("surname") == "ERIKSSON"
+        assert data.get("given_names") == "ANNA MARIA"
+        assert data.get("issuing_country") == "UTO"
+        assert data.get("issue_date") == "2015-01-01"
+        assert data.get("issuing_authority") == "UTOPIA"
 
     def test_analyze_pdf_basic_analysis(self, sample_text_pdf):
         """Without LLM, should provide basic document analysis."""

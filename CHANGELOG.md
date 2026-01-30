@@ -6,6 +6,10 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+### Added
+- Non-LLM passport extraction via `extract_structured_data(data_type="passport")` using MRZ parsing and label heuristics.
+- Issue date and issuing authority extraction for passport scans when OCR text is available.
+
 ## 1.0.2 - 2026-01-30
 
 ### Added

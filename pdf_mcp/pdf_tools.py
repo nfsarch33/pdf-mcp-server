@@ -25,7 +25,7 @@ import re
 import secrets
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
@@ -4069,6 +4069,135 @@ Only include mappings you're confident about."""
     }
 
 
+def _parse_mrz_date(value: str) -> Optional[str]:
+    if not value or len(value) != 6 or not value.isdigit():
+        return None
+    year = int(value[0:2])
+    month = int(value[2:4])
+    day = int(value[4:6])
+    current_year = date.today().year % 100
+    century = 2000 if year <= current_year else 1900
+    full_year = century + year
+    try:
+        return f"{full_year:04d}-{month:02d}-{day:02d}"
+    except ValueError:
+        return None
+
+
+def _normalize_issue_date(value: str) -> Optional[str]:
+    if not value:
+        return None
+    candidate = value.strip()
+    formats = (
+        "%d %b %Y",
+        "%d %B %Y",
+        "%Y-%m-%d",
+        "%Y/%m/%d",
+        "%d/%m/%Y",
+        "%m/%d/%Y",
+        "%d-%m-%Y",
+        "%m-%d-%Y",
+        "%d/%m/%y",
+        "%m/%d/%y",
+        "%d-%m-%y",
+        "%m-%d-%y",
+    )
+    for fmt in formats:
+        try:
+            return datetime.strptime(candidate, fmt).date().isoformat()
+        except ValueError:
+            continue
+    return None
+
+
+def _extract_mrz_lines(text: str) -> Optional[tuple[str, str]]:
+    lines = []
+    for line in text.splitlines():
+        cleaned = re.sub(r"\s", "", line.strip())
+        if "<" in cleaned and len(cleaned) >= 30:
+            lines.append(cleaned)
+    for i in range(len(lines) - 1):
+        if len(lines[i]) == 44 and len(lines[i + 1]) == 44:
+            return lines[i], lines[i + 1]
+    return None
+
+
+def _extract_passport_fields(full_text: str) -> tuple[Dict[str, Any], Dict[str, float]]:
+    extracted: Dict[str, Any] = {}
+    confidence: Dict[str, float] = {}
+
+    mrz = _extract_mrz_lines(full_text)
+    if mrz:
+        line1, line2 = mrz
+        if line1.startswith("P<"):
+            issuing_country = line1[2:5].replace("<", "").strip()
+            names = line1[5:]
+            surname = ""
+            given_names = ""
+            if "<<" in names:
+                surname_part, given_part = names.split("<<", 1)
+                surname = surname_part.replace("<", " ").strip()
+                given_names = given_part.replace("<", " ").strip()
+            passport_number = line2[0:9].replace("<", "").strip()
+            nationality = line2[10:13].replace("<", "").strip()
+            birth_raw = line2[13:19]
+            sex = line2[20:21].replace("<", "").strip()
+            expiry_raw = line2[21:27]
+            personal_number = line2[28:42].replace("<", "").strip()
+
+            birth_date = _parse_mrz_date(birth_raw)
+            expiry_date = _parse_mrz_date(expiry_raw)
+
+            extracted.update({
+                "passport_number": passport_number or None,
+                "issuing_country": issuing_country or None,
+                "nationality": nationality or None,
+                "surname": surname or None,
+                "given_names": given_names or None,
+                "birth_date": birth_date or birth_raw,
+                "sex": sex or None,
+                "expiry_date": expiry_date or expiry_raw,
+                "personal_number": personal_number or None,
+            })
+            confidence.update({
+                "passport_number": 0.85,
+                "issuing_country": 0.8,
+                "nationality": 0.8,
+                "surname": 0.75,
+                "given_names": 0.75,
+                "birth_date": 0.85,
+                "sex": 0.9,
+                "expiry_date": 0.85,
+                "personal_number": 0.6,
+            })
+
+    issue_date_patterns = [
+        r"(?:date of issue|issue date|issued on)\s*[:\-]?\s*([0-9]{1,2}\s*[A-Za-z]{3,9}\s*\d{2,4}|\d{4}[/-]\d{1,2}[/-]\d{1,2}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4})",
+        r"(?:\u7b7e\u53d1\u65e5\u671f|\u53d1\u8bc1\u65e5\u671f)\s*[:\-\uFF1A]?\s*([0-9]{4}[.\-/][0-9]{1,2}[.\-/][0-9]{1,2})",
+    ]
+    for pattern in issue_date_patterns:
+        match = re.search(pattern, full_text, re.IGNORECASE)
+        if match:
+            raw_issue_date = match.group(1).strip()
+            normalized_issue_date = _normalize_issue_date(raw_issue_date)
+            extracted["issue_date"] = normalized_issue_date or raw_issue_date
+            confidence["issue_date"] = 0.6
+            break
+
+    issuing_authority_patterns = [
+        r"(?:issuing authority|authority)\s*[:\-]?\s*([A-Za-z0-9 ,.-]+)",
+        r"(?:\u7b7e\u53d1\u673a\u5173)\s*[:\-\uFF1A]?\s*([^\n]+)",
+    ]
+    for pattern in issuing_authority_patterns:
+        match = re.search(pattern, full_text, re.IGNORECASE)
+        if match:
+            extracted["issuing_authority"] = match.group(1).strip()
+            confidence["issuing_authority"] = 0.6
+            break
+
+    return extracted, confidence
+
+
 def extract_structured_data(
     pdf_path: str,
     data_type: Optional[str] = None,
@@ -4087,7 +4216,7 @@ def extract_structured_data(
 
     Args:
         pdf_path: Path to the PDF file
-        data_type: Predefined type: "invoice", "receipt", "contract", "form", or None
+        data_type: Predefined type: "invoice", "receipt", "contract", "form", "passport", or None
         schema: Custom extraction schema as Dict[field_name, field_type]
                 Types: "string", "number", "date", "currency", "list"
         pages: Optional list of 1-based page numbers (default: all)
@@ -4119,6 +4248,18 @@ def extract_structured_data(
     full_text = text_result.get("text", "")
     if not full_text.strip():
         return {"error": "No text content found in PDF", "page_count": text_result.get("page_count", 0)}
+
+    if data_type == "passport":
+        extracted_data, confidence = _extract_passport_fields(full_text)
+        return {
+            "data": extracted_data,
+            "confidence": confidence,
+            "method": "passport",
+            "page_count": text_result.get("page_count", 0),
+            "data_type": data_type,
+            "backend": None,
+            "backend_available": None,
+        }
 
     # Define patterns for common data types
     patterns = {

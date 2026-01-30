@@ -1088,7 +1088,7 @@ def extract_structured_data(
 
     Args:
         pdf_path: Path to the PDF file
-        data_type: Predefined type: "invoice", "receipt", "contract", "form", or None
+        data_type: Predefined type: "invoice", "receipt", "contract", "form", "passport", or None
         schema: Custom extraction schema as Dict[field_name, field_type]
                 Types: "string", "number", "date", "currency", "list"
         pages: Optional list of 1-based page numbers (default: all)
