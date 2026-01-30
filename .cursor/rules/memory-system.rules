@@ -43,6 +43,10 @@ Your system has three memory layers that work together automatically:
 | Procedure or guide discovered | Update Pepper only | Layer 2 |
 | Investigation completed | Write to global-kb/ | Layer 3 |
 
+## Tool Usage Priority
+
+- Prefer MCP tools first for relevant operations; use shell only when no suitable MCP tool exists.
+
 ### Quality Gates (Before Creating Cursor Memory)
 
 1. Is this needed every conversation?
