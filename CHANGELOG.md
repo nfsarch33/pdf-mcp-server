@@ -6,6 +6,29 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 1.0.1 - 2026-01-30
+
+### Added
+- **Agent Skills**: Project-level skills in `.cursor/skills/`
+  - `release-sop`: End-to-end release checklist automation
+  - `llm-e2e-qa`: LLM E2E test and manual QA instructions
+  - `memo-kb-sync`: Bi-directional memory sync procedures
+- **Subagents**: Custom AI assistants in `.cursor/agents/`
+  - `verifier`: Validates completed work (skeptical validator)
+  - `debugger`: Root cause analysis specialist
+  - `test-runner`: Proactive test automation
+- **Hooks**: Agent behavior control in `.cursor/hooks.json`
+  - `beforeShellExecution`: Blocks destructive commands (git reset --hard, rm -rf)
+
+### Changed
+- Tesseract OCR verified working (v5.5.2)
+- Test coverage confirmed: 260 passed, 8 skipped (stable)
+
+### Technical Notes
+- Skills use YAML frontmatter with name and description
+- Subagents can be invoked explicitly via /name syntax
+- Hooks run via `block-destructive.sh` shell script
+
 ## 1.0.0 - 2026-01-30
 
 ### Milestone: Production Release
