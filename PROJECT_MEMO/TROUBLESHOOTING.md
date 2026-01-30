@@ -18,6 +18,14 @@ Hard requirement tools:
 - `fill_pdf_form`
 - `clear_pdf_form_fields`
 
+## OCR language packs
+
+If OCR output is noisy for passports or non-English documents:
+- Run `make check-tesseract` to confirm Tesseract availability.
+- Use `get_ocr_languages()` to list installed languages.
+- Install additional language packs (Linux):
+  - `tesseract-ocr-chi-tra`, `tesseract-ocr-jpn`, `tesseract-ocr-kor`
+
 ## Signature + encryption workflow
 
 Use “sign then encrypt”:

@@ -1,6 +1,6 @@
 # PDF MCP Server
 
-**Version 1.0.3** | MCP server for PDF form filling, editing, OCR text extraction, table extraction, image extraction, link extraction, and batch processing.
+**Version 1.0.4** | MCP server for PDF form filling, editing, OCR text extraction, table extraction, image extraction, link extraction, and batch processing.
 
 Built with Python, `pypdf`, `fillpdf`, and `pymupdf` (AGPL).
 
@@ -70,6 +70,11 @@ sudo apt-get install tesseract-ocr
 pip install pytesseract pillow
 ```
 
+**Additional language packs (optional):**
+```bash
+sudo apt-get install tesseract-ocr-chi-tra tesseract-ocr-jpn tesseract-ocr-kor
+```
+
 Or install with the `ocr` extra:
 ```bash
 pip install -e ".[ocr]"
@@ -100,7 +105,7 @@ Restart Cursor after saving.
 
 | Category | Tools | Description |
 |----------|-------|-------------|
-| **Form Handling** | 6 tools | Fill, clear, flatten, and create PDF forms |
+| **Form Handling** | 8 tools | Fill, clear, flatten, and create PDF forms |
 | **Page Operations** | 5 tools | Merge, extract, rotate, reorder, insert, remove pages |
 | **Annotations** | 11 tools | Text annotations, comments, watermarks, redaction, numbering, highlights |
 | **Signatures & Security** | 7 tools | Digital signing, verification, encryption |
@@ -127,6 +132,8 @@ Restart Cursor after saving.
 - `clear_pdf_form_fields(input_path, output_path, fields=None)`: clear values while keeping fields fillable.
 - `flatten_pdf(input_path, output_path)`: flatten forms/annotations.
 - `create_pdf_form(output_path, fields, page_size=None, pages=1)`: create a new PDF with AcroForm fields.
+- `get_form_templates()`: list built-in templates for common workflows.
+- `create_pdf_form_from_template(output_path, template_name)`: create a form from a built-in template.
 Note: XFA/LiveCycle forms are not supported; convert to AcroForm or flatten first.
 
 ### Page Operations
@@ -238,7 +245,7 @@ LLM-powered tools for intelligent PDF processing. **Uses local VLM by default (f
 
 - `get_llm_backend_info()`: Check which LLM backends are available (local, ollama, openai).
 - `auto_fill_pdf_form(pdf_path, output_path, source_data, backend=None)`: Intelligently fill form fields with LLM-powered field mapping.
-- `extract_structured_data(pdf_path, data_type=None, schema=None, backend=None)`: Extract structured data using pattern matching or LLM (includes non-LLM `passport` extraction via MRZ + labels).
+- `extract_structured_data(pdf_path, data_type=None, schema=None, ocr_engine="auto", ocr_language="eng", backend=None)`: Extract structured data using pattern matching or LLM (includes non-LLM `passport` extraction via MRZ + labels). Use `ocr_language` for non-English OCR.
 - `analyze_pdf_content(pdf_path, include_summary=True, detect_entities=True, backend=None)`: Analyze PDF for document type classification, entity extraction, and summarization.
 
 **Backend Priority (v0.9.0+):**

@@ -19,7 +19,7 @@ Available tool categories:
 - Consolidated API (3 tools)
 - Agentic AI (4 tools) - v0.8.0+, local VLM support v0.9.0+
 
-Version: 1.0.3
+Version: 1.0.4
 License: AGPL-3.0
 """
 from __future__ import annotations
@@ -97,6 +97,20 @@ def create_pdf_form(
 ) -> Dict[str, Any]:
     """Create a new PDF with AcroForm fields."""
     return pdf_tools.create_pdf_form(output_path, fields, page_size=page_size, pages=pages)
+
+
+@mcp.tool()
+@_handle_errors
+def get_form_templates() -> Dict[str, Any]:
+    """List built-in form templates for common workflows."""
+    return pdf_tools.get_form_templates()
+
+
+@mcp.tool()
+@_handle_errors
+def create_pdf_form_from_template(output_path: str, template_name: str) -> Dict[str, Any]:
+    """Create a PDF form using a built-in template."""
+    return pdf_tools.create_pdf_form_from_template(output_path, template_name)
 
 
 @mcp.tool()
@@ -1075,6 +1089,8 @@ def extract_structured_data(
     data_type: Optional[str] = None,
     schema: Optional[Dict[str, str]] = None,
     pages: Optional[List[int]] = None,
+    ocr_engine: str = "auto",
+    ocr_language: str = "eng",
     model: str = "auto",
     backend: Optional[str] = None,
 ) -> Dict[str, Any]:
@@ -1092,6 +1108,8 @@ def extract_structured_data(
         schema: Custom extraction schema as Dict[field_name, field_type]
                 Types: "string", "number", "date", "currency", "list"
         pages: Optional list of 1-based page numbers (default: all)
+        ocr_engine: OCR engine for image-based docs ("auto", "ocr", "tesseract", "force_ocr")
+        ocr_language: Tesseract language code (default: "eng")
         model: Model to use (default: auto-select based on backend)
         backend: Force specific backend: "local", "ollama", or "openai" (default: auto)
 
@@ -1099,7 +1117,14 @@ def extract_structured_data(
         Dict with extracted data, confidence scores, extraction method, and backend used
     """
     return pdf_tools.extract_structured_data(
-        pdf_path, data_type=data_type, schema=schema, pages=pages, model=model, backend=backend
+        pdf_path,
+        data_type=data_type,
+        schema=schema,
+        pages=pages,
+        ocr_engine=ocr_engine,
+        ocr_language=ocr_language,
+        model=model,
+        backend=backend,
     )
 
 

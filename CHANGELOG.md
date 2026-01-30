@@ -6,6 +6,16 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 1.0.4 - 2026-01-31
+
+### Added
+- `get_form_templates` and `create_pdf_form_from_template` for common client workflows.
+- OCR options for `extract_structured_data` (`ocr_engine`, `ocr_language`) to improve passport scans.
+
+### Changed
+- Improved non-standard form label matching and checkbox handling in `fill_pdf_form_any`.
+- Expanded passport issue date/issuing authority label patterns.
+
 ## 1.0.3 - 2026-01-30
 
 ### Added

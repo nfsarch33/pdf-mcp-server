@@ -13,7 +13,7 @@ This module provides PDF manipulation, OCR, and extraction capabilities:
 - Agentic AI: LLM-powered form filling, entity extraction, document analysis (v0.8.0+)
 - Local VLM: Cost-free local model integration via Qwen3-VL (v0.9.0+)
 
-Version: 1.0.3
+Version: 1.0.4
 License: AGPL-3.0
 """
 from __future__ import annotations
@@ -272,6 +272,47 @@ def _normalize_field_key(value: str) -> str:
     return re.sub(r"[^a-z0-9]", "", value.lower())
 
 
+def _field_tokens(value: str) -> List[str]:
+    tokens = re.findall(r"[a-z0-9]+", value.lower())
+    if not tokens:
+        return []
+    stopwords = {
+        "the",
+        "and",
+        "of",
+        "to",
+        "for",
+        "please",
+        "select",
+        "check",
+        "mark",
+        "if",
+        "applicable",
+        "yes",
+        "no",
+    }
+    return [t for t in tokens if t not in stopwords]
+
+
+def _score_label_match(key: str, label_normalized: str, label_tokens: List[str]) -> int:
+    key_normalized = _normalize_field_key(key)
+    if not key_normalized:
+        return 0
+    if key_normalized == label_normalized:
+        return 3
+    if key_normalized in label_normalized or label_normalized in key_normalized:
+        return 2
+    key_tokens = _field_tokens(key)
+    if not key_tokens or not label_tokens:
+        return 0
+    overlap = set(key_tokens) & set(label_tokens)
+    if not overlap:
+        return 0
+    if len(overlap) == len(set(key_tokens)):
+        return 2
+    return 1
+
+
 def _is_truthy(value: Any) -> bool:
     if isinstance(value, bool):
         return value
@@ -417,6 +458,82 @@ def create_pdf_form(
     }
 
 
+_FORM_TEMPLATES: Dict[str, Dict[str, Any]] = {
+    "client_intake_basic": {
+        "description": "Basic client intake (contact + ID + consent)",
+        "fields": [
+            {"name": "Full Name", "type": "text", "rect": [50, 760, 300, 780]},
+            {"name": "Date of Birth", "type": "text", "rect": [320, 760, 520, 780]},
+            {"name": "Email", "type": "text", "rect": [50, 725, 300, 745]},
+            {"name": "Phone", "type": "text", "rect": [320, 725, 520, 745]},
+            {"name": "Address", "type": "text", "rect": [50, 690, 520, 710], "multiline": True},
+            {"name": "Passport Number", "type": "text", "rect": [50, 645, 250, 665]},
+            {"name": "Nationality", "type": "text", "rect": [270, 645, 520, 665]},
+            {"name": "Travel Dates", "type": "text", "rect": [50, 610, 300, 630]},
+            {"name": "Overseas Address", "type": "text", "rect": [50, 575, 520, 595], "multiline": True},
+            {"name": "Consent", "type": "checkbox", "rect": [50, 535, 65, 550]},
+        ],
+    },
+    "payment_receipt_basic": {
+        "description": "Payment receipt (payer + amount + method)",
+        "fields": [
+            {"name": "Receipt Number", "type": "text", "rect": [50, 760, 240, 780]},
+            {"name": "Receipt Date", "type": "text", "rect": [260, 760, 520, 780]},
+            {"name": "Payer Name", "type": "text", "rect": [50, 725, 300, 745]},
+            {"name": "Amount", "type": "text", "rect": [320, 725, 520, 745]},
+            {"name": "Payment Method", "type": "text", "rect": [50, 690, 300, 710]},
+            {"name": "Reference", "type": "text", "rect": [320, 690, 520, 710]},
+            {"name": "Notes", "type": "text", "rect": [50, 650, 520, 670], "multiline": True},
+        ],
+    },
+    "travel_authorization_basic": {
+        "description": "Travel authorization (traveler + itinerary + signature)",
+        "fields": [
+            {"name": "Traveler Name", "type": "text", "rect": [50, 760, 300, 780]},
+            {"name": "Passport Number", "type": "text", "rect": [320, 760, 520, 780]},
+            {"name": "Departure Date", "type": "text", "rect": [50, 725, 240, 745]},
+            {"name": "Return Date", "type": "text", "rect": [260, 725, 520, 745]},
+            {"name": "Destination", "type": "text", "rect": [50, 690, 300, 710]},
+            {"name": "Purpose of Travel", "type": "text", "rect": [50, 655, 520, 675], "multiline": True},
+            {"name": "Approver Name", "type": "text", "rect": [50, 610, 300, 630]},
+            {"name": "Signature", "type": "text", "rect": [320, 610, 520, 630]},
+        ],
+    },
+}
+
+
+def get_form_templates() -> Dict[str, Any]:
+    """
+    Return built-in form templates for common client workflows.
+
+    Returns:
+        Dict with template names, descriptions, and field definitions.
+    """
+    return {
+        "templates": {
+            name: {
+                "description": meta["description"],
+                "fields": meta["fields"],
+            }
+            for name, meta in _FORM_TEMPLATES.items()
+        }
+    }
+
+
+def create_pdf_form_from_template(output_path: str, template_name: str) -> Dict[str, Any]:
+    """
+    Create a PDF form using a built-in template.
+
+    Args:
+        output_path: Path to the output PDF
+        template_name: One of the names returned by get_form_templates()
+    """
+    template = _FORM_TEMPLATES.get(template_name)
+    if not template:
+        raise PdfToolError(f"Unknown template: {template_name}")
+    return create_pdf_form(output_path=output_path, fields=template["fields"], pages=1)
+
+
 def get_pdf_form_fields(pdf_path: str) -> Dict:
     path = _ensure_file(pdf_path)
     reader = PdfReader(str(path))
@@ -536,7 +653,13 @@ def fill_pdf_form_any(
     for entry in detected:
         label = entry.get("text", "")
         if label:
-            normalized_labels.append((_normalize_field_key(label), entry))
+            normalized_labels.append(
+                {
+                    "normalized": _normalize_field_key(label),
+                    "tokens": _field_tokens(label),
+                    "entry": entry,
+                }
+            )
 
     writer = PdfWriter()
     writer.clone_document_from_reader(reader)
@@ -544,12 +667,22 @@ def fill_pdf_form_any(
     filled = 0
     missing = []
     page_analysis = {p["page"]: p for p in detection.get("page_analysis", [])}
+    used_indices = set()
     for key, value in data.items():
-        normalized_key = _normalize_field_key(str(key))
-        match = next((entry for n, entry in normalized_labels if n == normalized_key or normalized_key in n), None)
-        if match is None:
+        best_score = 0
+        best_index = None
+        for idx, candidate in enumerate(normalized_labels):
+            if idx in used_indices:
+                continue
+            score = _score_label_match(str(key), candidate["normalized"], candidate["tokens"])
+            if score > best_score:
+                best_score = score
+                best_index = idx
+        if best_index is None:
             missing.append(str(key))
             continue
+        used_indices.add(best_index)
+        match = normalized_labels[best_index]["entry"]
 
         page_num = match.get("page", 1)
         page_index = int(page_num) - 1
@@ -571,7 +704,12 @@ def fill_pdf_form_any(
             missing.append(str(key))
             continue
 
-        text_value = "X" if match.get("type") == "checkbox" and _is_truthy(value) else str(value)
+        if match.get("type") == "checkbox":
+            if not _is_truthy(value):
+                continue
+            text_value = "X"
+        else:
+            text_value = str(value)
         annotation_id = secrets.token_hex(8)
         _add_freetext_annotation(writer, writer.pages[page_index], text_value, rect, annotation_id)
         filled += 1
@@ -2473,6 +2611,8 @@ def detect_form_fields(
         re.compile(r"^(ssn|social security|tax id|ein)\s*:?\s*$", re.I),
         re.compile(r"^(amount|total|subtotal|price)\s*:?\s*$", re.I),
         re.compile(r"^(comments?|notes?|remarks?)\s*:?\s*$", re.I),
+        re.compile(r"^[a-z0-9][a-z0-9 \-/#(),]{1,80}:\s*$", re.I),
+        re.compile(r"^[a-z0-9].*_{3,}\s*$", re.I),
     ]
 
     # Checkbox/selection patterns
@@ -4248,7 +4388,7 @@ def _extract_passport_fields(full_text: str) -> tuple[Dict[str, Any], Dict[str, 
             confidence["passport_number"] = 0.55
 
     issue_date_patterns = [
-        r"(?:date of issue|issue date|issued on)\s*[:\-]?\s*([0-9]{1,2}\s*[A-Za-z]{3,9}\s*\d{2,4}|\d{4}[/-]\d{1,2}[/-]\d{1,2}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4})",
+        r"(?:date of issue|issue date|date of issuance|issued on|issued)\s*[:\-]?\s*([0-9]{1,2}\s*[A-Za-z]{3,9}\s*\d{2,4}|\d{4}[/-]\d{1,2}[/-]\d{1,2}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4})",
         r"(?:\u7b7e\u53d1\u65e5\u671f|\u53d1\u8bc1\u65e5\u671f)\s*[:\-\uFF1A]?\s*([0-9]{4}[.\-/][0-9]{1,2}[.\-/][0-9]{1,2})",
     ]
     for pattern in issue_date_patterns:
@@ -4261,8 +4401,8 @@ def _extract_passport_fields(full_text: str) -> tuple[Dict[str, Any], Dict[str, 
             break
 
     issuing_authority_patterns = [
-        r"(?:issuing authority|authority)\s*[:\-]?\s*([A-Za-z0-9 ,.-]+)",
-        r"(?:\u7b7e\u53d1\u673a\u5173)\s*[:\-\uFF1A]?\s*([^\n]+)",
+        r"(?:issuing authority|issue authority|issuing office|authority|place of issue|place of issuance)\s*[:\-]?\s*([^\n\r]+)",
+        r"(?:\u7b7e\u53d1\u673a\u5173|\u7b7e\u53d1\u5730)\s*[:\-\uFF1A]?\s*([^\n\r]+)",
     ]
     for pattern in issuing_authority_patterns:
         match = re.search(pattern, full_text, re.IGNORECASE)
@@ -4279,6 +4419,8 @@ def extract_structured_data(
     data_type: Optional[str] = None,
     schema: Optional[Dict[str, str]] = None,
     pages: Optional[List[int]] = None,
+    ocr_engine: str = "auto",
+    ocr_language: str = "eng",
     model: str = "auto",
     backend: Optional[str] = None,
 ) -> Dict[str, Any]:
@@ -4296,6 +4438,8 @@ def extract_structured_data(
         schema: Custom extraction schema as Dict[field_name, field_type]
                 Types: "string", "number", "date", "currency", "list"
         pages: Optional list of 1-based page numbers (default: all)
+        ocr_engine: OCR engine for image-based docs ("auto", "ocr", "tesseract", "force_ocr")
+        ocr_language: Tesseract language code (default: "eng")
         model: Model to use (default: auto-select based on backend)
         backend: Force specific backend: "local", "ollama", or "openai" (default: auto)
 
@@ -4317,7 +4461,7 @@ def extract_structured_data(
         return {"error": str(e)}
 
     # Extract text from PDF
-    text_result = extract_text(str(src), pages=pages, engine="auto")
+    text_result = extract_text(str(src), pages=pages, engine=ocr_engine, language=ocr_language)
     if "error" in text_result:
         return text_result
 

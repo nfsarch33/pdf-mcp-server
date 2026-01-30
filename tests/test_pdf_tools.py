@@ -242,6 +242,18 @@ def test_create_pdf_form_and_fill(tmp_path: Path):
     assert Path(res["output_path"]).exists()
 
 
+def test_create_pdf_form_from_template(tmp_path: Path):
+    templates = pdf_tools.get_form_templates()
+    assert "client_intake_basic" in templates.get("templates", {})
+
+    out = tmp_path / "template_form.pdf"
+    result = pdf_tools.create_pdf_form_from_template(str(out), "client_intake_basic")
+    assert Path(result["output_path"]).exists()
+
+    fields = pdf_tools.get_pdf_form_fields(str(out))
+    assert fields["count"] >= 1
+
+
 def test_fill_pdf_form_any_nonstandard(tmp_path: Path):
     src = _make_nonstandard_form_pdf(tmp_path / "nonstandard.pdf")
     out = tmp_path / "nonstandard_filled.pdf"
@@ -711,6 +723,20 @@ def test_mcp_layer_can_call_all_tools(tmp_path: Path):
                 "fields": [{"name": "Name", "type": "text", "rect": [50, 100, 250, 130]}],
                 "pages": 1,
             },
+        )
+    )
+    assert Path(res["output_path"]).exists()
+
+    # get_form_templates
+    templates = asyncio.run(call("get_form_templates", {}))
+    assert "client_intake_basic" in templates.get("templates", {})
+
+    # create_pdf_form_from_template
+    template_form = tmp_path / "mcp_template_form.pdf"
+    res = asyncio.run(
+        call(
+            "create_pdf_form_from_template",
+            {"output_path": str(template_form), "template_name": "client_intake_basic"},
         )
     )
     assert Path(res["output_path"]).exists()
