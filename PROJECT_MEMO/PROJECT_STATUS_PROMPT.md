@@ -1,10 +1,10 @@
-# Project Status Prompt (v0.9.9)
+# Project Status Prompt (v1.0.0)
 
 Use this prompt to sync status and plan next moves for `pdf-mcp-server`.
 
 ---
 
-Review the status and plan next moves (main branch is now v0.9.9).
+Review the status and plan next moves (main branch is now v1.0.0 - Production Release).
 
 Context
 - Repo: https://github.com/nfsarch33/pdf-mcp-server
