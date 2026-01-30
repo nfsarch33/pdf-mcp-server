@@ -169,6 +169,20 @@ def _safe_value(value):
     return str(value)
 
 
+def _has_xfa_form(reader: PdfReader) -> bool:
+    try:
+        root = reader.trailer.get("/Root")
+        if not root:
+            return False
+        acro_form = root.get("/AcroForm")
+        if not acro_form:
+            return False
+        acro_obj = acro_form.get_object() if hasattr(acro_form, "get_object") else acro_form
+        return bool(acro_obj.get("/XFA"))
+    except Exception:
+        return False
+
+
 def _flatten_writer(writer: PdfWriter) -> None:
     # Remove annotations and form field structures so the document is no longer editable.
     annots_key = NameObject("/Annots")
@@ -406,6 +420,13 @@ def create_pdf_form(
 def get_pdf_form_fields(pdf_path: str) -> Dict:
     path = _ensure_file(pdf_path)
     reader = PdfReader(str(path))
+    if _has_xfa_form(reader):
+        return {
+            "error": "XFA forms are not supported. Convert to AcroForm or flatten first.",
+            "xfa": True,
+            "fields": {},
+            "count": 0,
+        }
     fields = reader.get_fields()
     return {"fields": _simplify_fields(fields), "count": len(fields or {})}
 
@@ -420,6 +441,10 @@ def fill_pdf_form(
     dst = _prepare_output(output_path)
 
     reader = PdfReader(str(src))
+    if _has_xfa_form(reader):
+        raise PdfToolError(
+            "XFA forms are not supported. Convert to AcroForm or flatten first."
+        )
     has_fields = bool(reader.get_fields())
 
     if _HAS_FILLPDF and has_fields:
@@ -491,6 +516,10 @@ def fill_pdf_form_any(
     src = _ensure_file(input_path)
     dst = _prepare_output(output_path)
     reader = PdfReader(str(src))
+    if _has_xfa_form(reader):
+        raise PdfToolError(
+            "XFA forms are not supported. Convert to AcroForm or flatten first."
+        )
     has_fields = bool(reader.get_fields())
 
     if has_fields:
@@ -4170,6 +4199,53 @@ def _extract_passport_fields(full_text: str) -> tuple[Dict[str, Any], Dict[str, 
                 "expiry_date": 0.85,
                 "personal_number": 0.6,
             })
+
+    def _label_value(patterns: list[str]) -> Optional[str]:
+        for pattern in patterns:
+            match = re.search(pattern, full_text, re.IGNORECASE | re.MULTILINE)
+            if match:
+                return match.group(1).strip()
+        return None
+
+    if not extracted.get("surname"):
+        surname_value = _label_value([
+            r"(?:surname|last name)\s*[:\-]?\s*([^\n\r]+)",
+        ])
+        if surname_value:
+            extracted["surname"] = surname_value
+            confidence["surname"] = 0.55
+
+    if not extracted.get("given_names"):
+        given_value = _label_value([
+            r"(?:given names?|first name|forename)\s*[:\-]?\s*([^\n\r]+)",
+        ])
+        if given_value:
+            extracted["given_names"] = given_value
+            confidence["given_names"] = 0.55
+
+    if not extracted.get("nationality"):
+        nationality_value = _label_value([
+            r"(?:nationality)\s*[:\-]?\s*([^\n\r]+)",
+        ])
+        if nationality_value:
+            extracted["nationality"] = nationality_value
+            confidence["nationality"] = 0.55
+
+    if not extracted.get("issuing_country"):
+        issuing_country_value = _label_value([
+            r"(?:issuing country|country of issue)\s*[:\-]?\s*([^\n\r]+)",
+        ])
+        if issuing_country_value:
+            extracted["issuing_country"] = issuing_country_value
+            confidence["issuing_country"] = 0.55
+
+    if not extracted.get("passport_number"):
+        passport_number_value = _label_value([
+            r"(?:passport number|passport no\.?|document number)\s*[:\-]?\s*([^\n\r]+)",
+        ])
+        if passport_number_value:
+            extracted["passport_number"] = passport_number_value.replace("<", "").strip()
+            confidence["passport_number"] = 0.55
 
     issue_date_patterns = [
         r"(?:date of issue|issue date|issued on)\s*[:\-]?\s*([0-9]{1,2}\s*[A-Za-z]{3,9}\s*\d{2,4}|\d{4}[/-]\d{1,2}[/-]\d{1,2}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4})",

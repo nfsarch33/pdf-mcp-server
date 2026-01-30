@@ -127,6 +127,7 @@ Restart Cursor after saving.
 - `clear_pdf_form_fields(input_path, output_path, fields=None)`: clear values while keeping fields fillable.
 - `flatten_pdf(input_path, output_path)`: flatten forms/annotations.
 - `create_pdf_form(output_path, fields, page_size=None, pages=1)`: create a new PDF with AcroForm fields.
+Note: XFA/LiveCycle forms are not supported; convert to AcroForm or flatten first.
 
 ### Page Operations
 - `merge_pdfs(pdf_list, output_path)`: merge multiple PDFs.
@@ -171,6 +172,7 @@ Restart Cursor after saving.
 - `extract_text(pdf_path, engine="auto", pages=None, include_confidence=False, ...)`: unified text extraction. Engines: "native", "auto", "smart", "ocr", "force_ocr". Set `include_confidence=True` for word-level confidence scores.
 - `get_pdf_text_blocks(pdf_path, pages=None)`: extract text blocks with bounding box positions (useful for form field detection).
 - `get_ocr_languages()`: get available Tesseract languages and installation status.
+Optional language packs: `chi_tra`, `jpn`, `kor` improve OCR for low-quality scans.
 
 ### Table Extraction
 - `extract_tables(pdf_path, pages=None, output_format="list")`: extract tables as structured data; format "list" or "dict" (with headers).
@@ -360,9 +362,9 @@ make install-llm-models
 - **OpenAI**: Set `OPENAI_API_KEY` environment variable (costs money!)
 
 ### Test Coverage
-- **268 tests** total (includes Tier 1/2 coverage + agentic features + multi-backend + e2e tests)
+- **273 tests** total (includes Tier 1/2 coverage + agentic features + multi-backend + e2e tests)
 - All tests pass with Tesseract installed
-- 8 tests skip depending on which optional dependencies/backends are available
+- 18 tests skip depending on which optional dependencies/backends are available
 
 ## Agent Extensions (v1.0.1+)
 

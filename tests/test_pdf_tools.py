@@ -27,6 +27,17 @@ def _make_pdf(path: Path, pages: int = 1) -> Path:
     return path
 
 
+def _make_xfa_pdf(path: Path) -> Path:
+    writer = PdfWriter()
+    writer.add_blank_page(width=200, height=200)
+    acro_form = DictionaryObject({NameObject("/XFA"): TextStringObject("dummy")})
+    writer._root_object.update({NameObject("/AcroForm"): writer._add_object(acro_form)})  # type: ignore[attr-defined]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("wb") as f:
+        writer.write(f)
+    return path
+
+
 def _make_form_pdf(path: Path) -> Path:
     writer = PdfWriter()
     page = writer.add_blank_page(width=300, height=200)
@@ -243,6 +254,30 @@ def test_fill_pdf_form_any_nonstandard(tmp_path: Path):
     annots = list(page.annots() or [])
     doc.close()
     assert len(annots) >= 1
+
+
+def test_xfa_form_unsupported_for_get_fields(tmp_path: Path):
+    src = _make_xfa_pdf(tmp_path / "xfa.pdf")
+    result = pdf_tools.get_pdf_form_fields(str(src))
+    assert result.get("xfa") is True
+    assert "error" in result
+    assert result.get("count") == 0
+
+
+def test_xfa_form_unsupported_for_fill(tmp_path: Path):
+    src = _make_xfa_pdf(tmp_path / "xfa_fill.pdf")
+    out = tmp_path / "xfa_out.pdf"
+    with pytest.raises(PdfToolError) as exc_info:
+        pdf_tools.fill_pdf_form(str(src), str(out), {"Name": "X"}, flatten=False)
+    assert "XFA" in str(exc_info.value)
+
+
+def test_xfa_form_unsupported_for_fill_any(tmp_path: Path):
+    src = _make_xfa_pdf(tmp_path / "xfa_fill_any.pdf")
+    out = tmp_path / "xfa_any_out.pdf"
+    with pytest.raises(PdfToolError) as exc_info:
+        pdf_tools.fill_pdf_form_any(str(src), str(out), {"Name": "X"}, flatten=False)
+    assert "XFA" in str(exc_info.value)
 
 
 def test_fill_pdf_form_falls_back_on_pdfrw_object_stream_failure(tmp_path: Path):

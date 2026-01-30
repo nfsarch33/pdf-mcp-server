@@ -105,6 +105,29 @@ def sample_passport_pdf(tmp_path):
 
 
 @pytest.fixture
+def sample_passport_label_only_pdf(tmp_path):
+    """Create a PDF with passport labels but no MRZ."""
+    import pymupdf
+    output = tmp_path / "passport_labels.pdf"
+    doc = pymupdf.open()
+    page = doc.new_page()
+    text = """
+    Passport
+    Surname: NGUYEN
+    Given Names: THI MAI
+    Nationality: VNM
+    Issuing Country: VIETNAM
+    Passport Number: B1234567
+    Date of Issue: 2016-07-21
+    Issuing Authority: IMMIGRATION DEPT
+    """
+    page.insert_text((72, 72), text, fontsize=11)
+    doc.save(str(output))
+    doc.close()
+    return str(output)
+
+
+@pytest.fixture
 def mock_openai_response():
     """Create a mock OpenAI response."""
     def _create_mock(content):
@@ -469,6 +492,23 @@ class TestAgenticIntegration:
         assert data.get("issuing_country") == "UTO"
         assert data.get("issue_date") == "2015-01-01"
         assert data.get("issuing_authority") == "UTOPIA"
+
+    def test_extract_structured_data_passport_labels_only(self, sample_passport_label_only_pdf):
+        """Should extract key passport fields from labels when MRZ is missing."""
+        result = pdf_tools.extract_structured_data(
+            sample_passport_label_only_pdf,
+            data_type="passport"
+        )
+
+        assert isinstance(result, dict)
+        data = result.get("data", {})
+        assert data.get("surname") == "NGUYEN"
+        assert data.get("given_names") == "THI MAI"
+        assert data.get("nationality") == "VNM"
+        assert data.get("issuing_country") == "VIETNAM"
+        assert data.get("passport_number") == "B1234567"
+        assert data.get("issue_date") == "2016-07-21"
+        assert data.get("issuing_authority") == "IMMIGRATION DEPT"
 
     def test_analyze_pdf_basic_analysis(self, sample_text_pdf):
         """Without LLM, should provide basic document analysis."""
