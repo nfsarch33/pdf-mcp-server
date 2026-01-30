@@ -1,6 +1,6 @@
 # PDF MCP Server
 
-**Version 1.0.2** | MCP server for PDF form filling, editing, OCR text extraction, table extraction, image extraction, link extraction, and batch processing.
+**Version 1.0.3** | MCP server for PDF form filling, editing, OCR text extraction, table extraction, image extraction, link extraction, and batch processing.
 
 Built with Python, `pypdf`, `fillpdf`, and `pymupdf` (AGPL).
 
