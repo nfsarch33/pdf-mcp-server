@@ -255,9 +255,11 @@ LLM-powered tools for intelligent PDF processing. **Uses local VLM by default (f
 
 **Start local model server (recommended):**
 ```bash
-# From agentic-ai-research project
-cd ~/agentic-ai-research
-uv run python -m services.model_server.cli serve --port 8100
+# Self-contained setup (one-time)
+./scripts/setup_environment.sh
+
+# Start local VLM (auto-detects best GPU)
+./scripts/run_local_vlm.sh
 ```
 
 **Or use Ollama:**
@@ -364,9 +366,15 @@ make install-llm-models
 ```
 
 **E2E Test Requirements:**
-- **Local VLM**: Start server at `~/agentic-ai-research` with `uv run python -m services.model_server.cli serve --port 8100`
+- **Local VLM**: Run `./scripts/run_local_vlm.sh` (auto-detects best GPU)
 - **Ollama**: Install with `curl -fsSL https://ollama.ai/install.sh | sh`, then `make install-llm-models`
 - **OpenAI**: Set `OPENAI_API_KEY` environment variable (costs money!)
+
+**Full environment setup (one-time):**
+```bash
+./scripts/setup_environment.sh
+```
+This handles Python venv, system packages, Ollama, GPU detection, and VLM runner generation for both macOS and WSL/Linux.
 
 ### Test Coverage
 - **273 tests** total (includes Tier 1/2 coverage + agentic features + multi-backend + e2e tests)

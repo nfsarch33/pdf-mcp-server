@@ -52,7 +52,7 @@ def main():
                 else:
                     print("  loaded_models: (no /models endpoint)")
             else:
-                print("  start: cd ~/agentic-ai-research && source .venv/bin/activate && python -m services.model_server.cli serve --port 8100")
+                print("  start: ./scripts/run_local_vlm.sh")
 
         if name == "ollama":
             if not ollama_installed:

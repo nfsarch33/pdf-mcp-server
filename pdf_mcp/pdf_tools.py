@@ -4181,7 +4181,7 @@ def auto_fill_pdf_form(
         if not selected_backend:
             return {
                 "error": "No LLM backend available. Options: start local model server, install ollama, or set OPENAI_API_KEY",
-                "hint": "Start local server: cd ~/agentic-ai-research && uv run python -m services.model_server.cli serve",
+                "hint": "Start local server: cd pdf-mcp-server && ./scripts/run_local_vlm.sh",
                 "partial_mappings": direct_mappings
             }
 

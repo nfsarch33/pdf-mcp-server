@@ -1,6 +1,6 @@
 ---
 name: cross-platform-setup
-description: Set up pdf-mcp-server on a new machine (macOS, Linux, or Windows WSL). Use when migrating to a new environment or onboarding a new workstation.
+description: Set up pdf-mcp-server on a new machine (macOS, Linux, or Windows WSL) with GPU-aware VLM support. Use when migrating to a new environment or onboarding a new workstation.
 ---
 # Cross-Platform Setup
 
@@ -8,69 +8,75 @@ description: Set up pdf-mcp-server on a new machine (macOS, Linux, or Windows WS
 - Setting up pdf-mcp-server on a new machine
 - Migrating from macOS to Windows WSL (or vice versa)
 - Onboarding a new development workstation
+- Setting up local VLM on a multi-GPU machine
 
-## Prerequisites
-
-Ensure these are installed:
-- Python 3.10+
-- Git with SSH key configured for GitHub
-- Cursor IDE
-
-## Step 1: Clone Repositories
+## Quick Setup (Recommended)
 
 ```bash
 # Clone pdf-mcp-server
 git clone git@github.com:nfsarch33/pdf-mcp-server.git ~/Code/pdf-mcp-server
-
-# Clone memory repos (private)
-git clone git@github.com:nfsarch33/cursor-memory-bank.git ~/memo
-git clone git@github.com:nfsarch33/cursor-global-kb.git ~/Code/global-kb
-```
-
-## Step 2: Install Dependencies
-
-```bash
 cd ~/Code/pdf-mcp-server
 
-# Create virtual environment
-python3 -m venv .venv
-source .venv/bin/activate
+# One-command setup: venv, system packages, Ollama, GPU detection, VLM
+./scripts/setup_environment.sh
 
-# Install dependencies
-pip install -r requirements.txt
+# Start local VLM server (auto-detects best GPU)
+./scripts/run_local_vlm.sh
+```
+
+The setup script handles:
+- Python venv creation and all dependency installation
+- System packages (Tesseract OCR, zbar)
+- Ollama installation and model pull
+- GPU detection and optimal card selection
+- VLM backend installation (vLLM for NVIDIA, MLX for Apple Silicon)
+- Runner script generation
+
+## Prerequisites
+
+- Python 3.10+
+- Git with SSH key configured for GitHub
+- Cursor IDE
+
+## Manual Setup (Step by Step)
+
+### Step 1: Clone Repository
+
+```bash
+git clone git@github.com:nfsarch33/pdf-mcp-server.git ~/Code/pdf-mcp-server
+cd ~/Code/pdf-mcp-server
+```
+
+### Step 2: Install Dependencies
+
+```bash
+# Create venv + install
+make install
 
 # Install optional dependencies
-pip install -e ".[dev,ocr,llm]"
+uv pip install -e ".[dev,ocr,llm]"
 ```
 
-## Step 3: Platform-Specific Setup
+### Step 3: Platform-Specific Packages
 
-### macOS
+**macOS:**
 ```bash
-# Install Tesseract OCR
-brew install tesseract
-
-# Install zbar for barcode detection
-brew install zbar
-
-# Install Ollama (optional)
-curl -fsSL https://ollama.ai/install.sh | sh
+brew install tesseract zbar
 ```
 
-### Linux/WSL
+**Linux/WSL:**
 ```bash
-# Install Tesseract OCR
-sudo apt-get update
-sudo apt-get install tesseract-ocr
-
-# Install zbar
-sudo apt-get install libzbar0
-
-# Install Ollama (optional)
-curl -fsSL https://ollama.ai/install.sh | sh
+sudo apt-get install -y tesseract-ocr libzbar0
 ```
 
-## Step 4: Configure MCP Server
+### Step 4: Ollama Setup
+
+```bash
+curl -fsSL https://ollama.ai/install.sh | sh
+make install-llm-models
+```
+
+### Step 5: Configure MCP Server
 
 Edit `~/.cursor/mcp.json`:
 ```json
@@ -85,70 +91,92 @@ Edit `~/.cursor/mcp.json`:
 }
 ```
 
-**Note for WSL**: Use the full Linux path (e.g., `/home/username/...`), not Windows paths.
+**WSL note**: Use Linux paths (e.g., `/home/username/...`), not Windows paths.
 
-## Step 5: Configure Memory System
+## GPU-Aware VLM Serving
+
+### How It Works
+
+`run_local_vlm.sh` detects GPUs at **runtime** and pins the VLM to the best card:
+
+| Platform | Detection | Backend | Notes |
+|----------|-----------|---------|-------|
+| macOS Apple Silicon | `sysctl hw.memsize` | MLX | Unified memory |
+| Linux/WSL + NVIDIA | `nvidia-smi` query | vLLM | Selects highest VRAM card |
+| No GPU | fallback | Ollama | CPU-based |
+
+### Multi-GPU Example (RTX 4070 Ti Super + RTX 3090)
+
+```
+[INFO] Detected NVIDIA GPUs:
+  GPU 0: NVIDIA GeForce RTX 4070 Ti Super (16384MB VRAM)
+  GPU 1: NVIDIA GeForce RTX 3090 (24576MB VRAM)
+[OK]   Auto-selected GPU 1 (24576MB VRAM)
+[INFO] Starting vLLM server on port 8100 with model Qwen/Qwen3-VL-30B-A3B-Instruct
+```
+
+The RTX 3090 (24GB) is automatically selected for the heavy VLM model.
+
+### Override GPU Selection
 
 ```bash
-# Set global-kb path
-echo "$HOME/Code/global-kb" > ~/memo/tools/global-kb-path.txt
+# Force specific GPU
+CUDA_VISIBLE_DEVICES=0 ./scripts/run_local_vlm.sh
 
-# Configure MCP for memory bank
-# Add to ~/.cursor/mcp.json:
-# "allPepper-memory-bank": { "command": "...", "env": {"MEMORY_BANK_ROOT": "$HOME/memo"} }
+# Custom port
+./scripts/run_local_vlm.sh --port 9000
+
+# Custom model
+./scripts/run_local_vlm.sh --model Qwen/Qwen2.5-7B-Instruct
 ```
 
-## Step 6: Install Daily Automation
+## Memory System Setup (Optional)
 
-### macOS
 ```bash
-~/memo/tools/install-launchd-automation.sh
+# Clone memory repos (private)
+git clone git@github.com:nfsarch33/cursor-memory-bank.git ~/memo
+
+# Install daily automation
+~/memo/tools/install-daily-automation.sh  # Linux
+~/memo/tools/install-launchd-automation.sh  # macOS
 ```
 
-### Linux
-```bash
-~/memo/tools/install-daily-automation.sh
-```
-
-### WSL (Windows Task Scheduler)
-```powershell
-# Run from PowerShell as Administrator
-~/memo/tools/install-wsl-task-scheduler.ps1
-```
-
-## Step 7: Verify Installation
+## Verify Installation
 
 ```bash
 cd ~/Code/pdf-mcp-server
 source .venv/bin/activate
 
-# Run tests
-make test
-
-# Check LLM status
-make check-llm
-
-# Verify in Cursor
-# Say "health check" in Agent chat
+make test         # Run tests
+make check-llm    # Check LLM status
+make test-e2e     # E2E tests (requires VLM running)
 ```
 
 ## Quick Reference
 
-| Platform | Tesseract | zbar | Ollama |
-|----------|-----------|------|--------|
-| macOS | `brew install tesseract` | `brew install zbar` | curl script |
-| Linux/WSL | `apt install tesseract-ocr` | `apt install libzbar0` | curl script |
+| Task | Command |
+|------|---------|
+| Full setup | `./scripts/setup_environment.sh` |
+| Start VLM | `./scripts/run_local_vlm.sh` |
+| Check status | `make check-llm` |
+| Run tests | `make test` |
+| E2E tests | `make test-e2e` |
 
 ## Troubleshooting
 
 ### WSL Path Issues
-- Use Linux paths inside WSL, not Windows paths
-- Ensure SSH key is configured in WSL, not just Windows
+- Use Linux paths, not Windows paths
+- Ensure SSH key is configured in WSL
 
 ### MCP Server Not Found
 - Restart Cursor after editing mcp.json
-- Verify Python path in mcp.json matches your venv
+- Verify Python path matches your venv
 
-### Ollama Not Working
-- Check service is running: `ollama serve`
-- Pull required model: `ollama pull qwen2.5:1.5b`
+### GPU Not Detected in WSL
+- Ensure NVIDIA drivers are installed on Windows host
+- WSL needs `nvidia-smi` accessible (comes with NVIDIA Container Toolkit)
+- Run `nvidia-smi` in WSL terminal to verify
+
+### VLM Out of Memory
+- Use a smaller model: `./scripts/run_local_vlm.sh --model Qwen/Qwen2.5-7B-Instruct`
+- For 16GB GPUs, 4-bit quantised models work well via Ollama

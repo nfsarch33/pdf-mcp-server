@@ -979,8 +979,7 @@ class TestE2ELocalVLM:
     End-to-end tests with REAL local model server (not mocked).
     
     These tests require the local model server to be running:
-        cd ~/agentic-ai-research
-        uv run python -m services.model_server.cli serve --port 8100
+        ./scripts/run_local_vlm.sh
     
     Tests are skipped if server is not available.
     """

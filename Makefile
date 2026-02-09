@@ -7,6 +7,7 @@ PIP ?= $(UV) pip
 .PHONY: smoke prepush
 .PHONY: lint format-check
 .PHONY: check-tesseract check-llm
+.PHONY: setup start-vlm
 
 venv: $(VENV)/bin/python
 
@@ -55,7 +56,7 @@ install-llm: install
 	. $(VENV)/bin/activate && $(PIP) install -e ".[llm]"
 	@echo "LLM dependencies installed (openai)."
 	@echo "For local VLM (free), start the model server:"
-	@echo "  cd ~/agentic-ai-research && uv run python -m services.model_server.cli serve --port 8100"
+	@echo "  ./scripts/run_local_vlm.sh"
 	@echo "For Ollama (free), install: curl -fsSL https://ollama.ai/install.sh | sh"
 	@echo "For Ollama model setup: make install-llm-models"
 
@@ -76,6 +77,16 @@ check-llm:
 	@echo "==============================================================="
 	@echo ""
 	@$(PY) scripts/check_llm_status.py 2>/dev/null || echo "pdf_mcp not installed. Run: make install"
+
+# Full environment setup (one-time, cross-platform)
+setup:
+	@chmod +x scripts/setup_environment.sh
+	@./scripts/setup_environment.sh
+
+# Start local VLM server (auto-detects best GPU)
+start-vlm:
+	@chmod +x scripts/run_local_vlm.sh
+	@./scripts/run_local_vlm.sh
 
 clean:
 	rm -rf $(VENV) .pytest_cache **/__pycache__

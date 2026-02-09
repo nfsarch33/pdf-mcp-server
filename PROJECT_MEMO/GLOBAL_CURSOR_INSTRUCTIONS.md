@@ -21,9 +21,8 @@ make check-llm
 # Ensure Ollama model is present (skips duplicate downloads)
 make install-llm-models
 
-# Start local model server (FREE!)
-cd ~/agentic-ai-research
-uv run python -m services.model_server.cli serve --port 8100
+# Start local model server (FREE! auto-detects best GPU)
+./scripts/run_local_vlm.sh
 ```
 
 **Backend Priority**: local > ollama > openai (free first!)
