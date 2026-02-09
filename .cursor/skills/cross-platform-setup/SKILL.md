@@ -30,7 +30,7 @@ The setup script handles:
 - Ollama installation and model pull
 - GPU detection and optimal card selection
 - VLM backend installation (vLLM for NVIDIA, MLX for Apple Silicon)
-- Runner script generation
+- Ensures `run_local_vlm.sh` (committed in repo) is executable
 
 ## Prerequisites
 

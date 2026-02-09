@@ -12,7 +12,8 @@ description: Execute the pdf-mcp-server release SOP end-to-end, including versio
 ## Instructions
 1. Run health check and confirm local LLM server status.
 2. Sync memo and global-kb repos (pull first, push after updates).
-3. Run required tests:
+3. Run required tests and checks:
+   - `make lint` (or `ruff check --fix` then manually fix remaining)
    - `make check-llm`
    - `make test-e2e` (local server required)
    - `make test` or `make prepush`
@@ -20,13 +21,13 @@ description: Execute the pdf-mcp-server release SOP end-to-end, including versio
    - `pyproject.toml`
    - `README.md`
    - `CHANGELOG.md`
-   - `pdf_mcp/pdf_tools.py`
-   - `pdf_mcp/server.py`
+   - `pdf_mcp/pdf_tools.py` (if version present)
+   - `pdf_mcp/server.py` (if version present)
    - `PROJECT_MEMO/GLOBAL_CURSOR_INSTRUCTIONS.md`
-   - `PROJECT_MEMO/PROJECT_STATUS_PROMPT.md`
 5. Update `CHANGELOG.md` with release notes and test counts.
 6. Commit, tag, and push using conventional commit style.
-7. Update Pepper memory status and global-kb release notes, then push both repos.
+7. Post-release housekeeping: delete merged branches, verify CI, re-run lint.
+8. Update Pepper memory status and push memo repo.
 
 ## Output Format
 - Provide a concise release summary with:
