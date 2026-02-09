@@ -4,8 +4,6 @@ from typing import Dict
 
 import pymupdf
 import pytest
-from pdf_mcp import pdf_tools
-from pdf_mcp.pdf_tools import PdfToolError
 from pypdf import PdfWriter
 from pypdf.generic import (
     ArrayObject,
@@ -15,6 +13,9 @@ from pypdf.generic import (
     NumberObject,
     TextStringObject,
 )
+
+from pdf_mcp import pdf_tools
+from pdf_mcp.pdf_tools import PdfToolError
 
 
 def _make_pdf(path: Path, pages: int = 1) -> Path:
@@ -692,8 +693,9 @@ def test_mcp_layer_can_call_all_tools(tmp_path: Path):
     """
     import asyncio
 
-    from pdf_mcp import server
     from pypdf import PdfReader
+
+    from pdf_mcp import server
 
     form_src = _make_form_pdf(tmp_path / "mcp_form.pdf")
     nonstandard_src = _make_nonstandard_form_pdf(tmp_path / "mcp_nonstandard.pdf")
@@ -1229,8 +1231,9 @@ def test_mcp_layer_real_world_1006_regression(tmp_path: Path):
     import asyncio
 
     import pymupdf
-    from pdf_mcp import server
     from pypdf import PdfReader
+
+    from pdf_mcp import server
 
     src = Path(__file__).parent / "1006.pdf"
     assert src.exists(), "Missing fixture tests/1006.pdf"
@@ -1401,8 +1404,9 @@ def test_mcp_layer_1006_all_tools_scenario_a(tmp_path: Path):
     import asyncio
 
     import pymupdf
-    from pdf_mcp import server
     from pypdf import PdfReader
+
+    from pdf_mcp import server
 
     src = Path(__file__).parent / "1006.pdf"
     assert src.exists(), "Missing fixture tests/1006.pdf"
@@ -1551,8 +1555,9 @@ def test_mcp_layer_1006_all_tools_scenario_b(tmp_path: Path):
     """
     import asyncio
 
-    from pdf_mcp import server
     from pypdf import PdfReader
+
+    from pdf_mcp import server
 
     src = Path(__file__).parent / "1006.pdf"
     assert src.exists(), "Missing fixture tests/1006.pdf"

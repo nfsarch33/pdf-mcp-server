@@ -17,14 +17,12 @@ All tests use mocked LLM responses for unit testing.
 
 import json
 import os
-import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from pdf_mcp import pdf_tools
-
 
 # ============================================================================
 # Test Fixtures

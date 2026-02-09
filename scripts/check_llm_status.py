@@ -27,7 +27,7 @@ def main():
     ollama_models = llm_setup.ollama_list_models() if ollama_installed else set()
 
     # Query local server for model info
-    local_health = llm_setup.get_local_server_health()
+    llm_setup.get_local_server_health()  # verify reachability
     local_models = llm_setup.get_local_server_models()
 
     for name, data in info["backends"].items():

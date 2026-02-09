@@ -9,10 +9,9 @@ from __future__ import annotations
 
 import json
 import os
-import sys
 import urllib.error
-import urllib.request
 import urllib.parse
+import urllib.request
 from dataclasses import dataclass
 
 

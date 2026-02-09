@@ -10,13 +10,12 @@ Tests cover:
 """
 
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any, Dict
 
 import pytest
 
 from pdf_mcp import pdf_tools
 from pdf_mcp.pdf_tools import PdfToolError
-
 
 # =============================================================================
 # Test Fixtures - All PDFs in tests/
@@ -417,6 +416,7 @@ class TestMcpLayerOcr:
     def test_mcp_detect_pdf_type(self):
         """Test detect_pdf_type via MCP layer."""
         import asyncio
+
         from pdf_mcp import server
 
         path = TESTS_DIR / "1006.pdf"
@@ -439,6 +439,7 @@ class TestMcpLayerOcr:
     def test_mcp_extract_text_native(self):
         """Test extract_text with engine='native' via MCP layer."""
         import asyncio
+
         from pdf_mcp import server
 
         path = TESTS_DIR / "1006.pdf"
@@ -460,6 +461,7 @@ class TestMcpLayerOcr:
     def test_mcp_extract_text_ocr(self):
         """Test extract_text with engine='auto' via MCP layer."""
         import asyncio
+
         from pdf_mcp import server
 
         path = TESTS_DIR / "1006.pdf"
@@ -482,6 +484,7 @@ class TestMcpLayerOcr:
     def test_mcp_get_pdf_text_blocks(self):
         """Test get_pdf_text_blocks via MCP layer."""
         import asyncio
+
         from pdf_mcp import server
 
         path = TESTS_DIR / "1006.pdf"

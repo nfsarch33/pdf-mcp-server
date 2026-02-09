@@ -10,17 +10,15 @@ Integration tests for Phase 3 features:
 TDD Pattern: Tests written FIRST, implementation follows.
 """
 
-from pathlib import Path
-from typing import Dict, Any, List
-import tempfile
-import shutil
 import os
+import shutil
+import tempfile
+from pathlib import Path
 
 import pytest
 
 from pdf_mcp import pdf_tools
 from pdf_mcp.pdf_tools import PdfToolError
-
 
 # =============================================================================
 # Test Fixtures

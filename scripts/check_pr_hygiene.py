@@ -8,11 +8,8 @@ This is intentionally lightweight (no external deps).
 
 from __future__ import annotations
 
-import json
 import os
 import subprocess
-import sys
-from pathlib import Path
 
 
 def _run(cmd: list[str]) -> str:

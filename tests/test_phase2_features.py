@@ -7,16 +7,13 @@ Integration tests for Phase 2 features:
 - Form auto-detection
 """
 
-from pathlib import Path
-from typing import Dict, Any
 import tempfile
-import shutil
+from pathlib import Path
 
 import pytest
 
 from pdf_mcp import pdf_tools
 from pdf_mcp.pdf_tools import PdfToolError
-
 
 # =============================================================================
 # Test Fixtures
@@ -522,6 +519,7 @@ class TestMcpLayerPhase2:
     def test_mcp_get_ocr_languages(self):
         """Test get_ocr_languages via MCP layer."""
         import asyncio
+
         from pdf_mcp import server
 
         async def call():
@@ -538,6 +536,7 @@ class TestMcpLayerPhase2:
     def test_mcp_extract_tables(self):
         """Test extract_tables via MCP layer."""
         import asyncio
+
         from pdf_mcp import server
 
         pdf_path = get_test_pdf("1006.pdf")
@@ -559,6 +558,7 @@ class TestMcpLayerPhase2:
     def test_mcp_get_image_info(self):
         """Test get_image_info via MCP layer."""
         import asyncio
+
         from pdf_mcp import server
 
         pdf_path = get_test_pdf("scansmpl.pdf")
@@ -580,6 +580,7 @@ class TestMcpLayerPhase2:
     def test_mcp_extract_text_smart(self):
         """Test extract_text_smart via MCP layer."""
         import asyncio
+
         from pdf_mcp import server
 
         pdf_path = get_test_pdf("1006.pdf")
@@ -601,6 +602,7 @@ class TestMcpLayerPhase2:
     def test_mcp_detect_form_fields(self):
         """Test detect_form_fields via MCP layer."""
         import asyncio
+
         from pdf_mcp import server
 
         pdf_path = get_test_pdf("1006.pdf")
@@ -702,7 +704,7 @@ class TestEndToEndWorkflows:
 
         avg_conf = result["overall_average_confidence"]
 
-        print(f"\n--- OCR Quality Assessment ---")
+        print("\n--- OCR Quality Assessment ---")
         print(f"Words: {result['total_words']}")
         print(f"Average Confidence: {avg_conf}%")
 
@@ -747,7 +749,7 @@ class TestAdvancedOcr:
         assert result_150["total_words"] >= 0
         assert result_300["total_words"] >= 0
 
-        print(f"\n--- DPI Comparison ---")
+        print("\n--- DPI Comparison ---")
         print(f"150 DPI: {result_150['total_words']} words, "
               f"avg confidence: {result_150['overall_average_confidence']}%")
         print(f"300 DPI: {result_300['total_words']} words, "
@@ -814,6 +816,7 @@ class TestAdvancedOcr:
     def test_extract_text_with_confidence_mcp_layer(self):
         """Test extract_text_with_confidence via MCP layer."""
         import asyncio
+
         from pdf_mcp import server
 
         pdf_path = get_test_pdf("1006.pdf")
@@ -850,7 +853,7 @@ class TestAdvancedOcr:
         assert result["total_chars"] > 0, "OCR should extract some text"
         assert len(result["text"].strip()) > 0
 
-        print(f"\n--- OCR Text Preview ---")
+        print("\n--- OCR Text Preview ---")
         preview = result["text"][:200].replace("\n", " ")
         print(f"Extracted: {preview}...")
 
@@ -876,7 +879,7 @@ class TestAdvancedOcr:
         assert native_result["total_chars"] > 0
         assert ocr_result["total_chars"] > 0
 
-        print(f"\n--- Native vs Force OCR ---")
+        print("\n--- Native vs Force OCR ---")
         print(f"Native: {native_result['total_chars']} chars")
         print(f"Force OCR: {ocr_result['total_chars']} chars")
 
