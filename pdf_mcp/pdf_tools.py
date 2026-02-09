@@ -3974,6 +3974,12 @@ def _call_ollama_llm(
     Uses Qwen3-VL by default for vision-language capabilities
     (OCR accuracy improvement on PDF page images).
     
+    Qwen3 models use a "thinking" mode by default that generates
+    internal reasoning tokens before the answer.  We set a generous
+    num_predict budget (4096) and keep_alive (10m) so the model has
+    room for thinking tokens plus the actual response, and does not
+    get unloaded between requests in the same session.
+    
     Args:
         prompt: The user prompt to send
         system_prompt: Optional system prompt for context
@@ -3995,6 +4001,8 @@ def _call_ollama_llm(
             model=model,
             messages=messages,
             stream=False,
+            options={"num_predict": 4096},
+            keep_alive="10m",
         )
         # Ollama returns Pydantic ChatResponse; access via attribute
         return response.message.content

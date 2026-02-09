@@ -6,6 +6,22 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 1.0.6 - 2026-02-10
+
+### Changed
+- Ollama `_call_ollama_llm` now sets `num_predict=4096` and `keep_alive='10m'` to prevent Qwen3 thinking tokens from consuming the entire response budget and model unloading mid-session.
+
+### Validated
+- Qwen3-VL-8B via Ollama: 100% accurate OCR on synthetic images (10.2s on M4 Pro 48GB warm cache).
+- Full-page scanned document OCR via Ollama on Apple Silicon is slow (6+ min); recommended for NVIDIA GPU machines via vLLM for production use.
+- Qwen3-VL-30B-A3B downloaded and available via Ollama (19GB).
+- Full test suite: 258 passed, 6 skipped, 0 failures (non-slow), 3 passed E2E.
+- Cross-platform scripts reviewed: `run_local_vlm.sh` (GPU-aware), `setup_environment.sh` (self-contained).
+
+### Performance Notes
+- Apple Silicon (M4 Pro 48GB): VLM works well for small images and text tasks; full-page scanned document OCR is slow through Ollama (use Tesseract for bulk OCR, VLM for accuracy-critical fields).
+- NVIDIA GPUs (WSL): vLLM backend recommended for production VLM serving. `run_local_vlm.sh` auto-selects GPU with most VRAM.
+
 ## 1.0.5 - 2026-02-09
 
 ### Changed
