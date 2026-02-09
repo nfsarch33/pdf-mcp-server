@@ -6,10 +6,13 @@ import subprocess
 from typing import Any, Dict, Optional, Set
 
 # Ollama configuration
-DEFAULT_OLLAMA_MODEL = "qwen2.5:7b"
+# Use Qwen3-VL (vision-language model) for best OCR accuracy on PDFs.
+# The 8B model is a good default for most machines; override with env var
+# for larger models (e.g., qwen3-vl:30b-a3b on 48GB+ machines).
+DEFAULT_OLLAMA_MODEL = "qwen3-vl:8b"
 OLLAMA_MODEL_ENV = "PDF_MCP_OLLAMA_MODEL"
 
-# Local model server configuration
+# Local model server configuration (vLLM / MLX backend)
 LOCAL_MODEL_SERVER_URL = os.environ.get("LOCAL_MODEL_SERVER_URL", "http://localhost:8100")
 LOCAL_VLM_MODEL = os.environ.get("LOCAL_VLM_MODEL", "qwen3-vl-30b-a3b")
 

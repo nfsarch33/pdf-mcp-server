@@ -6,6 +6,21 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 1.0.5 - 2026-02-09
+
+### Changed
+- Default Ollama model updated from `qwen2.5:7b` (text-only) to `qwen3-vl:8b` (vision-language) for improved OCR accuracy on PDF page images.
+- Fixed Ollama API compatibility: updated `_call_ollama_llm` to use Pydantic attribute access (`response.message.content`) instead of dict `.get()` for Ollama's ChatResponse.
+- `_call_llm` now uses `llm_setup.get_ollama_model_name()` instead of hardcoded default, respecting environment variable overrides.
+
+### Fixed
+- Test isolation: patched all "no-LLM" integration tests to explicitly disable LLM backends, preventing real Ollama calls when model is available on the system.
+- Updated mock in `test_call_ollama_llm_with_mock` to use `MagicMock` for Pydantic-compatible response objects.
+
+### Validated
+- Qwen3-VL-8B via Ollama: 100% accuracy (10/10 fields) on invoice OCR test with 73s warm-cache inference time on M4 Pro 48GB.
+- Full test suite: 258 passed, 6 skipped, 0 failures in 93s (non-slow tests).
+
 ## 1.0.4 - 2026-01-31
 
 ### Added

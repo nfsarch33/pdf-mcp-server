@@ -97,6 +97,7 @@ LLM_BACKEND_OLLAMA = "ollama"
 LLM_BACKEND_OPENAI = "openai"
 
 # Import LLM configuration from llm_setup (DRY - single source of truth)
+from pdf_mcp import llm_setup
 from pdf_mcp.llm_setup import LOCAL_MODEL_SERVER_URL, LOCAL_VLM_MODEL
 
 # Common Tesseract language codes
@@ -3965,15 +3966,18 @@ def _call_local_llm(
 def _call_ollama_llm(
     prompt: str,
     system_prompt: Optional[str] = None,
-    model: str = "qwen2.5:7b",
+    model: str = "qwen3-vl:8b",
 ) -> Optional[str]:
     """
     Call Ollama LLM with the given prompt.
     
+    Uses Qwen3-VL by default for vision-language capabilities
+    (OCR accuracy improvement on PDF page images).
+    
     Args:
         prompt: The user prompt to send
         system_prompt: Optional system prompt for context
-        model: Ollama model to use (default: qwen2.5:7b)
+        model: Ollama model to use (default: qwen3-vl:8b)
     
     Returns:
         LLM response content or None if unavailable
@@ -3992,7 +3996,8 @@ def _call_ollama_llm(
             messages=messages,
             stream=False,
         )
-        return response.get("message", {}).get("content", "")
+        # Ollama returns Pydantic ChatResponse; access via attribute
+        return response.message.content
     except Exception:
         return None
 
@@ -4067,7 +4072,7 @@ def _call_llm(
         return _call_local_llm(prompt, system_prompt, model if model != "auto" else None)
     
     if selected_backend == LLM_BACKEND_OLLAMA:
-        ollama_model = model if model != "auto" else "qwen2.5:7b"
+        ollama_model = model if model != "auto" else llm_setup.get_ollama_model_name()
         return _call_ollama_llm(prompt, system_prompt, ollama_model)
     
     if selected_backend == LLM_BACKEND_OPENAI:

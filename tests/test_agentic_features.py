@@ -256,10 +256,13 @@ class TestAutoFillPdfForm:
 # Test: extract_structured_data
 # ============================================================================
 
+@patch("pdf_mcp.pdf_tools._check_local_model_server", return_value=False)
+@patch("pdf_mcp.pdf_tools._HAS_OLLAMA", False)
+@patch("pdf_mcp.pdf_tools._HAS_OPENAI", False)
 class TestExtractStructuredData:
-    """Tests for entity/section extraction."""
+    """Tests for entity/section extraction (LLM disabled - pattern matching only)."""
 
-    def test_extract_invoice_data(self, sample_text_pdf):
+    def test_extract_invoice_data(self, mock_check, sample_text_pdf):
         """Extract invoice-specific fields."""
         result = pdf_tools.extract_structured_data(
             sample_text_pdf,
@@ -271,7 +274,7 @@ class TestExtractStructuredData:
         if "error" not in result:
             assert "data" in result or "extracted" in result
 
-    def test_extract_with_custom_schema(self, sample_text_pdf):
+    def test_extract_with_custom_schema(self, mock_check, sample_text_pdf):
         """Extract data using custom schema definition."""
         schema = {
             "invoice_number": "string",
@@ -287,7 +290,7 @@ class TestExtractStructuredData:
         # Should attempt extraction
         assert isinstance(result, dict)
 
-    def test_extract_with_invalid_pdf_returns_error(self):
+    def test_extract_with_invalid_pdf_returns_error(self, mock_check):
         """Invalid PDF should return error."""
         result = pdf_tools.extract_structured_data(
             "/nonexistent/path.pdf",
@@ -323,10 +326,13 @@ class TestExtractStructuredData:
 # Test: analyze_pdf_content
 # ============================================================================
 
+@patch("pdf_mcp.pdf_tools._check_local_model_server", return_value=False)
+@patch("pdf_mcp.pdf_tools._HAS_OLLAMA", False)
+@patch("pdf_mcp.pdf_tools._HAS_OPENAI", False)
 class TestAnalyzePdfContent:
-    """Tests for PDF content analysis and summarization."""
+    """Tests for PDF content analysis and summarization (LLM disabled)."""
 
-    def test_analyze_returns_document_type(self, sample_text_pdf):
+    def test_analyze_returns_document_type(self, mock_check, sample_text_pdf):
         """Should classify document type."""
         result = pdf_tools.analyze_pdf_content(sample_text_pdf)
         
@@ -335,7 +341,7 @@ class TestAnalyzePdfContent:
         if "error" not in result:
             assert "document_type" in result or "classification" in result or "analysis" in result
 
-    def test_analyze_returns_summary(self, sample_text_pdf):
+    def test_analyze_returns_summary(self, mock_check, sample_text_pdf):
         """Should generate summary."""
         result = pdf_tools.analyze_pdf_content(
             sample_text_pdf,
@@ -344,7 +350,7 @@ class TestAnalyzePdfContent:
         
         assert isinstance(result, dict)
 
-    def test_analyze_detects_key_entities(self, sample_text_pdf):
+    def test_analyze_detects_key_entities(self, mock_check, sample_text_pdf):
         """Should detect key entities like dates, amounts, names."""
         result = pdf_tools.analyze_pdf_content(
             sample_text_pdf,
@@ -353,7 +359,7 @@ class TestAnalyzePdfContent:
         
         assert isinstance(result, dict)
 
-    def test_analyze_with_invalid_pdf_returns_error(self):
+    def test_analyze_with_invalid_pdf_returns_error(self, mock_check):
         """Invalid PDF should return error."""
         result = pdf_tools.analyze_pdf_content("/nonexistent/path.pdf")
         assert "error" in result
@@ -439,7 +445,10 @@ class TestMCPToolRegistration:
 class TestAgenticIntegration:
     """Integration tests using real PDFs without LLM."""
 
-    def test_auto_fill_graceful_degradation(self, sample_form_pdf, tmp_path):
+    @patch("pdf_mcp.pdf_tools._check_local_model_server", return_value=False)
+    @patch("pdf_mcp.pdf_tools._HAS_OLLAMA", False)
+    @patch("pdf_mcp.pdf_tools._HAS_OPENAI", False)
+    def test_auto_fill_graceful_degradation(self, mock_check, sample_form_pdf, tmp_path):
         """Without LLM, should fall back gracefully."""
         output = tmp_path / "filled.pdf"
         
@@ -461,7 +470,10 @@ class TestAgenticIntegration:
             # This is expected in some Python/pypdf version combinations
             pytest.skip(f"pypdf form filling compatibility issue: {e}")
 
-    def test_extract_structured_data_pattern_matching(self, sample_text_pdf):
+    @patch("pdf_mcp.pdf_tools._check_local_model_server", return_value=False)
+    @patch("pdf_mcp.pdf_tools._HAS_OLLAMA", False)
+    @patch("pdf_mcp.pdf_tools._HAS_OPENAI", False)
+    def test_extract_structured_data_pattern_matching(self, mock_check, sample_text_pdf):
         """Without LLM, should use pattern matching for common types."""
         result = pdf_tools.extract_structured_data(
             sample_text_pdf,
@@ -471,7 +483,10 @@ class TestAgenticIntegration:
         # Should attempt pattern-based extraction
         assert isinstance(result, dict)
 
-    def test_extract_structured_data_passport_mrz(self, sample_passport_pdf):
+    @patch("pdf_mcp.pdf_tools._check_local_model_server", return_value=False)
+    @patch("pdf_mcp.pdf_tools._HAS_OLLAMA", False)
+    @patch("pdf_mcp.pdf_tools._HAS_OPENAI", False)
+    def test_extract_structured_data_passport_mrz(self, mock_check, sample_passport_pdf):
         """Should extract key passport fields from MRZ and labels."""
         result = pdf_tools.extract_structured_data(
             sample_passport_pdf,
@@ -491,7 +506,10 @@ class TestAgenticIntegration:
         assert data.get("issue_date") == "2015-01-01"
         assert data.get("issuing_authority") == "UTOPIA"
 
-    def test_extract_structured_data_passport_labels_only(self, sample_passport_label_only_pdf):
+    @patch("pdf_mcp.pdf_tools._check_local_model_server", return_value=False)
+    @patch("pdf_mcp.pdf_tools._HAS_OLLAMA", False)
+    @patch("pdf_mcp.pdf_tools._HAS_OPENAI", False)
+    def test_extract_structured_data_passport_labels_only(self, mock_check, sample_passport_label_only_pdf):
         """Should extract key passport fields from labels when MRZ is missing."""
         result = pdf_tools.extract_structured_data(
             sample_passport_label_only_pdf,
@@ -508,7 +526,10 @@ class TestAgenticIntegration:
         assert data.get("issue_date") == "2016-07-21"
         assert data.get("issuing_authority") == "IMMIGRATION DEPT"
 
-    def test_analyze_pdf_basic_analysis(self, sample_text_pdf):
+    @patch("pdf_mcp.pdf_tools._check_local_model_server", return_value=False)
+    @patch("pdf_mcp.pdf_tools._HAS_OLLAMA", False)
+    @patch("pdf_mcp.pdf_tools._HAS_OPENAI", False)
+    def test_analyze_pdf_basic_analysis(self, mock_check, sample_text_pdf):
         """Without LLM, should provide basic document analysis."""
         result = pdf_tools.analyze_pdf_content(sample_text_pdf)
         
@@ -658,9 +679,10 @@ class TestOllamaBackend:
             pytest.skip("Ollama not installed")
         
         with patch("pdf_mcp.pdf_tools._ollama") as mock_ollama:
-            mock_ollama.chat.return_value = {
-                "message": {"content": "Ollama response"}
-            }
+            # Ollama returns Pydantic ChatResponse; mock .message.content
+            mock_response = MagicMock()
+            mock_response.message.content = "Ollama response"
+            mock_ollama.chat.return_value = mock_response
             result = pdf_tools._call_ollama_llm("test prompt")
             assert result == "Ollama response"
 
@@ -782,7 +804,10 @@ class TestOllamaIntegration:
 class TestBackendFieldInResults:
     """Tests verifying backend field is returned in agentic function results."""
 
-    def test_extract_structured_data_returns_backend_field(self, sample_text_pdf):
+    @patch("pdf_mcp.pdf_tools._check_local_model_server", return_value=False)
+    @patch("pdf_mcp.pdf_tools._HAS_OLLAMA", False)
+    @patch("pdf_mcp.pdf_tools._HAS_OPENAI", False)
+    def test_extract_structured_data_returns_backend_field(self, mock_check, sample_text_pdf):
         """extract_structured_data should return backend field."""
         result = pdf_tools.extract_structured_data(
             sample_text_pdf,
@@ -793,7 +818,10 @@ class TestBackendFieldInResults:
         # Backend field should be present (may be None if no LLM used)
         assert "backend" in result
 
-    def test_analyze_pdf_content_returns_backend_field(self, sample_text_pdf):
+    @patch("pdf_mcp.pdf_tools._check_local_model_server", return_value=False)
+    @patch("pdf_mcp.pdf_tools._HAS_OLLAMA", False)
+    @patch("pdf_mcp.pdf_tools._HAS_OPENAI", False)
+    def test_analyze_pdf_content_returns_backend_field(self, mock_check, sample_text_pdf):
         """analyze_pdf_content should return backend field."""
         result = pdf_tools.analyze_pdf_content(sample_text_pdf)
         

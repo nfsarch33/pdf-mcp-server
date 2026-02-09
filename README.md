@@ -271,7 +271,7 @@ make install-llm-models
 ```
 Optional override:
 ```bash
-export PDF_MCP_OLLAMA_MODEL="qwen2.5:7b"
+export PDF_MCP_OLLAMA_MODEL="qwen3-vl:8b"
 ```
 
 **Or use OpenAI (paid):**
