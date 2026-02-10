@@ -1,10 +1,13 @@
-# Project Status Prompt (v1.0.7)
+# Project Status Prompt
 
 Use this prompt to sync status and plan next moves for `pdf-mcp-server`.
 
+Version is derived from `pyproject.toml` (single source of truth). Check with:
+`python -c "from pdf_mcp import __version__; print(__version__)"`
+
 ---
 
-Review the status and plan next moves (main branch is now v1.0.7 with version consistency fixes and updated documentation).
+Review the status and plan next moves. Version centralized in pyproject.toml; tag-based release CI creates GitHub Releases automatically.
 
 Context
 - Repo: https://github.com/nfsarch33/pdf-mcp-server

@@ -1,12 +1,13 @@
 # PDF MCP Server
 
-**Version 1.0.7** | MCP server for PDF form filling, editing, OCR text extraction, table extraction, image extraction, link extraction, and batch processing.
+MCP server for PDF form filling, editing, OCR text extraction, table extraction, image extraction, link extraction, and batch processing.
 
 Built with Python, `pypdf`, `fillpdf`, and `pymupdf` (AGPL).
 
 **Goal**: Extract 99% of information from any PDF file, including scanned/image-based documents, and fill any PDF forms.
 
 ## Status
+[![Release](https://img.shields.io/github/v/release/nfsarch33/pdf-mcp-server?style=flat&label=release)](https://github.com/nfsarch33/pdf-mcp-server/releases/latest)
 [![CI](https://github.com/nfsarch33/pdf-mcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/nfsarch33/pdf-mcp-server/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/nfsarch33/pdf-mcp-server/actions/workflows/codeql.yml/badge.svg)](https://github.com/nfsarch33/pdf-mcp-server/actions/workflows/codeql.yml)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)

@@ -18,8 +18,15 @@ alwaysApply: true
 # - memory_bank_read("global-memories", "coding-standards-v9-1.md")
 # - memory_bank_read("global-memories", "quick-reference-card.md")
 # - memory_bank_read("global-memories", "mcp-index-and-selection-sop.md")
-# - memory_bank_read("global-memories", "release-sop-tag-based.md")
+# - memory_bank_read("global-memories", "tag-based-release-sop.md")
+# - memory_bank_read("global-memories", "release-sop-checklist.md")
 # - memory_bank_read("global-memories", "pdf-handler-troubleshooting.md")
+#
+# Version strategy:
+# - Single source of truth: pyproject.toml -> version field
+# - Runtime: from pdf_mcp import __version__
+# - CI gate: scripts/check_release_ready.py validates tag == pyproject.toml
+# - Release: tag push v*.*.* triggers .github/workflows/release.yml (auto)
 #
 # Repo doc layout (permanent)
 # - Canonical, portable onboarding/runbooks live under `PROJECT_MEMO/`.

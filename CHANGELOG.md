@@ -6,6 +6,22 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 1.0.8 - 2026-02-10
+
+### Changed
+- **Version centralization**: Single source of truth is now `pyproject.toml`. Removed hardcoded version strings from `pdf_tools.py`, `server.py`, `README.md`, and `GLOBAL_CURSOR_INSTRUCTIONS.md`. Runtime access via `from pdf_mcp import __version__`.
+- **README**: Replaced static version string with dynamic GitHub Release badge (`shields.io/github/v/release`).
+- **Release workflow**: Enhanced `.github/workflows/release.yml` with test gate (runs full test suite on tagged commit) and version gate (validates tag matches pyproject.toml + CHANGELOG) before creating GitHub Release.
+
+### Added
+- `pdf_mcp/__init__.py` with `__version__` derived from `importlib.metadata.version("pdf-mcp")` at runtime.
+- Tag-based release SOP documented in Pepper KB (`tag-based-release-sop.md`).
+
+### Version Locations (reduced from 6 to 2)
+- **Bump**: `pyproject.toml` only (single source)
+- **Historical**: `CHANGELOG.md` (manual, section headers)
+- **Derived**: `pdf_mcp.__version__`, README badge, CI scripts (all auto)
+
 ## 1.0.7 - 2026-02-10
 
 ### Fixed
