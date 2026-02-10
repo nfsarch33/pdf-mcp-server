@@ -6,6 +6,26 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 1.1.0 - 2026-02-10
+
+### Fixed
+- **Local VLM integration was non-functional**: `_call_local_llm` called non-existent `/generate` endpoint with raw prompt format. Fixed to use OpenAI-compatible `/v1/chat/completions` with proper messages array. This was the root cause of all E2E local VLM test failures.
+- **`get_local_server_models` used wrong endpoint**: Called `/models` (404 on vLLM). Fixed to `/v1/models`.
+- **`get_local_server_health` crashed on vLLM**: vLLM returns empty 200 from `/health`. Fixed to handle non-JSON responses gracefully.
+
+### Added
+- **Model auto-detection**: New `_resolve_local_model_name()` queries `/v1/models` to auto-detect the running model instead of requiring hardcoded `LOCAL_VLM_MODEL` config. Works with any OpenAI-compatible server.
+
+### Changed
+- `_call_local_llm` now uses proper `system`/`user` message roles instead of concatenating prompts, enabling better model behavior.
+- Updated mock test to match new OpenAI chat completions response format.
+
+### Validated
+- Full test suite: 264 passed, 10 skipped, 0 failures in ~230s (best ever; was 261/13).
+- E2E local VLM: 5/5 tests passing with Qwen2.5-VL-7B-Instruct on RTX 3090.
+- VLM sanity: 2+2=4 in 1.7s via vLLM on RTX 3090 (24GB).
+- Lint: all checks passed (ruff).
+
 ## 1.0.9 - 2026-02-10
 
 ### Changed

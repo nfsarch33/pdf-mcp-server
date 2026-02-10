@@ -3929,12 +3929,14 @@ def _call_local_llm(
     model: Optional[str] = None,
 ) -> Optional[str]:
     """
-    Call local model server at localhost:8100.
+    Call local model server at localhost:8100 via OpenAI-compatible chat API.
+    
+    Supports vLLM, MLX, and any OpenAI-compatible server.
     
     Args:
         prompt: The user prompt to send
-        system_prompt: Optional system prompt (prepended to prompt)
-        model: Model to use (default: from LOCAL_VLM_MODEL env var)
+        system_prompt: Optional system prompt
+        model: Model to use (default: auto-detect from server, fallback to LOCAL_VLM_MODEL)
     
     Returns:
         LLM response content or None if unavailable
@@ -3942,25 +3944,50 @@ def _call_local_llm(
     if not _HAS_REQUESTS:
         return None
     
-    full_prompt = prompt
+    # Build messages array (OpenAI chat format)
+    messages = []
     if system_prompt:
-        full_prompt = f"{system_prompt}\n\n{prompt}"
+        messages.append({"role": "system", "content": system_prompt})
+    messages.append({"role": "user", "content": prompt})
+    
+    # Resolve model name: explicit > auto-detect from server > env default
+    model_name = model or _resolve_local_model_name()
     
     try:
         response = _requests.post(
-            f"{LOCAL_MODEL_SERVER_URL}/generate",
+            f"{LOCAL_MODEL_SERVER_URL}/v1/chat/completions",
             json={
-                "prompt": full_prompt,
-                "model": model or LOCAL_VLM_MODEL,
+                "messages": messages,
+                "model": model_name,
                 "max_tokens": 1024,
             },
             timeout=120,  # Local models can be slow on first load
         )
         if response.status_code == 200:
-            return response.json().get("text", "")
+            data = response.json()
+            choices = data.get("choices", [])
+            if choices:
+                return choices[0].get("message", {}).get("content", "")
         return None
     except Exception:
         return None
+
+
+def _resolve_local_model_name() -> str:
+    """Resolve the model name for the local server.
+    
+    Auto-detects from the /v1/models endpoint if available,
+    otherwise falls back to LOCAL_VLM_MODEL env/default.
+    """
+    try:
+        response = _requests.get(f"{LOCAL_MODEL_SERVER_URL}/v1/models", timeout=5)
+        if response.status_code == 200:
+            data = response.json().get("data", [])
+            if data:
+                return data[0].get("id", LOCAL_VLM_MODEL)
+    except Exception:
+        pass
+    return LOCAL_VLM_MODEL
 
 
 def _call_ollama_llm(

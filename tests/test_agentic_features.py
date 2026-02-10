@@ -647,12 +647,15 @@ class TestLocalVLMBackend:
         assert result is None
 
     @patch("pdf_mcp.pdf_tools._HAS_REQUESTS", True)
+    @patch("pdf_mcp.pdf_tools._resolve_local_model_name", return_value="test-model")
     @patch("pdf_mcp.pdf_tools._requests")
-    def test_call_local_llm_with_mock_server(self, mock_requests):
-        """With mocked server, should return response."""
+    def test_call_local_llm_with_mock_server(self, mock_requests, _mock_resolve):
+        """With mocked server, should return response (OpenAI chat format)."""
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.json.return_value = {"text": "Test response"}
+        mock_response.json.return_value = {
+            "choices": [{"message": {"content": "Test response"}}]
+        }
         mock_requests.post.return_value = mock_response
         
         result = pdf_tools._call_local_llm("test prompt")

@@ -23,14 +23,16 @@ def get_ollama_model_name() -> str:
 
 def get_local_server_models() -> Optional[Dict[str, Any]]:
     """
-    Query /models endpoint on local model server to get loaded models.
+    Query /v1/models endpoint on local model server to get loaded models.
+    
+    Supports vLLM, MLX, and any OpenAI-compatible server.
     
     Returns:
         Dict with model info if available, None if server unavailable or endpoint missing.
     """
     try:
         import requests
-        response = requests.get(f"{LOCAL_MODEL_SERVER_URL}/models", timeout=5)
+        response = requests.get(f"{LOCAL_MODEL_SERVER_URL}/v1/models", timeout=5)
         if response.status_code == 200:
             return response.json()
     except Exception:
@@ -42,6 +44,8 @@ def get_local_server_health() -> Optional[Dict[str, Any]]:
     """
     Query /health endpoint on local model server.
     
+    Handles both JSON and empty responses (vLLM returns empty 200).
+    
     Returns:
         Dict with health info if available, None if server unavailable.
     """
@@ -49,9 +53,12 @@ def get_local_server_health() -> Optional[Dict[str, Any]]:
         import requests
         response = requests.get(f"{LOCAL_MODEL_SERVER_URL}/health", timeout=2)
         if response.status_code == 200:
-            data = response.json()
-            if isinstance(data, dict):
-                return data
+            try:
+                data = response.json()
+                if isinstance(data, dict):
+                    return data
+            except (ValueError, Exception):
+                pass
             return {"status": "ok"}
     except Exception:
         pass
