@@ -6,6 +6,23 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 1.0.7 - 2026-02-10
+
+### Fixed
+- Version consistency: synchronized version strings across all 6 required locations (pyproject.toml, README.md, CHANGELOG.md, pdf_tools.py, server.py, GLOBAL_CURSOR_INSTRUCTIONS.md) - previously 4 files were stale at 1.0.4.
+- Updated test count in PROJECT_STATUS_PROMPT.md to match actual results (261 passed, 13 skipped).
+
+### Validated
+- Full test suite: 261 passed, 13 skipped, 0 failures in 94s.
+- E2E slow tests: 3 passed, 7 skipped.
+- VLM manual test: Qwen3-VL-8B via Ollama responding correctly (~16s).
+- Lint: all checks passed (ruff).
+
+### Documentation
+- Updated WSL Ubuntu onboarding guide with Qwen3-VL model references and GPU notes.
+- Updated release SOP checklist to include all 6 version locations (was missing 3).
+- Updated release SOP to v2.2 with recurring version mismatch lessons.
+
 ## 1.0.6 - 2026-02-10
 
 ### Changed

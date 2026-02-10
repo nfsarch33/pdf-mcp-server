@@ -1,10 +1,10 @@
-# Project Status Prompt (v1.0.6)
+# Project Status Prompt (v1.0.7)
 
 Use this prompt to sync status and plan next moves for `pdf-mcp-server`.
 
 ---
 
-Review the status and plan next moves (main branch is now v1.0.6 with VLM OCR validation and Ollama token budget fix).
+Review the status and plan next moves (main branch is now v1.0.7 with version consistency fixes and updated documentation).
 
 Context
 - Repo: https://github.com/nfsarch33/pdf-mcp-server
@@ -38,7 +38,7 @@ Quality bar
 - Feature-ready with unit + E2E coverage before pushing.
 - Test every MCP tool end-to-end with dummy PDFs (multiple fixtures if needed).
 - Always verify outputs by re-opening PDFs and re-reading metadata/fields.
-- 273 tests collected; current run: 255 passed, 18 skipped (depends on optional backends and OCR availability).
+- 258 passed, 6 skipped, 0 failures (depends on optional backends and OCR availability).
 
 Workflow expectations
 - Use safe git workflow (branching + PRs); never change main directly.
