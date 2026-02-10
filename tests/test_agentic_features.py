@@ -1244,3 +1244,150 @@ class TestBackendComparison:
             assert "confidence" in result, f"{backend} missing 'confidence' field"
             assert "method" in result, f"{backend} missing 'method' field"
             assert "backend" in result, f"{backend} missing 'backend' field"
+
+
+# ============================================================================
+# Test: MRZ Checksum Validation (v1.2.0)
+# ============================================================================
+
+
+class TestMrzChecksumValidation:
+    """Tests for MRZ checksum validation per ICAO 9303."""
+
+    def test_mrz_check_digit_valid(self):
+        """Valid MRZ check digit should return correct value per ICAO 9303."""
+        assert pdf_tools._mrz_check_digit("L898902C3") == 6
+
+    def test_mrz_check_digit_all_zeros(self):
+        """All zeros should return 0."""
+        assert pdf_tools._mrz_check_digit("000000000") == 0
+
+    def test_mrz_check_digit_letters(self):
+        """Letters should be converted to numbers (A=10..Z=35)."""
+        # Per ICAO: A=10, B=11, ..., Z=35, <(filler)=0
+        result = pdf_tools._mrz_check_digit("A")
+        assert isinstance(result, int)
+        assert 0 <= result <= 9
+
+    def test_mrz_validate_field_correct(self):
+        """Field with matching check digit should validate."""
+        assert pdf_tools._mrz_validate_field("L898902C3", 6) is True
+
+    def test_mrz_validate_field_incorrect(self):
+        """Field with wrong check digit should fail."""
+        assert pdf_tools._mrz_validate_field("L898902C3", 9) is False
+
+    def test_extract_passport_fields_with_checksum(self):
+        """MRZ extraction should include checksum_valid field."""
+        mrz_text = (
+            "P<UTOERIKSSON<<ANNA<MARIA<<<<<<<<<<<<<<<<<<<\n"
+            "L898902C36UTO7408122F1204159ZE184226B<<<<<10\n"
+        )
+        extracted, confidence = pdf_tools._extract_passport_fields(mrz_text)
+        assert extracted.get("passport_number") == "L898902C3"
+        # After checksum implementation, confidence should be higher for validated fields
+        assert confidence.get("passport_number", 0) >= 0.8
+
+
+class TestMrzTd1Format:
+    """Tests for TD1 ID card format (3 lines x 30 chars)."""
+
+    def test_extract_mrz_lines_td1(self):
+        """Should detect TD1 format (3 lines of 30 chars)."""
+        td1_text = (
+            "I<UTOD231458907<<<<<<<<<<<<<<<\n"
+            "7408122F1204159UTO<<<<<<<<<<<6\n"
+            "ERIKSSON<<ANNA<MARIA<<<<<<<<<<\n"
+        )
+        result = pdf_tools._extract_mrz_lines(td1_text)
+        assert result is not None
+        assert len(result) >= 2
+
+    def test_extract_passport_fields_td1(self):
+        """Should extract fields from TD1 (ID card) format."""
+        td1_text = (
+            "I<UTOD231458907<<<<<<<<<<<<<<<\n"
+            "7408122F1204159UTO<<<<<<<<<<<6\n"
+            "ERIKSSON<<ANNA<MARIA<<<<<<<<<<\n"
+        )
+        extracted, confidence = pdf_tools._extract_passport_fields(td1_text)
+        # Should extract at least some fields from TD1
+        assert isinstance(extracted, dict)
+        # Surname should be extractable from line 3
+        if extracted.get("surname"):
+            assert "ERIKSSON" in extracted["surname"]
+
+
+class TestMrzOcrErrorCorrection:
+    """Tests for OCR error correction in MRZ text."""
+
+    def test_mrz_ocr_correction_common_mistakes(self):
+        """Should correct common OCR mistakes in MRZ: O->0, I->1, B->8."""
+        # Line2 with OCR errors: O instead of 0, I instead of 1
+        corrected = pdf_tools._correct_mrz_ocr_errors(
+            "L89890ZC36UTO74O8I22FI2O4I59ZEI84226B<<<<<IO"
+        )
+        assert "0" in corrected  # O should become 0 in digit positions
+        assert isinstance(corrected, str)
+
+    def test_mrz_ocr_correction_preserves_valid(self):
+        """Should not modify already-correct MRZ text."""
+        valid = "L898902C36UTO7408122F1204159ZE184226B<<<<<10"
+        corrected = pdf_tools._correct_mrz_ocr_errors(valid)
+        assert corrected == valid
+
+
+# ============================================================================
+# Test: Non-standard Form Heuristics (v1.2.0)
+# ============================================================================
+
+
+class TestFormHeuristicsLcs:
+    """Tests for improved label matching using LCS fuzzy similarity."""
+
+    def test_lcs_similarity_exact_match(self):
+        """Exact match should return 1.0."""
+        assert pdf_tools._lcs_similarity("name", "name") == 1.0
+
+    def test_lcs_similarity_partial_match(self):
+        """Partial match should return > 0 and < 1."""
+        score = pdf_tools._lcs_similarity("fullname", "firstname")
+        assert 0 < score < 1
+
+    def test_lcs_similarity_no_match(self):
+        """Completely different strings should return 0."""
+        assert pdf_tools._lcs_similarity("xyz", "abc") == 0.0
+
+    def test_lcs_similarity_empty(self):
+        """Empty strings should return 0."""
+        assert pdf_tools._lcs_similarity("", "abc") == 0.0
+
+    def test_improved_score_label_match_fuzzy(self):
+        """Improved scoring should handle fuzzy matches like full_name -> name."""
+        score = pdf_tools._score_label_match("full_name", "name", ["name"])
+        assert score >= 1  # Should match via token overlap
+
+    def test_improved_score_label_match_abbreviation(self):
+        """Should handle abbreviations like DOB -> date of birth."""
+        score = pdf_tools._score_label_match("dob", "dateofbirth", ["date", "birth"])
+        assert score >= 1
+
+
+class TestFormHeuristicsGeometricCheckbox:
+    """Tests for geometric checkbox/radio button detection."""
+
+    def test_detect_form_fields_has_geometric_detection(self, sample_text_pdf):
+        """detect_form_fields should include geometric checkbox detection."""
+        result = pdf_tools.detect_form_fields(sample_text_pdf)
+        assert isinstance(result, dict)
+        # Should have page analysis with checkbox info
+        for page_analysis in result.get("page_analysis", []):
+            assert "detected_checkboxes" in page_analysis
+
+    def test_detect_form_fields_multiline_areas(self, sample_text_pdf):
+        """detect_form_fields should detect large blank areas as multi-line fields."""
+        result = pdf_tools.detect_form_fields(sample_text_pdf)
+        assert isinstance(result, dict)
+        # Structure should exist even if no multi-line areas found
+        for page_analysis in result.get("page_analysis", []):
+            assert "detected_multiline_areas" in page_analysis

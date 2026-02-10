@@ -295,7 +295,36 @@ def _field_tokens(value: str) -> List[str]:
     return [t for t in tokens if t not in stopwords]
 
 
+def _lcs_similarity(a: str, b: str) -> float:
+    """Compute normalized Longest Common Subsequence similarity.
+
+    Returns a value between 0.0 (no match) and 1.0 (exact match).
+    Used for fuzzy label-to-field matching in non-standard forms.
+    """
+    if not a or not b:
+        return 0.0
+    a_low, b_low = a.lower(), b.lower()
+    n, m = len(a_low), len(b_low)
+    # Space-optimized LCS (two rows)
+    prev = [0] * (m + 1)
+    curr = [0] * (m + 1)
+    for i in range(1, n + 1):
+        for j in range(1, m + 1):
+            if a_low[i - 1] == b_low[j - 1]:
+                curr[j] = prev[j - 1] + 1
+            else:
+                curr[j] = max(prev[j], curr[j - 1])
+        prev, curr = curr, [0] * (m + 1)
+    lcs_len = prev[m]
+    return lcs_len / min(n, m)
+
+
 def _score_label_match(key: str, label_normalized: str, label_tokens: List[str]) -> int:
+    """Score how well a data key matches a detected label.
+
+    Uses exact match, substring containment, token overlap, and LCS fuzzy matching.
+    Returns 0 (no match) to 3 (exact match).
+    """
     key_normalized = _normalize_field_key(key)
     if not key_normalized:
         return 0
@@ -305,10 +334,14 @@ def _score_label_match(key: str, label_normalized: str, label_tokens: List[str])
         return 2
     key_tokens = _field_tokens(key)
     if not key_tokens or not label_tokens:
-        return 0
+        # Fallback to LCS for tokenless matches (abbreviations, etc.)
+        lcs = _lcs_similarity(key_normalized, label_normalized)
+        return 2 if lcs >= 0.7 else (1 if lcs >= 0.5 else 0)
     overlap = set(key_tokens) & set(label_tokens)
     if not overlap:
-        return 0
+        # LCS fallback for fuzzy matching
+        lcs = _lcs_similarity(key_normalized, label_normalized)
+        return 1 if lcs >= 0.5 else 0
     if len(overlap) == len(set(key_tokens)):
         return 2
     return 1
@@ -2645,6 +2678,7 @@ def detect_form_fields(
                 "detected_labels": [],
                 "detected_checkboxes": [],
                 "detected_underlines": [],
+                "detected_multiline_areas": [],
             }
 
             # Get text blocks with positions
@@ -2708,6 +2742,26 @@ def detect_form_fields(
                                     })
             except Exception:
                 pass  # get_drawings might not be available in all PyMuPDF versions
+
+            # Detect large blank rectangular areas (potential multi-line text fields)
+            try:
+                drawings = page.get_drawings()
+                line_height = 14  # Approximate single line height in points
+                for drawing in drawings:
+                    rect = drawing.get("rect", [])
+                    if len(rect) == 4:
+                        width = abs(rect[2] - rect[0])
+                        height = abs(rect[3] - rect[1])
+                        # Multi-line: wider than 100pt and taller than 2x line height
+                        if width > 100 and height > line_height * 2:
+                            page_result["detected_multiline_areas"].append({
+                                "bbox": list(rect),
+                                "width": width,
+                                "height": height,
+                                "estimated_lines": max(1, int(height / line_height)),
+                            })
+            except Exception:
+                pass
 
             page_analyses.append(page_result)
 
@@ -4278,6 +4332,61 @@ Only include mappings you're confident about."""
     }
 
 
+def _mrz_check_digit(value: str) -> int:
+    """Compute MRZ check digit per ICAO 9303.
+
+    Characters: 0-9 = 0-9, A-Z = 10-35, < (filler) = 0.
+    Weights cycle: 7, 3, 1.
+    """
+    weights = [7, 3, 1]
+    total = 0
+    for i, ch in enumerate(value):
+        if ch.isdigit():
+            num = int(ch)
+        elif ch.isalpha():
+            num = ord(ch.upper()) - ord("A") + 10
+        else:  # filler '<' or any other char
+            num = 0
+        total += num * weights[i % 3]
+    return total % 10
+
+
+def _mrz_validate_field(field: str, expected_check: int) -> bool:
+    """Validate an MRZ field against its check digit."""
+    return _mrz_check_digit(field) == expected_check
+
+
+def _correct_mrz_ocr_errors(line: str) -> str:
+    """Correct common OCR misreads in MRZ text.
+
+    Common OCR errors in MRZ zones:
+    - O (letter) misread as 0 (digit) and vice-versa in wrong positions
+    - I (letter) misread as 1 (digit)
+    - B misread as 8, S as 5, Z as 2
+    """
+    # For TD3 line 2 (passport data line), positions have known types:
+    # 0-8: passport number (alphanum), 9: check, 10-12: nationality (alpha),
+    # 13-18: birth date (digits), 19: check, 20: sex (alpha), 21-26: expiry (digits),
+    # 27: check, 28-41: personal number (alphanum), 42: check, 43: composite check
+    # We only correct obvious digit/alpha misreads
+    result = list(line)
+    digit_corrections = {"O": "0", "o": "0", "I": "1", "l": "1", "S": "5", "B": "8", "Z": "2"}
+    alpha_corrections = {"0": "O", "1": "I", "5": "S", "8": "B", "2": "Z"}
+
+    # For a 44-char line2, correct known digit-only positions
+    if len(result) == 44:
+        digit_positions = set(range(13, 20)) | set(range(21, 28)) | {9, 27, 42, 43}
+        alpha_positions = set(range(10, 13)) | {20}
+        for pos in digit_positions:
+            if pos < len(result) and result[pos] in digit_corrections:
+                result[pos] = digit_corrections[result[pos]]
+        for pos in alpha_positions:
+            if pos < len(result) and result[pos] in alpha_corrections:
+                result[pos] = alpha_corrections[result[pos]]
+
+    return "".join(result)
+
+
 def _parse_mrz_date(value: str) -> Optional[str]:
     if not value or len(value) != 6 or not value.isdigit():
         return None
@@ -4319,15 +4428,37 @@ def _normalize_issue_date(value: str) -> Optional[str]:
     return None
 
 
-def _extract_mrz_lines(text: str) -> Optional[tuple[str, str]]:
-    lines = []
+def _extract_mrz_lines(text: str) -> Optional[tuple]:
+    """Extract MRZ lines supporting TD1 (3x30), TD2 (2x36), and TD3 (2x44).
+
+    Returns:
+        Tuple of MRZ lines if found, None otherwise.
+        TD1: (line1, line2, line3) - 3 lines of 30 chars
+        TD2: (line1, line2) - 2 lines of 36 chars
+        TD3: (line1, line2) - 2 lines of 44 chars
+    """
+    candidates = []
     for line in text.splitlines():
         cleaned = re.sub(r"\s", "", line.strip())
-        if "<" in cleaned and len(cleaned) >= 30:
-            lines.append(cleaned)
-    for i in range(len(lines) - 1):
-        if len(lines[i]) == 44 and len(lines[i + 1]) == 44:
-            return lines[i], lines[i + 1]
+        if "<" in cleaned and len(cleaned) >= 28:
+            candidates.append(cleaned)
+
+    # Try TD3 first (passport, 2x44)
+    for i in range(len(candidates) - 1):
+        if len(candidates[i]) == 44 and len(candidates[i + 1]) == 44:
+            return (candidates[i], candidates[i + 1])
+
+    # Try TD2 (travel document, 2x36)
+    for i in range(len(candidates) - 1):
+        if len(candidates[i]) == 36 and len(candidates[i + 1]) == 36:
+            return (candidates[i], candidates[i + 1])
+
+    # Try TD1 (ID card, 3x30)
+    for i in range(len(candidates) - 2):
+        if (len(candidates[i]) == 30 and len(candidates[i + 1]) == 30
+                and len(candidates[i + 2]) == 30):
+            return (candidates[i], candidates[i + 1], candidates[i + 2])
+
     return None
 
 
@@ -4336,9 +4467,11 @@ def _extract_passport_fields(full_text: str) -> tuple[Dict[str, Any], Dict[str, 
     confidence: Dict[str, float] = {}
 
     mrz = _extract_mrz_lines(full_text)
-    if mrz:
+    if mrz and len(mrz) == 2 and len(mrz[0]) == 44:
+        # TD3 passport format (2x44)
         line1, line2 = mrz
-        if line1.startswith("P<"):
+        line2 = _correct_mrz_ocr_errors(line2)
+        if line1.startswith("P<") or line1[0] == "P":
             issuing_country = line1[2:5].replace("<", "").strip()
             names = line1[5:]
             surname = ""
@@ -4348,11 +4481,19 @@ def _extract_passport_fields(full_text: str) -> tuple[Dict[str, Any], Dict[str, 
                 surname = surname_part.replace("<", " ").strip()
                 given_names = given_part.replace("<", " ").strip()
             passport_number = line2[0:9].replace("<", "").strip()
+            passport_check = int(line2[9]) if line2[9].isdigit() else -1
             nationality = line2[10:13].replace("<", "").strip()
             birth_raw = line2[13:19]
+            birth_check = int(line2[19]) if line2[19].isdigit() else -1
             sex = line2[20:21].replace("<", "").strip()
             expiry_raw = line2[21:27]
+            expiry_check = int(line2[27]) if line2[27].isdigit() else -1
             personal_number = line2[28:42].replace("<", "").strip()
+
+            # Validate checksums for dynamic confidence
+            pn_valid = _mrz_validate_field(line2[0:9], passport_check) if passport_check >= 0 else False
+            bd_valid = _mrz_validate_field(birth_raw, birth_check) if birth_check >= 0 else False
+            ed_valid = _mrz_validate_field(expiry_raw, expiry_check) if expiry_check >= 0 else False
 
             birth_date = _parse_mrz_date(birth_raw)
             expiry_date = _parse_mrz_date(expiry_raw)
@@ -4369,16 +4510,61 @@ def _extract_passport_fields(full_text: str) -> tuple[Dict[str, Any], Dict[str, 
                 "personal_number": personal_number or None,
             })
             confidence.update({
-                "passport_number": 0.85,
+                "passport_number": 0.95 if pn_valid else 0.7,
                 "issuing_country": 0.8,
                 "nationality": 0.8,
                 "surname": 0.75,
                 "given_names": 0.75,
-                "birth_date": 0.85,
+                "birth_date": 0.95 if bd_valid else 0.7,
                 "sex": 0.9,
-                "expiry_date": 0.85,
+                "expiry_date": 0.95 if ed_valid else 0.7,
                 "personal_number": 0.6,
             })
+    elif mrz and len(mrz) == 3 and len(mrz[0]) == 30:
+        # TD1 ID card format (3x30)
+        line1, line2, line3 = mrz
+        line2 = _correct_mrz_ocr_errors(line2)
+        doc_code = line1[0:2].replace("<", "").strip()
+        issuing_country = line1[2:5].replace("<", "").strip()
+        doc_number = line1[5:14].replace("<", "").strip()
+        birth_raw = line2[0:6]
+        sex = line2[7:8].replace("<", "").strip()
+        expiry_raw = line2[8:14]
+        nationality = line2[15:18].replace("<", "").strip()
+
+        # Names from line 3
+        name_part = line3.rstrip("<")
+        surname = ""
+        given_names = ""
+        if "<<" in name_part:
+            surname_part, given_part = name_part.split("<<", 1)
+            surname = surname_part.replace("<", " ").strip()
+            given_names = given_part.replace("<", " ").strip()
+
+        birth_date = _parse_mrz_date(birth_raw)
+        expiry_date = _parse_mrz_date(expiry_raw)
+
+        extracted.update({
+            "document_type": doc_code or "ID",
+            "passport_number": doc_number or None,
+            "issuing_country": issuing_country or None,
+            "nationality": nationality or None,
+            "surname": surname or None,
+            "given_names": given_names or None,
+            "birth_date": birth_date or birth_raw,
+            "sex": sex or None,
+            "expiry_date": expiry_date or expiry_raw,
+        })
+        confidence.update({
+            "passport_number": 0.8,
+            "issuing_country": 0.8,
+            "nationality": 0.8,
+            "surname": 0.75,
+            "given_names": 0.75,
+            "birth_date": 0.8,
+            "sex": 0.9,
+            "expiry_date": 0.8,
+        })
 
     def _label_value(patterns: list[str]) -> Optional[str]:
         for pattern in patterns:

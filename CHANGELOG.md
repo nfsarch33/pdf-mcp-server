@@ -6,6 +6,31 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 1.2.0 - 2026-02-10
+
+### Added
+- **MRZ checksum validation**: New `_mrz_check_digit()` and `_mrz_validate_field()` per ICAO 9303. Passport number, birth date, and expiry date checksums are validated, boosting confidence to 0.95 when valid.
+- **TD1 ID card format**: `_extract_mrz_lines()` now supports TD1 (3x30 chars) and TD2 (2x36) in addition to TD3 (2x44) passports.
+- **OCR error correction for MRZ**: New `_correct_mrz_ocr_errors()` fixes common OCR misreads (O->0, I->1, B->8) in digit/alpha positions per MRZ structure.
+- **LCS fuzzy matching**: New `_lcs_similarity()` for normalized Longest Common Subsequence scoring. `_score_label_match` now falls back to LCS for abbreviations and fuzzy matches.
+- **Multi-line text area detection**: `detect_form_fields()` now includes `detected_multiline_areas` for large blank rectangles suitable for multi-line text input.
+- **18 new tests**: MRZ checksum (6), TD1 format (2), OCR correction (2), LCS similarity (6), geometric detection (2).
+- Installed pyzbar Python package (libzbar0 system lib requires sudo).
+
+### Changed
+- `_extract_passport_fields()` now uses dynamic confidence based on checksum validation (0.95 for validated, 0.7 for unvalidated).
+- `_score_label_match()` enhanced with LCS fallback for better non-standard form field matching.
+
+### Validated
+- Full test suite: 283 passed, 9 skipped, 0 failures (~236s) - up from 264/10 (+19 new tests, -1 skip).
+- All 18 new feature tests pass.
+- E2E local VLM: all tests passing with Qwen2.5-VL-7B-Instruct on RTX 3090.
+- Lint: all checks passed (ruff).
+
+### Research
+- VLM model confirmed: Qwen2.5-VL-7B-Instruct is optimal for RTX 3090 (24GB). No switch needed.
+- Potential future upgrade: olmOCR-7B for structured output, RolmOCR for OCR-specific fine-tune.
+
 ## 1.1.0 - 2026-02-10
 
 ### Fixed
