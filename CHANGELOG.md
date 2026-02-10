@@ -6,6 +6,24 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 1.0.9 - 2026-02-10
+
+### Changed
+- Updated test count in PROJECT_STATUS_PROMPT.md (261 passed, 13 skipped).
+- Updated Pepper SOPs: `pdf-mcp-server-release-sop.md` v3.0 now reflects centralized versioning (was still referencing old 6-location strategy).
+- Updated `release-sop-tag-based.md` with tag rollback procedure and reference to comprehensive SOP.
+
+### Added
+- **Tag rollback procedure**: Verified workflow for deleting and recreating tags. Documented in all release SOPs.
+- **VLM Apple Silicon findings**: Documented that Qwen3-VL image/complex extraction times out (>300s) on Apple Silicon via Ollama (CPU-only for vision encoder). Simple text queries work (~25s). NVIDIA GPUs required for production VLM workloads.
+
+### Validated
+- Tag-based release CI: v1.0.8 Release workflow succeeded on both original and re-created tag.
+- Tag rollback: delete remote tag + release, recreate tag -> CI re-fires and creates new release.
+- Full test suite: 261 passed, 13 skipped, 0 failures in 94s.
+- Lint: all checks passed (ruff).
+- Self-contained scripts: `setup_environment.sh` and `run_local_vlm.sh` have no external repo dependencies.
+
 ## 1.0.8 - 2026-02-10
 
 ### Changed
