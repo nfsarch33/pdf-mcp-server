@@ -17,6 +17,7 @@ All tests use mocked LLM responses for unit testing.
 
 import json
 import os
+import re
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -1816,3 +1817,182 @@ class TestVlmQuality001DateCrossValidation:
             assert "2030" not in str(issue), (
                 "VLM-QUALITY-001: issue_date still contains expiry year after correction"
             )
+
+
+# ============================================================================
+# Test: BUG-003 - MRZ expiry_date century must use future context (v1.2.3)
+# ============================================================================
+
+
+class TestBug003ExpiryDateCentury:
+    """BUG-003: _parse_mrz_date uses a single threshold that fails for future
+    expiry dates. Year '33' should be 2033 (expiry), not 1933."""
+
+    def test_expiry_date_future_year(self):
+        """MRZ expiry '330406' should produce 2033-04-06, not 1933."""
+        result = pdf_tools._parse_mrz_date("330406", is_expiry=True)
+        assert result is not None
+        assert result.startswith("2033"), (
+            f"BUG-003: expiry '330406' returned {result}, expected 2033-04-06"
+        )
+
+    def test_expiry_date_far_future(self):
+        """MRZ expiry '450101' should produce 2045-01-01."""
+        result = pdf_tools._parse_mrz_date("450101", is_expiry=True)
+        assert result is not None
+        assert result.startswith("2045"), (
+            f"BUG-003: expiry '450101' returned {result}, expected 2045-01-01"
+        )
+
+    def test_birth_date_past_year(self):
+        """MRZ birth '490508' should produce 1949-05-08 (DOB is in the past)."""
+        result = pdf_tools._parse_mrz_date("490508")
+        assert result is not None
+        assert result.startswith("1949"), (
+            f"BUG-003: birth '490508' returned {result}, expected 1949-05-08"
+        )
+
+    def test_birth_date_recent(self):
+        """MRZ birth '050101' should produce 2005-01-01 (young person)."""
+        result = pdf_tools._parse_mrz_date("050101")
+        assert result is not None
+        assert result.startswith("2005"), (
+            f"BUG-003: birth '050101' returned {result}, expected 2005-01-01"
+        )
+
+    def test_expiry_cascades_to_passport_output(self):
+        """Full passport extraction must produce correct expiry year."""
+        # TD3 MRZ with expiry 330406 (April 6, 2033)
+        line1 = "P<UTODOE<<JOHN<JAMES<<<<<<<<<<<<<<<<<<<<<<<<" # 44 chars
+        line2 = "AB12345674UTO8001011M3304064<<<<<<<<<<<<<<06" # 44 chars
+        fake_text = f"{line1}\n{line2}\n"
+        fake_text_result = {"text": fake_text, "pages_extracted": 1}
+
+        with (
+            patch.object(
+                pdf_tools, "_ensure_file", return_value=Path("/fake/p.pdf")
+            ),
+            patch.object(
+                pdf_tools, "extract_text", return_value=fake_text_result
+            ),
+            patch.object(pdf_tools, "_get_llm_backend", return_value=None),
+        ):
+            result = pdf_tools.extract_structured_data(
+                "/fake/p.pdf", data_type="passport",
+            )
+
+        expiry = result["data"].get("expiry_date", "")
+        assert "2033" in str(expiry), (
+            f"BUG-003: expiry_date in passport output is {expiry}, expected 2033"
+        )
+
+
+# ============================================================================
+# Test: BUG-004 - personal_number OCR noise filtering (v1.2.3)
+# ============================================================================
+
+
+class TestBug004PersonalNumberNoise:
+    """BUG-004: personal_number from MRZ positions 28-42 often contains OCR
+    garbage. Should be None when no meaningful content is found."""
+
+    def test_noise_personal_number_filtered(self):
+        """OCR noise like 'MENPNAODNDKCA9' should become None."""
+        # MRZ line2 with noise in personal_number positions
+        line1 = "P<UTODOE<<JOHN<JAMES<<<<<<<<<<<<<<<<<<<<<<<<" # 44 chars
+        line2 = "AB12345674UTO8001011M3012315MENPNAODNDKCA906" # 44 chars
+        fake_text = f"{line1}\n{line2}\n"
+        fake_text_result = {"text": fake_text, "pages_extracted": 1}
+
+        with (
+            patch.object(
+                pdf_tools, "_ensure_file", return_value=Path("/fake/p.pdf")
+            ),
+            patch.object(
+                pdf_tools, "extract_text", return_value=fake_text_result
+            ),
+            patch.object(pdf_tools, "_get_llm_backend", return_value=None),
+        ):
+            result = pdf_tools.extract_structured_data(
+                "/fake/p.pdf", data_type="passport",
+            )
+
+        pn = result["data"].get("personal_number")
+        if pn is not None:
+            # If present, it should not be pure noise
+            assert re.match(r"^[A-Z0-9]+$", pn) is None or len(pn) <= 2, (
+                f"BUG-004: personal_number '{pn}' looks like OCR noise"
+            )
+
+    def test_valid_personal_number_preserved(self):
+        """A legitimate personal_number (digits) should be kept."""
+        line1 = "P<UTODOE<<JOHN<JAMES<<<<<<<<<<<<<<<<<<<<<<<<" # 44 chars
+        line2 = "AB12345674UTO8001011M301231512345678<<<<<<06" # 44 chars
+        fake_text = f"{line1}\n{line2}\n"
+        fake_text_result = {"text": fake_text, "pages_extracted": 1}
+
+        with (
+            patch.object(
+                pdf_tools, "_ensure_file", return_value=Path("/fake/p.pdf")
+            ),
+            patch.object(
+                pdf_tools, "extract_text", return_value=fake_text_result
+            ),
+            patch.object(pdf_tools, "_get_llm_backend", return_value=None),
+        ):
+            result = pdf_tools.extract_structured_data(
+                "/fake/p.pdf", data_type="passport",
+            )
+
+        pn = result["data"].get("personal_number")
+        assert pn == "12345678", (
+            f"BUG-004: valid personal_number should be '12345678', got '{pn}'"
+        )
+
+
+# ============================================================================
+# Test: VLM-QUALITY-003 - VLM authority prompt improvement (v1.2.3)
+# ============================================================================
+
+
+class TestVlmQuality003AuthorityPrompt:
+    """VLM-QUALITY-003: VLM prompt should specify to look at the data page,
+    not the introductory page, for issuing authority. Also for Chinese
+    passports, post-process MFA -> NIA if appropriate."""
+
+    def test_chinese_passport_authority_post_processing(self):
+        """If issuing_country=CHN and authority mentions 'Foreign Affairs',
+        it should be corrected to NIA."""
+        line1 = "P<CHNTEST<<PERSON<<<<<<<<<<<<<<<<<<<<<<<<<<<" # 44 chars
+        line2 = "AB12345674CHN8001011M3012315<<<<<<<<<<<<<<06" # 44 chars
+        fake_text = f"{line1}\n{line2}\n"
+        fake_text_result = {"text": fake_text, "pages_extracted": 1}
+        # VLM returns MFA (from intro page)
+        fake_llm_response = json.dumps({
+            "issue_date": "2020-12-31",
+            "issuing_authority": "Ministry of Foreign Affairs",
+            "place_of_birth": "Beijing",
+        })
+
+        with (
+            patch.object(
+                pdf_tools, "_ensure_file", return_value=Path("/fake/p.pdf")
+            ),
+            patch.object(
+                pdf_tools, "extract_text", return_value=fake_text_result
+            ),
+            patch.object(
+                pdf_tools, "_get_llm_backend", return_value="local"
+            ),
+            patch.object(
+                pdf_tools, "_call_llm", return_value=fake_llm_response
+            ),
+        ):
+            result = pdf_tools.extract_structured_data(
+                "/fake/p.pdf", data_type="passport", backend="local",
+            )
+
+        authority = result["data"].get("issuing_authority", "")
+        assert "Foreign Affairs" not in authority, (
+            f"VLM-QUALITY-003: authority should not be MFA, got '{authority}'"
+        )

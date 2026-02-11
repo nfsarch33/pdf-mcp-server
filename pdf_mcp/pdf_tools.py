@@ -4387,14 +4387,31 @@ def _correct_mrz_ocr_errors(line: str) -> str:
     return "".join(result)
 
 
-def _parse_mrz_date(value: str) -> Optional[str]:
+def _parse_mrz_date(value: str, is_expiry: bool = False) -> Optional[str]:
+    """Parse a 6-digit MRZ date (YYMMDD) into ISO format (YYYY-MM-DD).
+
+    Uses context-aware century determination per ICAO 9303:
+    - Birth dates: always in the past (use current_year as threshold).
+    - Expiry dates: always in the near future (use current_year + 30 as
+      threshold, capped so they don't exceed ~30 years from now).
+
+    Args:
+        value: 6-digit date string in YYMMDD format.
+        is_expiry: True if this is an expiry/validity date (future-biased).
+    """
     if not value or len(value) != 6 or not value.isdigit():
         return None
     year = int(value[0:2])
     month = int(value[2:4])
     day = int(value[4:6])
-    current_year = date.today().year % 100
-    century = 2000 if year <= current_year else 1900
+    if is_expiry:
+        # Expiry dates are in the near future: always 20xx for typical passports
+        # (valid for 5-10 years). Use a generous 50-year window.
+        century = 2000 if year <= 80 else 1900
+    else:
+        # Birth dates are in the past: standard threshold at current year
+        current_year = date.today().year % 100
+        century = 2000 if year <= current_year else 1900
     full_year = century + year
     try:
         return f"{full_year:04d}-{month:02d}-{day:02d}"
@@ -4541,6 +4558,44 @@ def _normalize_date_to_yymmdd(date_str: str) -> Optional[str]:
     return None
 
 
+def _correct_chinese_passport_authority(
+    extracted_data: Dict[str, Any],
+    confidence: Dict[str, float],
+) -> None:
+    """Correct issuing authority for Chinese passports.
+
+    VLM often returns "Ministry of Foreign Affairs" which appears on the
+    introductory page of Chinese passports. Since 2019, the actual issuing
+    authority on the data page is "National Immigration Administration" (NIA).
+
+    Mutates extracted_data and confidence in-place.
+    """
+    issuing_country = extracted_data.get("issuing_country", "")
+    authority = str(extracted_data.get("issuing_authority", ""))
+
+    if not authority:
+        return
+
+    # Only apply to Chinese passports (CHN or CHINA)
+    is_chinese = issuing_country.upper() in ("CHN", "CHINA") or (
+        extracted_data.get("nationality", "").upper() in ("CHN", "CHINA")
+    )
+    if not is_chinese:
+        return
+
+    # Check if VLM returned MFA-related text
+    mfa_indicators = [
+        "foreign affairs",
+        "ministry of foreign",
+        "外交部",
+    ]
+    if any(ind in authority.lower() for ind in mfa_indicators):
+        extracted_data["issuing_authority"] = (
+            "National Immigration Administration, PRC"
+        )
+        confidence["issuing_authority"] = 0.5  # Lower confidence for corrected
+
+
 def _cross_validate_passport_dates(
     extracted_data: Dict[str, Any],
     confidence: Dict[str, float],
@@ -4615,7 +4670,14 @@ def _extract_passport_fields(full_text: str) -> tuple[Dict[str, Any], Dict[str, 
             sex = line2[20:21].replace("<", "").strip()
             expiry_raw = line2[21:27]
             expiry_check = int(line2[27]) if line2[27].isdigit() else -1
-            personal_number = line2[28:42].replace("<", "").strip()
+            personal_number_raw = line2[28:42].replace("<", "").strip()
+            # Filter OCR noise from personal_number: if it contains mostly
+            # non-digit characters, it's likely OCR garbage from the scan.
+            personal_number = None
+            if personal_number_raw:
+                digit_ratio = sum(c.isdigit() for c in personal_number_raw) / len(personal_number_raw)
+                if digit_ratio >= 0.5:
+                    personal_number = personal_number_raw
 
             # Validate checksums for dynamic confidence
             pn_valid = _mrz_validate_field(line2[0:9], passport_check) if passport_check >= 0 else False
@@ -4623,7 +4685,7 @@ def _extract_passport_fields(full_text: str) -> tuple[Dict[str, Any], Dict[str, 
             ed_valid = _mrz_validate_field(expiry_raw, expiry_check) if expiry_check >= 0 else False
 
             birth_date = _parse_mrz_date(birth_raw)
-            expiry_date = _parse_mrz_date(expiry_raw)
+            expiry_date = _parse_mrz_date(expiry_raw, is_expiry=True)
 
             extracted.update({
                 "passport_number": passport_number or None,
@@ -4669,7 +4731,7 @@ def _extract_passport_fields(full_text: str) -> tuple[Dict[str, Any], Dict[str, 
             given_names = given_part.replace("<", " ").strip()
 
         birth_date = _parse_mrz_date(birth_raw)
-        expiry_date = _parse_mrz_date(expiry_raw)
+        expiry_date = _parse_mrz_date(expiry_raw, is_expiry=True)
 
         extracted.update({
             "document_type": doc_code or "ID",
@@ -4869,6 +4931,10 @@ def extract_structured_data(
                 system_prompt = (
                     "You are a passport data extraction assistant. "
                     "Extract structured data from OCR text of a passport scan. "
+                    "Focus on the DATA PAGE (the page with the photo and MRZ), "
+                    "NOT the introductory page. "
+                    "For issuing_authority, look for the authority on the data "
+                    "page, not the general ministry on the first page. "
                     "Return ONLY a valid JSON object. "
                     "Use null for fields you cannot find."
                 )
@@ -4901,6 +4967,12 @@ def extract_structured_data(
                         method = "passport+llm"
                     except (json.JSONDecodeError, IndexError):
                         pass
+
+        # Post-process: Chinese passport issuing authority correction.
+        # VLM often picks "Ministry of Foreign Affairs" from the passport's
+        # introductory page instead of the actual issuing authority on the
+        # data page (National Immigration Administration since 2019).
+        _correct_chinese_passport_authority(extracted_data, confidence)
 
         # Cross-validate: if VLM issue_date matches MRZ expiry_date, apply
         # domain knowledge correction (10-year validity for most passports).

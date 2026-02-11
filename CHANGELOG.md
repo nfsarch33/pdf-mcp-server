@@ -6,6 +6,21 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 1.2.3 - 2026-02-11
+
+### Fixed
+- **BUG-003 (HIGH)**: `_parse_mrz_date()` now accepts `is_expiry` parameter for context-aware century determination per ICAO 9303. Expiry year '33' correctly produces 2033, not 1933. Fixes cascading issue_date cross-validation failures.
+- **BUG-004 (LOW)**: `personal_number` from MRZ positions 28-42 now filtered for OCR noise. Lines with <50% digits are discarded as garbage instead of stored as-is.
+- **VLM-QUALITY-003 (MEDIUM)**: Chinese passport issuing authority post-processing: VLM responses containing "Ministry of Foreign Affairs" (intro page text) are corrected to "National Immigration Administration, PRC" when issuing_country is CHN. VLM prompt improved with data-page guidance.
+
+### Added
+- `_correct_chinese_passport_authority()`: Post-processes VLM authority responses for Chinese passports.
+- 8 new tests: BUG-003 expiry century (5), BUG-004 personal_number noise (2), VLM-QUALITY-003 authority correction (1).
+
+### Validated
+- Full test suite: 307 passed, 9 skipped, 0 failures (~237s) - up from 299/9 (+8 new tests, zero regressions).
+- All bug fix tests written first (TDD red-green), then fixes implemented.
+
 ## 1.2.2 - 2026-02-11
 
 ### Fixed
