@@ -1996,3 +1996,137 @@ class TestVlmQuality003AuthorityPrompt:
         assert "Foreign Affairs" not in authority, (
             f"VLM-QUALITY-003: authority should not be MFA, got '{authority}'"
         )
+
+
+class TestBug005IssueDateOffByOneDay:
+    """BUG-005 (CRITICAL): extract_structured_data passport issue_date is off
+    by -1 day. The VLM derives issue_date = expiry - 10 years, but passports
+    expire the day BEFORE the 10-year anniversary of issuance.
+
+    Correct formula: issue_date = expiry_date + 1 day - 10 years
+    Example: expiry 2033-04-06 -> issue 2023-04-07 (NOT 2023-04-06)
+
+    See: https://github.com/nfsarch33/pdf-mcp-server/issues/34
+    """
+
+    def test_cross_validate_corrects_with_plus_one_day(self):
+        """When VLM returns expiry as issue_date, the correction should produce
+        expiry + 1 day - 10 years, not expiry - 10 years."""
+        from datetime import date, timedelta
+
+        data = {"issue_date": "2033-04-06", "expiry_date": "2033-04-06"}
+        conf = {"issue_date": 0.85, "expiry_date": 0.95}
+        pdf_tools._cross_validate_passport_dates(data, conf)
+        # Corrected issue_date should be 2023-04-07 (expiry + 1 day - 10 years)
+        assert data["issue_date"] == "2023-04-07", (
+            f"BUG-005: expected 2023-04-07, got {data['issue_date']}"
+        )
+        # Confidence should be lowered for derived values
+        assert conf["issue_date"] <= 0.55, (
+            f"BUG-005: derived date confidence should be <= 0.55, got {conf['issue_date']}"
+        )
+
+    def test_cross_validate_jan_boundary(self):
+        """Expiry 2033-01-01 -> issue should be 2023-01-02 (not 2023-01-01)."""
+        data = {"issue_date": "2033-01-01", "expiry_date": "2033-01-01"}
+        conf = {"issue_date": 0.85, "expiry_date": 0.95}
+        pdf_tools._cross_validate_passport_dates(data, conf)
+        assert data["issue_date"] == "2023-01-02", (
+            f"BUG-005: expected 2023-01-02, got {data['issue_date']}"
+        )
+
+    def test_cross_validate_dec31_year_boundary(self):
+        """Expiry 2033-12-31 -> issue should be 2024-01-01.
+        Dec 31 + 1 day = Jan 1, 2034, - 10 years = 2024-01-01."""
+        data = {"issue_date": "2033-12-31", "expiry_date": "2033-12-31"}
+        conf = {"issue_date": 0.85, "expiry_date": 0.95}
+        pdf_tools._cross_validate_passport_dates(data, conf)
+        assert data["issue_date"] == "2024-01-01", (
+            f"BUG-005: expected 2024-01-01, got {data['issue_date']}"
+        )
+
+    def test_detect_vlm_derived_issue_date(self):
+        """When VLM returns issue_date that is exactly expiry - 10 years
+        (same day/month), detect and apply +1 day correction.
+        This is the MAIN BUG-005 scenario from the real-world report."""
+        data = {"issue_date": "2023-04-06", "expiry_date": "2033-04-06"}
+        conf = {"issue_date": 0.85, "expiry_date": 0.95}
+        pdf_tools._cross_validate_passport_dates(data, conf)
+        # Should detect derivation and correct to +1 day
+        assert data["issue_date"] == "2023-04-07", (
+            f"BUG-005: expected 2023-04-07, got {data['issue_date']}"
+        )
+        assert conf["issue_date"] <= 0.55, (
+            f"BUG-005: derived confidence should be <= 0.55, got {conf['issue_date']}"
+        )
+
+    def test_detect_vlm_derived_second_passport(self):
+        """Second passport from bug report: expiry 2033-04-05, VLM issue 2023-04-05.
+        Should be corrected to 2023-04-06."""
+        data = {"issue_date": "2023-04-05", "expiry_date": "2033-04-05"}
+        conf = {"issue_date": 0.85, "expiry_date": 0.95}
+        pdf_tools._cross_validate_passport_dates(data, conf)
+        assert data["issue_date"] == "2023-04-06", (
+            f"BUG-005: expected 2023-04-06, got {data['issue_date']}"
+        )
+
+    def test_no_correction_for_legitimate_dates(self):
+        """If issue_date is NOT exactly expiry - 10 years, do NOT modify it.
+        Example: issue 2023-04-07, expiry 2033-04-06 (correct, no change needed)."""
+        data = {"issue_date": "2023-04-07", "expiry_date": "2033-04-06"}
+        conf = {"issue_date": 0.85, "expiry_date": 0.95}
+        pdf_tools._cross_validate_passport_dates(data, conf)
+        assert data["issue_date"] == "2023-04-07", (
+            f"BUG-005: legitimate date should not be modified, got {data['issue_date']}"
+        )
+        assert conf["issue_date"] == 0.85, (
+            f"BUG-005: legitimate confidence should not change, got {conf['issue_date']}"
+        )
+
+    def test_full_pipeline_corrects_issue_date(self):
+        """End-to-end: extract_structured_data should return the corrected
+        issue_date for a Chinese passport where VLM derives the date."""
+        # MRZ with expiry 330406 -> 2033-04-06
+        line1 = "P<CHNTEST<<PERSON<<<<<<<<<<<<<<<<<<<<<<<<<<<"  # 44 chars
+        line2 = "EK25479284CHN8001011M3304065<<<<<<<<<<<<<<06"  # 44 chars
+        fake_text = f"{line1}\n{line2}\n"
+        fake_text_result = {"text": fake_text, "pages_extracted": 1}
+        # VLM derives issue_date = expiry - 10 years (the BUG-005 pattern)
+        fake_llm_response = json.dumps({
+            "issue_date": "2023-04-06",  # Wrong: should be 2023-04-07
+            "issuing_authority": "National Immigration Administration, PRC",
+        })
+
+        with (
+            patch.object(
+                pdf_tools, "_ensure_file", return_value=Path("/fake/p.pdf")
+            ),
+            patch.object(
+                pdf_tools, "extract_text", return_value=fake_text_result
+            ),
+            patch.object(
+                pdf_tools, "_get_llm_backend", return_value="local"
+            ),
+            patch.object(
+                pdf_tools, "_call_llm", return_value=fake_llm_response
+            ),
+        ):
+            result = pdf_tools.extract_structured_data(
+                "/fake/p.pdf", data_type="passport", backend="local",
+            )
+
+        issue = result["data"].get("issue_date", "")
+        assert issue == "2023-04-07", (
+            f"BUG-005: full pipeline issue_date should be 2023-04-07, got {issue}"
+        )
+
+    def test_vlm_prompt_does_not_instruct_derivation(self):
+        """The VLM prompt should NOT tell the VLM to derive issue_date from
+        expiry_date. It should instruct to READ it directly."""
+        # This is a code inspection test -- verify the prompt guidance
+        import inspect
+        source = inspect.getsource(pdf_tools.extract_structured_data)
+        # The prompt should NOT contain "10 years BEFORE the expiry"
+        assert "10 years BEFORE the expiry" not in source, (
+            "BUG-005: VLM prompt should not instruct derivation of issue_date"
+        )

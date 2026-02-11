@@ -6,6 +6,23 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 1.2.4 - 2026-02-16
+
+### Fixed
+- **BUG-005 (CRITICAL)**: Passport `issue_date` was off by -1 day. The VLM derived `issue_date = expiry - 10 years` but passports expire the day BEFORE the 10-year anniversary. New formula: `issue_date = expiry + 1 day - 10 years` per ICAO/international standard. Fixes [#34](https://github.com/nfsarch33/pdf-mcp-server/issues/34).
+- **VLM prompt regression**: Removed instruction telling VLM to derive issue_date from expiry. VLM now instructed to READ the issue_date directly from the passport image, returning null if unreadable.
+
+### Added
+- `_derive_issue_from_expiry()`: Centralized helper for computing issue date from expiry using correct formula (`expiry + 1 day - 10 years`).
+- New detection: `_cross_validate_passport_dates` now detects BOTH VLM error patterns: (1) returning expiry as issue_date, (2) deriving `issue = expiry - 10 years` (BUG-005).
+- 8 new tests: BUG-005 cross-validation correction (3), VLM derivation detection (2), legitimate date preservation (1), full pipeline (1), prompt inspection (1).
+- Confidence lowered to 0.50 (from 0.60) for derived dates to flag uncertainty.
+
+### Validated
+- Full test suite: 315 passed, 9 skipped, 0 failures (~235s) - up from 307/9 (+8 new tests, zero regressions).
+- All bug fix tests written first (TDD red-green), then fixes implemented.
+- Real-world impact: This bug caused incorrect dates in an Australian immigration form (Form 1006 BVB application). The fix prevents future misreporting.
+
 ## 1.2.3 - 2026-02-11
 
 ### Fixed

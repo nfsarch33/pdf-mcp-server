@@ -4596,18 +4596,48 @@ def _correct_chinese_passport_authority(
         confidence["issuing_authority"] = 0.5  # Lower confidence for corrected
 
 
+def _derive_issue_from_expiry(expiry_date: "date") -> "date":
+    """Derive passport issue_date from expiry_date using international standard.
+
+    Most countries (including China, US, UK, etc.) issue passports that expire
+    the day BEFORE the Nth anniversary of issuance. For 10-year adult passports:
+        expiry = issue_date + 10 years - 1 day
+    Therefore:
+        issue_date = expiry_date + 1 day - 10 years
+
+    See: https://github.com/nfsarch33/pdf-mcp-server/issues/34
+    """
+    from datetime import timedelta
+
+    expiry_plus_one = expiry_date + timedelta(days=1)
+    try:
+        return expiry_plus_one.replace(year=expiry_plus_one.year - 10)
+    except ValueError:
+        # Handle Feb 29 -> Feb 28 for non-leap target year
+        return expiry_plus_one.replace(
+            year=expiry_plus_one.year - 10, month=2, day=28
+        )
+
+
 def _cross_validate_passport_dates(
     extracted_data: Dict[str, Any],
     confidence: Dict[str, float],
 ) -> None:
-    """Cross-validate VLM issue_date against MRZ expiry_date.
+    """Cross-validate VLM issue_date against expiry_date.
 
-    If the VLM returned the expiry date as the issue date (a common VLM error),
-    apply domain knowledge: for most passports, validity is 10 years, so
-    issue_date = expiry_date - 10 years.
+    Detects two VLM error patterns and corrects them:
+    1. VLM returned the expiry date AS the issue date (issue_norm == expiry_norm)
+    2. VLM derived issue_date = expiry - 10 years (off by -1 day)
+
+    For both cases, applies the correct formula:
+        issue_date = expiry_date + 1 day - 10 years
+
+    See BUG-005: https://github.com/nfsarch33/pdf-mcp-server/issues/34
 
     Mutates extracted_data and confidence in-place.
     """
+    from datetime import date
+
     issue_raw = str(extracted_data.get("issue_date", ""))
     expiry_raw = str(extracted_data.get("expiry_date", ""))
 
@@ -4620,28 +4650,48 @@ def _cross_validate_passport_dates(
     if not issue_norm or not expiry_norm:
         return
 
+    # Parse expiry date fully
+    try:
+        eyy = int(expiry_norm[:2])
+        emm = int(expiry_norm[2:4])
+        edd = int(expiry_norm[4:6])
+        ecentury = 1900 if eyy > 50 else 2000
+        expiry_date = date(ecentury + eyy, emm, edd)
+    except (ValueError, TypeError):
+        return
+
+    # Scenario 1: VLM returned expiry date as issue date (same YYMMDD)
     if issue_norm == expiry_norm:
-        # VLM returned the expiry date as issue date -- apply 10-year rule
+        corrected = _derive_issue_from_expiry(expiry_date)
+        extracted_data["issue_date"] = corrected.strftime("%Y-%m-%d")
+        confidence["issue_date"] = 0.50  # Low confidence for derived date
+        return
+
+    # Scenario 2: VLM derived issue = expiry - 10 years (BUG-005 pattern)
+    # Check if issue_date + 10 years == expiry_date (same day/month, exactly)
+    try:
+        iyy = int(issue_norm[:2])
+        imm = int(issue_norm[2:4])
+        idd = int(issue_norm[4:6])
+        icentury = 1900 if iyy > 50 else 2000
+        issue_date = date(icentury + iyy, imm, idd)
+
+        # Check if issue + 10 years == expiry (same day, evidence of derivation)
         try:
-            yy = int(expiry_norm[:2])
-            mm = int(expiry_norm[2:4])
-            dd = int(expiry_norm[4:6])
-            # Determine century: if yy > 50, it's 19xx; else 20xx
-            century = 1900 if yy > 50 else 2000
-            full_year = century + yy
-            issue_year = full_year - 10
-            # Handle day overflow (e.g., Feb 29 -> Feb 28)
-            for try_dd in [dd, dd - 1, 28]:
-                try:
-                    from datetime import date
-                    d = date(issue_year, mm, try_dd)
-                    extracted_data["issue_date"] = d.strftime("%Y-%m-%d")
-                    confidence["issue_date"] = 0.6  # Lower confidence for derived date
-                    return
-                except ValueError:
-                    continue
-        except (ValueError, TypeError):
-            pass
+            issue_plus_10 = issue_date.replace(year=issue_date.year + 10)
+        except ValueError:
+            # Feb 29 -> try Feb 28
+            issue_plus_10 = issue_date.replace(
+                year=issue_date.year + 10, month=2, day=28
+            )
+
+        if issue_plus_10 == expiry_date:
+            # VLM likely derived issue = expiry - 10 years; correct by +1 day
+            corrected = _derive_issue_from_expiry(expiry_date)
+            extracted_data["issue_date"] = corrected.strftime("%Y-%m-%d")
+            confidence["issue_date"] = 0.50  # Low confidence for derived date
+    except (ValueError, TypeError):
+        pass
 
 
 def _extract_passport_fields(full_text: str) -> tuple[Dict[str, Any], Dict[str, float]]:
@@ -4925,8 +4975,9 @@ def extract_structured_data(
                     mrz_context = (
                         f"\nIMPORTANT: The MRZ expiry date is {extracted_data['expiry_date']}. "
                         "The issue_date is DIFFERENT from the expiry date. "
-                        "Issue date is typically 10 years BEFORE the expiry date. "
-                        "Do NOT return the expiry date as the issue date."
+                        "READ the issue_date directly from the passport image. "
+                        "Do NOT compute or derive issue_date from the expiry date. "
+                        "If you cannot clearly read the issue_date, return null."
                     )
                 system_prompt = (
                     "You are a passport data extraction assistant. "
