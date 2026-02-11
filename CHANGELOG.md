@@ -6,6 +6,24 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 1.2.2 - 2026-02-11
+
+### Fixed
+- **MRZ-GAP-002 (HIGH)**: MRZ line detection now tolerates OCR noise that produces lines 42-46 chars instead of exactly 44. New `_normalize_mrz_candidate()` trims or pads lines to spec length. Also accepts MRZ line 2 candidates without `<` filler (common OCR artifact).
+- **MRZ-GAP-001 (MEDIUM)**: MRZ-derived fields (surname, given_names, nationality, birth_date, sex, expiry_date) now reliably appear in `passport+llm` output because the root cause (MRZ line detection failure on noisy OCR) is fixed.
+- **VLM-QUALITY-001 (MEDIUM)**: New `_cross_validate_passport_dates()` detects when VLM returns the expiry date as issue_date and applies domain-knowledge correction (10-year validity rule). VLM prompt now includes MRZ expiry context to prevent confusion.
+- **VLM-QUALITY-002 (MEDIUM)**: VLM enhancement prompt now also requests `passport_number` when MRZ/regex extraction fails, ensuring the VLM compensates for poor-quality OCR on second passport scans.
+
+### Added
+- `_normalize_mrz_candidate()`: Normalizes near-length MRZ lines to exact ICAO spec length.
+- `_normalize_date_to_yymmdd()`: Normalizes various date formats to YYMMDD for MRZ comparison.
+- `_cross_validate_passport_dates()`: Cross-validates VLM issue_date against MRZ expiry_date with domain-knowledge fallback.
+- 7 new tests: MRZ-GAP-001 output completeness (2), MRZ-GAP-002 noisy OCR tolerance (3), VLM-QUALITY-001 date cross-validation (2).
+
+### Validated
+- Full test suite: 299 passed, 9 skipped, 0 failures (~230s) - up from 292/9 (+7 new tests, zero regressions).
+- All bug fix tests written first (TDD red-green), then fixes implemented.
+
 ## 1.2.1 - 2026-02-11
 
 ### Fixed

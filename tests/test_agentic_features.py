@@ -1621,3 +1621,198 @@ class TestBug002bPageCount:
         assert result["page_count"] == 2, (
             f"BUG-002b: passport page_count is {result['page_count']}, expected 2"
         )
+
+
+# ============================================================================
+# Test: MRZ-GAP-001 - MRZ fields must appear in passport+llm output (v1.2.2)
+# ============================================================================
+
+
+class TestMrzGap001FieldsInOutput:
+    """MRZ-GAP-001: When MRZ is successfully parsed, ALL MRZ-derived fields
+    (surname, given_names, nationality, birth_date, sex, expiry_date) must
+    appear in the final passport output, even when VLM enhances it."""
+
+    # Standard TD3 MRZ: 2 lines x 44 chars each
+    MRZ_LINE1 = "P<UTODOE<<JOHN<JAMES<<<<<<<<<<<<<<<<<<<<<<<<" # 44 chars
+    MRZ_LINE2 = "AB12345674UTO8001011M3012315<<<<<<<<<<<<<<06" # 44 chars
+
+    def test_mrz_fields_present_in_passport_output(self):
+        """All MRZ-derived fields should be in the output."""
+        fake_text = f"{self.MRZ_LINE1}\n{self.MRZ_LINE2}\n"
+        fake_text_result = {"text": fake_text, "pages_extracted": 1}
+
+        with (
+            patch.object(pdf_tools, "_ensure_file", return_value=Path("/fake/p.pdf")),
+            patch.object(pdf_tools, "extract_text", return_value=fake_text_result),
+            patch.object(pdf_tools, "_get_llm_backend", return_value=None),
+        ):
+            result = pdf_tools.extract_structured_data(
+                "/fake/p.pdf", data_type="passport",
+            )
+
+        data = result["data"]
+        expected_fields = [
+            "passport_number", "surname", "given_names",
+            "nationality", "birth_date", "sex", "expiry_date",
+        ]
+        for field in expected_fields:
+            assert field in data, (
+                f"MRZ-GAP-001: '{field}' missing from passport output"
+            )
+
+    def test_mrz_fields_preserved_after_vlm_enhancement(self):
+        """MRZ fields must NOT be overwritten by VLM (MRZ is higher confidence)."""
+        fake_text = f"{self.MRZ_LINE1}\n{self.MRZ_LINE2}\n"
+        fake_text_result = {"text": fake_text, "pages_extracted": 1}
+        fake_llm_response = json.dumps({
+            "issue_date": "2020-01-01",
+            "issuing_authority": "Test Office",
+        })
+
+        with (
+            patch.object(pdf_tools, "_ensure_file", return_value=Path("/fake/p.pdf")),
+            patch.object(pdf_tools, "extract_text", return_value=fake_text_result),
+            patch.object(pdf_tools, "_get_llm_backend", return_value="local"),
+            patch.object(pdf_tools, "_call_llm", return_value=fake_llm_response),
+        ):
+            result = pdf_tools.extract_structured_data(
+                "/fake/p.pdf", data_type="passport", backend="local",
+            )
+
+        data = result["data"]
+        # MRZ fields must be present
+        assert data.get("surname") == "DOE"
+        assert data.get("given_names") == "JOHN JAMES"
+        assert data.get("passport_number") == "AB1234567"
+        # VLM fields should also be present
+        assert data.get("issuing_authority") == "Test Office"
+
+
+# ============================================================================
+# Test: MRZ-GAP-002 - Noisy OCR MRZ lines must be tolerated (v1.2.2)
+# ============================================================================
+
+
+class TestMrzGap002NoisyOcrTolerance:
+    """MRZ-GAP-002: Real OCR often produces MRZ lines that are 43-46 chars
+    instead of exactly 44. The parser must tolerate near-length matches."""
+
+    def test_mrz_detection_tolerates_extra_chars(self):
+        """MRZ lines with 1-2 extra trailing chars should still be detected."""
+        # Simulate real OCR noise: 45 chars (extra trailing char)
+        noisy_line1 = "POCHNNI<<XIUYING<<<<<<<<<<<<<<<<<<<<<<<<<<<K<"  # 45 chars
+        noisy_line2 = "EK25479281CHN4905088F3304064MENPNAODNDKCA930"  # 45 chars
+
+        mrz = pdf_tools._extract_mrz_lines(f"{noisy_line1}\n{noisy_line2}\n")
+        assert mrz is not None, (
+            "MRZ-GAP-002: MRZ detection failed on 45-char lines"
+        )
+        # Returned lines should be trimmed to 44
+        assert len(mrz[0]) == 44
+        assert len(mrz[1]) == 44
+
+    def test_mrz_detection_tolerates_short_line(self):
+        """MRZ lines with 1 missing char (43) should still be detected."""
+        short_line1 = "P<UTODOE<<JOHN<JAMES<<<<<<<<<<<<<<<<<<<<<<<" # 43 chars
+        normal_line2 = "AB12345674UTO8001011M3012315<<<<<<<<<<<<<<06" # 44 chars
+
+        mrz = pdf_tools._extract_mrz_lines(f"{short_line1}\n{normal_line2}\n")
+        # Should still attempt to detect -- pad short lines
+        assert mrz is not None, (
+            "MRZ-GAP-002: MRZ detection failed on 43-char line"
+        )
+
+    def test_passport_number_from_vlm_when_mrz_fails(self):
+        """When MRZ parsing fails, VLM should extract passport_number too."""
+        # No MRZ lines in text
+        fake_text = "Some passport text without clear MRZ lines\nPassport No: ABC123\n"
+        fake_text_result = {"text": fake_text, "pages_extracted": 1}
+        fake_llm_response = json.dumps({
+            "passport_number": "EK2544770",
+            "issuing_authority": "Immigration Office",
+            "place_of_birth": "Fujian",
+        })
+
+        with (
+            patch.object(pdf_tools, "_ensure_file", return_value=Path("/fake/p.pdf")),
+            patch.object(pdf_tools, "extract_text", return_value=fake_text_result),
+            patch.object(pdf_tools, "_get_llm_backend", return_value="local"),
+            patch.object(pdf_tools, "_call_llm", return_value=fake_llm_response),
+        ):
+            result = pdf_tools.extract_structured_data(
+                "/fake/p.pdf", data_type="passport", backend="local",
+            )
+
+        assert result["data"].get("passport_number") == "EK2544770", (
+            "MRZ-GAP-002: VLM should provide passport_number when MRZ fails"
+        )
+
+
+# ============================================================================
+# Test: VLM-QUALITY-001 - Cross-validate VLM dates with MRZ expiry (v1.2.2)
+# ============================================================================
+
+
+class TestVlmQuality001DateCrossValidation:
+    """VLM-QUALITY-001: When VLM returns an issue_date that matches the MRZ
+    expiry_date, it should be flagged and corrected using domain knowledge."""
+
+    MRZ_LINE1 = "P<UTODOE<<JOHN<JAMES<<<<<<<<<<<<<<<<<<<<<<<<" # 44 chars
+    MRZ_LINE2 = "AB12345674UTO8001011M3012315<<<<<<<<<<<<<<06" # 44 chars
+    # MRZ expiry = 301231 -> 2030-12-31
+
+    def test_vlm_issue_date_not_same_as_mrz_expiry(self):
+        """If VLM returns expiry as issue_date, it should be corrected."""
+        fake_text = f"{self.MRZ_LINE1}\n{self.MRZ_LINE2}\n"
+        fake_text_result = {"text": fake_text, "pages_extracted": 1}
+        # VLM mistakenly returns the expiry date as issue_date
+        fake_llm_response = json.dumps({
+            "issue_date": "2030-12-31",  # Same as MRZ expiry!
+            "issuing_authority": "Immigration Office",
+        })
+
+        with (
+            patch.object(pdf_tools, "_ensure_file", return_value=Path("/fake/p.pdf")),
+            patch.object(pdf_tools, "extract_text", return_value=fake_text_result),
+            patch.object(pdf_tools, "_get_llm_backend", return_value="local"),
+            patch.object(pdf_tools, "_call_llm", return_value=fake_llm_response),
+        ):
+            result = pdf_tools.extract_structured_data(
+                "/fake/p.pdf", data_type="passport", backend="local",
+            )
+
+        data = result["data"]
+        # issue_date must NOT be the same as expiry_date
+        if data.get("issue_date") and data.get("expiry_date"):
+            assert data["issue_date"] != data["expiry_date"], (
+                "VLM-QUALITY-001: issue_date should not equal expiry_date"
+            )
+
+    def test_domain_knowledge_passport_validity(self):
+        """When VLM date matches MRZ expiry, apply 10-year validity rule."""
+        fake_text = f"{self.MRZ_LINE1}\n{self.MRZ_LINE2}\n"
+        fake_text_result = {"text": fake_text, "pages_extracted": 1}
+        # VLM returns the expiry date (301231 in MRZ = 2030-12-31)
+        fake_llm_response = json.dumps({
+            "issue_date": "301231",  # Raw MRZ format of expiry
+            "issuing_authority": "Immigration Office",
+        })
+
+        with (
+            patch.object(pdf_tools, "_ensure_file", return_value=Path("/fake/p.pdf")),
+            patch.object(pdf_tools, "extract_text", return_value=fake_text_result),
+            patch.object(pdf_tools, "_get_llm_backend", return_value="local"),
+            patch.object(pdf_tools, "_call_llm", return_value=fake_llm_response),
+        ):
+            result = pdf_tools.extract_structured_data(
+                "/fake/p.pdf", data_type="passport", backend="local",
+            )
+
+        data = result["data"]
+        # If issue_date was corrected via domain knowledge, it should be ~10 years before expiry
+        issue = data.get("issue_date", "")
+        if issue:
+            assert "2030" not in str(issue), (
+                "VLM-QUALITY-001: issue_date still contains expiry year after correction"
+            )

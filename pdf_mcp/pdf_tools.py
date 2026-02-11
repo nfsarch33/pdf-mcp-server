@@ -4428,8 +4428,36 @@ def _normalize_issue_date(value: str) -> Optional[str]:
     return None
 
 
+def _normalize_mrz_candidate(candidate: str, target_len: int) -> Optional[str]:
+    """Normalize an MRZ candidate line to the target length.
+
+    OCR often produces lines that are 1-2 chars shorter or longer than the
+    ICAO spec length. This function trims or pads to produce a valid line.
+
+    Args:
+        candidate: The raw MRZ candidate string (whitespace already stripped).
+        target_len: The expected length (30, 36, or 44).
+
+    Returns:
+        Normalized string of exactly target_len, or None if too far off.
+    """
+    diff = len(candidate) - target_len
+    if diff == 0:
+        return candidate
+    if diff > 0 and diff <= 2:
+        # Extra trailing chars from OCR noise -- truncate
+        return candidate[:target_len]
+    if diff < 0 and diff >= -2:
+        # Missing chars -- pad with '<' (filler)
+        return candidate + "<" * abs(diff)
+    return None
+
+
 def _extract_mrz_lines(text: str) -> Optional[tuple]:
     """Extract MRZ lines supporting TD1 (3x30), TD2 (2x36), and TD3 (2x44).
+
+    Tolerates OCR noise by accepting lines within +/-2 chars of the expected
+    length and normalizing them to the exact ICAO spec length.
 
     Returns:
         Tuple of MRZ lines if found, None otherwise.
@@ -4440,26 +4468,125 @@ def _extract_mrz_lines(text: str) -> Optional[tuple]:
     candidates = []
     for line in text.splitlines():
         cleaned = re.sub(r"\s", "", line.strip())
-        if "<" in cleaned and len(cleaned) >= 28:
+        if len(cleaned) < 28:
+            continue
+        # Accept lines with '<' filler (standard MRZ), OR lines that are
+        # predominantly alphanumeric and look like MRZ line 2 (which may
+        # have no '<' due to OCR noise replacing filler characters).
+        if "<" in cleaned:
+            candidates.append(cleaned)
+        elif re.match(r"^[A-Z0-9<]{28,50}$", cleaned):
             candidates.append(cleaned)
 
-    # Try TD3 first (passport, 2x44)
+    # Try TD3 first (passport, 2x44) -- exact match
     for i in range(len(candidates) - 1):
         if len(candidates[i]) == 44 and len(candidates[i + 1]) == 44:
             return (candidates[i], candidates[i + 1])
 
-    # Try TD2 (travel document, 2x36)
+    # Try TD3 with tolerance (42-46 chars, normalize to 44)
+    for i in range(len(candidates) - 1):
+        norm1 = _normalize_mrz_candidate(candidates[i], 44)
+        norm2 = _normalize_mrz_candidate(candidates[i + 1], 44)
+        if norm1 is not None and norm2 is not None:
+            return (norm1, norm2)
+
+    # Try TD2 (travel document, 2x36) -- exact match
     for i in range(len(candidates) - 1):
         if len(candidates[i]) == 36 and len(candidates[i + 1]) == 36:
             return (candidates[i], candidates[i + 1])
 
-    # Try TD1 (ID card, 3x30)
+    # Try TD2 with tolerance (34-38, normalize to 36)
+    for i in range(len(candidates) - 1):
+        norm1 = _normalize_mrz_candidate(candidates[i], 36)
+        norm2 = _normalize_mrz_candidate(candidates[i + 1], 36)
+        if norm1 is not None and norm2 is not None:
+            # Avoid TD3 candidates being misclassified as TD2
+            if len(candidates[i]) > 38 or len(candidates[i + 1]) > 38:
+                continue
+            return (norm1, norm2)
+
+    # Try TD1 (ID card, 3x30) -- exact match
     for i in range(len(candidates) - 2):
         if (len(candidates[i]) == 30 and len(candidates[i + 1]) == 30
                 and len(candidates[i + 2]) == 30):
             return (candidates[i], candidates[i + 1], candidates[i + 2])
 
+    # Try TD1 with tolerance (28-32, normalize to 30)
+    for i in range(len(candidates) - 2):
+        norm1 = _normalize_mrz_candidate(candidates[i], 30)
+        norm2 = _normalize_mrz_candidate(candidates[i + 1], 30)
+        norm3 = _normalize_mrz_candidate(candidates[i + 2], 30)
+        if norm1 is not None and norm2 is not None and norm3 is not None:
+            # Avoid misclassifying TD2/TD3 candidates as TD1
+            if any(len(candidates[i + j]) > 34 for j in range(3)):
+                continue
+            return (norm1, norm2, norm3)
+
     return None
+
+
+def _normalize_date_to_yymmdd(date_str: str) -> Optional[str]:
+    """Normalize various date formats to YYMMDD for comparison with MRZ dates.
+
+    Handles: YYMMDD, YYYYMMDD, YYYY-MM-DD, DD/MM/YYYY, etc.
+    Returns YYMMDD string or None if unrecognizable.
+    """
+    if not date_str or not isinstance(date_str, str):
+        return None
+    cleaned = re.sub(r"[^\d]", "", str(date_str))
+    if len(cleaned) == 6:
+        return cleaned  # Already YYMMDD
+    if len(cleaned) == 8:
+        return cleaned[2:]  # YYYYMMDD -> YYMMDD
+    return None
+
+
+def _cross_validate_passport_dates(
+    extracted_data: Dict[str, Any],
+    confidence: Dict[str, float],
+) -> None:
+    """Cross-validate VLM issue_date against MRZ expiry_date.
+
+    If the VLM returned the expiry date as the issue date (a common VLM error),
+    apply domain knowledge: for most passports, validity is 10 years, so
+    issue_date = expiry_date - 10 years.
+
+    Mutates extracted_data and confidence in-place.
+    """
+    issue_raw = str(extracted_data.get("issue_date", ""))
+    expiry_raw = str(extracted_data.get("expiry_date", ""))
+
+    if not issue_raw or not expiry_raw:
+        return
+
+    issue_norm = _normalize_date_to_yymmdd(issue_raw)
+    expiry_norm = _normalize_date_to_yymmdd(expiry_raw)
+
+    if not issue_norm or not expiry_norm:
+        return
+
+    if issue_norm == expiry_norm:
+        # VLM returned the expiry date as issue date -- apply 10-year rule
+        try:
+            yy = int(expiry_norm[:2])
+            mm = int(expiry_norm[2:4])
+            dd = int(expiry_norm[4:6])
+            # Determine century: if yy > 50, it's 19xx; else 20xx
+            century = 1900 if yy > 50 else 2000
+            full_year = century + yy
+            issue_year = full_year - 10
+            # Handle day overflow (e.g., Feb 29 -> Feb 28)
+            for try_dd in [dd, dd - 1, 28]:
+                try:
+                    from datetime import date
+                    d = date(issue_year, mm, try_dd)
+                    extracted_data["issue_date"] = d.strftime("%Y-%m-%d")
+                    confidence["issue_date"] = 0.6  # Lower confidence for derived date
+                    return
+                except ValueError:
+                    continue
+        except (ValueError, TypeError):
+            pass
 
 
 def _extract_passport_fields(full_text: str) -> tuple[Dict[str, Any], Dict[str, float]]:
@@ -4714,29 +4841,42 @@ def extract_structured_data(
         extracted_data, confidence = _extract_passport_fields(full_text)
         method = "passport"
 
-        # Enhance with VLM if available (visual-zone fields: issue_date,
-        # issuing_authority, place_of_birth are NOT in the MRZ and benefit
-        # greatly from VLM analysis of OCR text).
+        # Enhance with VLM if available. Visual-zone fields (issue_date,
+        # issuing_authority, place_of_birth) are NOT in the MRZ.
+        # Also request passport_number if MRZ parsing failed to extract it.
         used_backend = None
         selected_backend = backend or _get_llm_backend()
         if selected_backend:
+            # Fields that always benefit from VLM
             viz_fields = ["issue_date", "issuing_authority", "place_of_birth"]
+            # Also request passport_number if MRZ failed to extract it
+            if "passport_number" not in extracted_data or confidence.get("passport_number", 0) < 0.7:
+                viz_fields.append("passport_number")
             fields_needed = [
                 f for f in viz_fields
                 if f not in extracted_data or confidence.get(f, 0) < 0.7
             ]
             if fields_needed:
+                # Build context from MRZ-derived data for cross-validation
+                mrz_context = ""
+                if extracted_data.get("expiry_date"):
+                    mrz_context = (
+                        f"\nIMPORTANT: The MRZ expiry date is {extracted_data['expiry_date']}. "
+                        "The issue_date is DIFFERENT from the expiry date. "
+                        "Issue date is typically 10 years BEFORE the expiry date. "
+                        "Do NOT return the expiry date as the issue date."
+                    )
                 system_prompt = (
                     "You are a passport data extraction assistant. "
                     "Extract structured data from OCR text of a passport scan. "
-                    "Focus on fields NOT in the MRZ: issue_date, issuing_authority, "
-                    "place_of_birth. Return ONLY a valid JSON object. "
+                    "Return ONLY a valid JSON object. "
                     "Use null for fields you cannot find."
                 )
                 prompt = (
                     f"Extract these passport fields from OCR text: "
                     f"{json.dumps(fields_needed)}\n\n"
                     f"OCR text:\n{full_text[:4000]}\n\n"
+                    f"{mrz_context}\n\n"
                     "Return a JSON object with the extracted values."
                 )
                 llm_response = _call_llm(
@@ -4761,6 +4901,10 @@ def extract_structured_data(
                         method = "passport+llm"
                     except (json.JSONDecodeError, IndexError):
                         pass
+
+        # Cross-validate: if VLM issue_date matches MRZ expiry_date, apply
+        # domain knowledge correction (10-year validity for most passports).
+        _cross_validate_passport_dates(extracted_data, confidence)
 
         return {
             "data": extracted_data,
