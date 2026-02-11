@@ -1391,3 +1391,233 @@ class TestFormHeuristicsGeometricCheckbox:
         # Structure should exist even if no multi-line areas found
         for page_analysis in result.get("page_analysis", []):
             assert "detected_multiline_areas" in page_analysis
+
+
+# ============================================================================
+# Test: BUG-002 - Passport branch should use VLM when available (v1.2.1)
+# ============================================================================
+
+
+class TestBug002PassportVlmIntegration:
+    """BUG-002: extract_structured_data(data_type='passport') must not
+    bypass VLM when a backend is available.  The passport branch previously
+    did an early-return with backend=None, completely skipping the LLM
+    enhancement code path."""
+
+    # Standard TD3 MRZ: 2 lines x 44 chars each
+    MRZ_LINE1 = "P<UTODOE<<JOHN<JAMES<<<<<<<<<<<<<<<<<<<<<<<<" # 44 chars
+    MRZ_LINE2 = "AB12345674UTO8001011M3012315<<<<<<<<<<<<<<06"  # 44 chars
+
+    def test_passport_branch_reports_backend_when_available(self):
+        """When VLM is available, passport extraction should report it."""
+        fake_text = (
+            f"{self.MRZ_LINE1}\n{self.MRZ_LINE2}\n"
+            "Date of Issue: 01 Jan 2020\n"
+            "Issuing Authority: Test Immigration Office\n"
+        )
+        fake_text_result = {
+            "text": fake_text,
+            "pages_extracted": 2,
+            "page_details": [{"page": 1, "text": fake_text}],
+        }
+        fake_llm_response = '{"issue_date": "2020-01-01", "issuing_authority": "Test Immigration Office"}'
+
+        with (
+            patch.object(pdf_tools, "_ensure_file", return_value=Path("/fake/passport.pdf")),
+            patch.object(pdf_tools, "extract_text", return_value=fake_text_result),
+            patch.object(pdf_tools, "_get_llm_backend", return_value="local"),
+            patch.object(pdf_tools, "_call_llm", return_value=fake_llm_response),
+        ):
+            result = pdf_tools.extract_structured_data(
+                "/fake/passport.pdf",
+                data_type="passport",
+                backend="local",
+            )
+
+        # BUG-002: backend must NOT be None when VLM is available
+        assert result["backend"] is not None, (
+            "BUG-002: passport branch still bypasses VLM (backend is None)"
+        )
+        assert result["backend_available"] is not None
+
+    def test_passport_branch_method_includes_llm_when_enhanced(self):
+        """Method should be 'passport+llm' when VLM enhances results."""
+        fake_text = f"{self.MRZ_LINE1}\n{self.MRZ_LINE2}\n"
+        fake_text_result = {
+            "text": fake_text,
+            "pages_extracted": 1,
+        }
+        fake_llm_response = '{"issuing_authority": "Immigration Office"}'
+
+        with (
+            patch.object(pdf_tools, "_ensure_file", return_value=Path("/fake/passport.pdf")),
+            patch.object(pdf_tools, "extract_text", return_value=fake_text_result),
+            patch.object(pdf_tools, "_get_llm_backend", return_value="local"),
+            patch.object(pdf_tools, "_call_llm", return_value=fake_llm_response),
+        ):
+            result = pdf_tools.extract_structured_data(
+                "/fake/passport.pdf",
+                data_type="passport",
+                backend="local",
+            )
+
+        assert "llm" in result.get("method", ""), (
+            "BUG-002: method should contain 'llm' when VLM enhances passport data"
+        )
+
+    def test_passport_branch_still_works_without_vlm(self):
+        """Without VLM, passport extraction should still work (pattern only)."""
+        fake_text = f"{self.MRZ_LINE1}\n{self.MRZ_LINE2}\n"
+        fake_text_result = {
+            "text": fake_text,
+            "pages_extracted": 1,
+        }
+
+        with (
+            patch.object(pdf_tools, "_ensure_file", return_value=Path("/fake/passport.pdf")),
+            patch.object(pdf_tools, "extract_text", return_value=fake_text_result),
+            patch.object(pdf_tools, "_get_llm_backend", return_value=None),
+        ):
+            result = pdf_tools.extract_structured_data(
+                "/fake/passport.pdf",
+                data_type="passport",
+            )
+
+        assert result["method"] == "passport"
+        assert result["backend"] is None
+        # MRZ should still extract the passport number
+        assert result["data"].get("passport_number") is not None
+
+    def test_passport_vlm_enhances_low_confidence_fields(self):
+        """VLM should fill in fields that pattern extraction missed or got
+        low confidence on (issue_date, issuing_authority, place_of_birth)."""
+        fake_text = f"{self.MRZ_LINE1}\n{self.MRZ_LINE2}\n"
+        fake_text_result = {"text": fake_text, "pages_extracted": 1}
+        fake_llm_response = json.dumps({
+            "issue_date": "2020-06-15",
+            "issuing_authority": "Department of Immigration",
+            "place_of_birth": "Springfield",
+        })
+
+        with (
+            patch.object(pdf_tools, "_ensure_file", return_value=Path("/fake/passport.pdf")),
+            patch.object(pdf_tools, "extract_text", return_value=fake_text_result),
+            patch.object(pdf_tools, "_get_llm_backend", return_value="local"),
+            patch.object(pdf_tools, "_call_llm", return_value=fake_llm_response),
+        ):
+            result = pdf_tools.extract_structured_data(
+                "/fake/passport.pdf",
+                data_type="passport",
+                backend="local",
+            )
+
+        data = result["data"]
+        assert data.get("issuing_authority") == "Department of Immigration"
+        assert data.get("issue_date") == "2020-06-15"
+        assert data.get("place_of_birth") == "Springfield"
+
+
+# ============================================================================
+# Test: BUG-002a - Passport regex quality issues (v1.2.1)
+# ============================================================================
+
+
+class TestBug002aPassportRegexQuality:
+    """BUG-002a: _extract_passport_fields regex should not capture junk
+    prefixes in passport_number or match 'Bearer's signature' as authority."""
+
+    def test_passport_number_no_junk_prefix(self):
+        """Passport number fallback should strip common prefixes."""
+        ocr_text = (
+            "PASSPORT | P CHN EK2547928\n"
+            "Some other text\n"
+        )
+        # No MRZ lines, so it falls back to label-value regex
+        extracted, confidence = pdf_tools._extract_passport_fields(ocr_text)
+        pn = extracted.get("passport_number", "")
+        # Must NOT contain "PASSPORT" or "P CHN" prefix
+        assert "PASSPORT" not in pn, (
+            f"BUG-002a: passport_number contains junk prefix: {pn}"
+        )
+        if pn:
+            # Should be clean alphanumeric
+            assert pn == "EK2547928" or len(pn) <= 12
+
+    def test_authority_does_not_match_bearer_signature(self):
+        """Issuing authority regex must not capture 'Bearer's signature'."""
+        ocr_text = (
+            "持 照 大 签名 /Bearer's signature x\n"
+            "Issuing Authority: National Immigration Administration\n"
+        )
+        extracted, confidence = pdf_tools._extract_passport_fields(ocr_text)
+        auth = extracted.get("issuing_authority", "")
+        assert "signature" not in auth.lower(), (
+            f"BUG-002a: issuing_authority matched signature field: {auth}"
+        )
+
+    def test_authority_does_not_match_signature_garbage(self):
+        """Authority should not capture OCR noise like '#9 A %'."""
+        ocr_text = (
+            "#9 A % /Bearer's signature S\n"
+            "Authority: Immigration Office\n"
+        )
+        extracted, confidence = pdf_tools._extract_passport_fields(ocr_text)
+        auth = extracted.get("issuing_authority", "")
+        assert "signature" not in auth.lower(), (
+            f"BUG-002a: issuing_authority matched garbage: {auth}"
+        )
+
+
+# ============================================================================
+# Test: BUG-002b - page_count should reflect actual pages (v1.2.1)
+# ============================================================================
+
+
+class TestBug002bPageCount:
+    """BUG-002b: extract_structured_data returns page_count: 0 because it
+    reads 'page_count' from text_result but extract_text returns
+    'pages_extracted' instead."""
+
+    def test_page_count_uses_pages_extracted(self):
+        """page_count in result should reflect actual pages from extract_text."""
+        fake_text_result = {
+            "text": "Some document text",
+            "pages_extracted": 3,
+        }
+        with (
+            patch.object(pdf_tools, "_ensure_file", return_value=Path("/fake/doc.pdf")),
+            patch.object(pdf_tools, "extract_text", return_value=fake_text_result),
+            patch.object(pdf_tools, "_get_llm_backend", return_value=None),
+        ):
+            result = pdf_tools.extract_structured_data(
+                "/fake/doc.pdf",
+                data_type="invoice",
+            )
+
+        assert result["page_count"] == 3, (
+            f"BUG-002b: page_count is {result['page_count']}, expected 3"
+        )
+
+    def test_page_count_passport_uses_pages_extracted(self):
+        """Passport branch should also correctly report page_count."""
+        fake_text = (
+            "P<UTODOE<<JOHN<JAMES<<<<<<<<<<<<<<<<<<<<<<<<\n"  # 44 chars
+            "AB12345674UTO8001011M3012315<<<<<<<<<<<<<<06\n"  # 44 chars
+        )
+        fake_text_result = {
+            "text": fake_text,
+            "pages_extracted": 2,
+        }
+        with (
+            patch.object(pdf_tools, "_ensure_file", return_value=Path("/fake/passport.pdf")),
+            patch.object(pdf_tools, "extract_text", return_value=fake_text_result),
+            patch.object(pdf_tools, "_get_llm_backend", return_value=None),
+        ):
+            result = pdf_tools.extract_structured_data(
+                "/fake/passport.pdf",
+                data_type="passport",
+            )
+
+        assert result["page_count"] == 2, (
+            f"BUG-002b: passport page_count is {result['page_count']}, expected 2"
+        )

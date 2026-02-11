@@ -4610,8 +4610,17 @@ def _extract_passport_fields(full_text: str) -> tuple[Dict[str, Any], Dict[str, 
             r"(?:passport number|passport no\.?|document number)\s*[:\-]?\s*([^\n\r]+)",
         ])
         if passport_number_value:
-            extracted["passport_number"] = passport_number_value.replace("<", "").strip()
-            confidence["passport_number"] = 0.55
+            # Post-process: strip common prefixes (PASSPORT, P, country codes, pipes)
+            cleaned_pn = passport_number_value.replace("<", "").strip()
+            cleaned_pn = re.sub(
+                r"^(?:PASSPORT\s*\|?\s*)?(?:P\s+)?(?:[A-Z]{3}\s+)?",
+                "",
+                cleaned_pn,
+                flags=re.IGNORECASE,
+            ).strip()
+            if cleaned_pn:
+                extracted["passport_number"] = cleaned_pn
+                confidence["passport_number"] = 0.55
 
     issue_date_patterns = [
         r"(?:date of issue|issue date|date of issuance|issued on|issued)\s*[:\-]?\s*([0-9]{1,2}\s*[A-Za-z]{3,9}\s*\d{2,4}|\d{4}[/-]\d{1,2}[/-]\d{1,2}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4})",
@@ -4627,13 +4636,18 @@ def _extract_passport_fields(full_text: str) -> tuple[Dict[str, Any], Dict[str, 
             break
 
     issuing_authority_patterns = [
-        r"(?:issuing authority|issue authority|issuing office|authority|place of issue|place of issuance)\s*[:\-]?\s*([^\n\r]+)",
+        r"(?:issuing authority|issue authority|issuing office|place of issue|place of issuance)\s*[:\-]?\s*([^\n\r]+)",
         r"(?:\u7b7e\u53d1\u673a\u5173|\u7b7e\u53d1\u5730)\s*[:\-\uFF1A]?\s*([^\n\r]+)",
     ]
     for pattern in issuing_authority_patterns:
         match = re.search(pattern, full_text, re.IGNORECASE)
         if match:
-            extracted["issuing_authority"] = match.group(1).strip()
+            auth_value = match.group(1).strip()
+            # Reject matches containing 'signature' (OCR noise from
+            # "Bearer's signature" field adjacent to authority labels)
+            if "signature" in auth_value.lower():
+                continue
+            extracted["issuing_authority"] = auth_value
             confidence["issuing_authority"] = 0.6
             break
 
@@ -4692,19 +4706,70 @@ def extract_structured_data(
         return text_result
 
     full_text = text_result.get("text", "")
+    page_count = text_result.get("pages_extracted", text_result.get("page_count", 0))
     if not full_text.strip():
-        return {"error": "No text content found in PDF", "page_count": text_result.get("page_count", 0)}
+        return {"error": "No text content found in PDF", "page_count": page_count}
 
     if data_type == "passport":
         extracted_data, confidence = _extract_passport_fields(full_text)
+        method = "passport"
+
+        # Enhance with VLM if available (visual-zone fields: issue_date,
+        # issuing_authority, place_of_birth are NOT in the MRZ and benefit
+        # greatly from VLM analysis of OCR text).
+        used_backend = None
+        selected_backend = backend or _get_llm_backend()
+        if selected_backend:
+            viz_fields = ["issue_date", "issuing_authority", "place_of_birth"]
+            fields_needed = [
+                f for f in viz_fields
+                if f not in extracted_data or confidence.get(f, 0) < 0.7
+            ]
+            if fields_needed:
+                system_prompt = (
+                    "You are a passport data extraction assistant. "
+                    "Extract structured data from OCR text of a passport scan. "
+                    "Focus on fields NOT in the MRZ: issue_date, issuing_authority, "
+                    "place_of_birth. Return ONLY a valid JSON object. "
+                    "Use null for fields you cannot find."
+                )
+                prompt = (
+                    f"Extract these passport fields from OCR text: "
+                    f"{json.dumps(fields_needed)}\n\n"
+                    f"OCR text:\n{full_text[:4000]}\n\n"
+                    "Return a JSON object with the extracted values."
+                )
+                llm_response = _call_llm(
+                    prompt, system_prompt, model=model, backend=selected_backend
+                )
+                used_backend = selected_backend
+                if llm_response:
+                    try:
+                        json_str = llm_response
+                        if "```json" in json_str:
+                            json_str = json_str.split("```json")[1].split("```")[0]
+                        elif "```" in json_str:
+                            json_str = json_str.split("```")[1].split("```")[0]
+                        llm_data = json.loads(json_str.strip())
+                        for key, value in llm_data.items():
+                            if value is not None and (
+                                key not in extracted_data
+                                or confidence.get(key, 0) < 0.7
+                            ):
+                                extracted_data[key] = value
+                                confidence[key] = 0.85
+                        method = "passport+llm"
+                    except (json.JSONDecodeError, IndexError):
+                        pass
+
         return {
             "data": extracted_data,
             "confidence": confidence,
-            "method": "passport",
-            "page_count": text_result.get("page_count", 0),
+            "method": method,
+            "page_count": page_count,
             "data_type": data_type,
-            "backend": None,
-            "backend_available": None,
+            "backend": used_backend,
+            "backend_available": selected_backend if selected_backend else None,
         }
 
     # Define patterns for common data types
@@ -4806,7 +4871,7 @@ Return a JSON object with the extracted values."""
         "data": extracted_data,
         "confidence": confidence,
         "method": method,
-        "page_count": text_result.get("page_count", 0),
+        "page_count": page_count,
         "data_type": data_type,
         "backend": used_backend,
         "backend_available": selected_backend if selected_backend else None,
@@ -4863,7 +4928,7 @@ def analyze_pdf_content(
         return text_result
 
     full_text = text_result.get("text", "")
-    page_count = text_result.get("page_count", 0)
+    page_count = text_result.get("pages_extracted", text_result.get("page_count", 0))
     word_count = len(full_text.split())
 
     # Basic document classification using patterns

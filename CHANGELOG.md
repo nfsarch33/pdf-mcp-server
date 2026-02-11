@@ -6,6 +6,21 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 1.2.1 - 2026-02-11
+
+### Fixed
+- **BUG-002 (HIGH)**: `extract_structured_data(data_type="passport")` now uses VLM when available instead of early-returning with `backend: null`. Visual-zone fields (issue_date, issuing_authority, place_of_birth) are enhanced by LLM. Method reports `"passport+llm"` when VLM is used.
+- **BUG-002a (MEDIUM)**: Passport number fallback regex no longer captures junk prefixes ("PASSPORT | P CHN"). Issuing authority regex no longer matches "Bearer's signature" OCR noise. Removed overly broad standalone `authority` keyword from pattern.
+- **BUG-002b (LOW)**: `extract_structured_data` and `analyze_pdf_content` now correctly read `pages_extracted` from `extract_text` result instead of non-existent `page_count` key. Page counts are no longer always 0.
+
+### Added
+- 9 new tests: BUG-002 VLM integration (4), BUG-002a regex quality (3), BUG-002b page count (2).
+
+### Validated
+- Full test suite: 292 passed, 9 skipped, 0 failures (~246s) - up from 283/9 (+9 new tests, zero regressions).
+- All bug fix tests written first (TDD red-green), then fixes implemented.
+- E2E local VLM: all tests passing with Qwen2.5-VL-7B-Instruct on RTX 3090.
+
 ## 1.2.0 - 2026-02-10
 
 ### Added
