@@ -23,6 +23,7 @@ import json
 import logging
 import os
 import re
+import time
 import secrets
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
@@ -4276,35 +4277,57 @@ def _call_llm(
     model: str = "auto",
     temperature: float = 0.0,
     backend: Optional[str] = None,
+    max_retries: int = 2,
 ) -> Optional[str]:
     """
-    Call LLM using the best available backend.
-    
+    Call LLM using the best available backend, with retry on transient failures.
+
     Priority: local > ollama > openai (local is free, no API costs)
-    
+
     Args:
         prompt: The user prompt to send
         system_prompt: Optional system prompt for context
         model: Model to use (default: auto-select based on backend)
         temperature: Sampling temperature (0.0 for deterministic, OpenAI only)
         backend: Force specific backend (local, ollama, openai)
+        max_retries: Maximum retry attempts on failure (default: 2, total 3 attempts)
 
     Returns:
         LLM response content or None if unavailable
     """
     selected_backend = backend or _get_llm_backend()
-    
-    if selected_backend == LLM_BACKEND_LOCAL:
-        return _call_local_llm(prompt, system_prompt, model if model != "auto" else None)
-    
-    if selected_backend == LLM_BACKEND_OLLAMA:
-        ollama_model = model if model != "auto" else llm_setup.get_ollama_model_name()
-        return _call_ollama_llm(prompt, system_prompt, ollama_model)
-    
-    if selected_backend == LLM_BACKEND_OPENAI:
-        openai_model = model if model != "auto" else "gpt-4o-mini"
-        return _call_openai_llm(prompt, system_prompt, openai_model, temperature)
-    
+
+    for attempt in range(max_retries + 1):
+        if selected_backend == LLM_BACKEND_LOCAL:
+            result = _call_local_llm(
+                prompt, system_prompt, model if model != "auto" else None,
+            )
+        elif selected_backend == LLM_BACKEND_OLLAMA:
+            ollama_model = model if model != "auto" else llm_setup.get_ollama_model_name()
+            result = _call_ollama_llm(prompt, system_prompt, ollama_model)
+        elif selected_backend == LLM_BACKEND_OPENAI:
+            openai_model = model if model != "auto" else "gpt-4o-mini"
+            result = _call_openai_llm(
+                prompt, system_prompt, openai_model, temperature,
+            )
+        else:
+            return None
+
+        if result is not None:
+            return result
+
+        if attempt < max_retries:
+            delay = 1.0 * (2 ** attempt)  # Exponential backoff: 1s, 2s, 4s...
+            logger.debug(
+                "LLM call returned None (attempt %d/%d), retrying in %.1fs",
+                attempt + 1, max_retries + 1, delay,
+            )
+            time.sleep(delay)
+
+    logger.debug(
+        "LLM call failed after %d attempts on '%s' backend",
+        max_retries + 1, selected_backend,
+    )
     return None
 
 

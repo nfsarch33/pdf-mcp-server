@@ -2602,3 +2602,148 @@ class TestEncryptedPdfEdgeCases:
                 str(src), str(out), {"Name": "test"}
             )
 
+
+# ---------------------------------------------------------------------------
+# LLM Retry Logic Tests (v1.2.9)
+# ---------------------------------------------------------------------------
+
+
+class TestLLMRetryLogic:
+    """Tests for LLM call retry with exponential backoff (v1.2.9)."""
+
+    def test_no_retry_on_first_success(self, monkeypatch):
+        """_call_llm returns immediately when first attempt succeeds."""
+        call_count = 0
+
+        def mock_local_llm(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            return "success response"
+
+        monkeypatch.setattr(pdf_tools, "_call_local_llm", mock_local_llm)
+        monkeypatch.setattr(pdf_tools, "_get_llm_backend", lambda: "local")
+
+        result = pdf_tools._call_llm("test prompt")
+        assert result == "success response"
+        assert call_count == 1
+
+    def test_retry_succeeds_on_second_attempt(self, monkeypatch):
+        """_call_llm retries and returns result on second attempt."""
+        call_count = 0
+
+        def mock_local_llm(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return None  # First attempt fails
+            return "recovered"
+
+        monkeypatch.setattr(pdf_tools, "_call_local_llm", mock_local_llm)
+        monkeypatch.setattr(pdf_tools, "_get_llm_backend", lambda: "local")
+        monkeypatch.setattr("time.sleep", lambda _: None)
+
+        result = pdf_tools._call_llm("test prompt")
+        assert result == "recovered"
+        assert call_count == 2
+
+    def test_retry_exhausted_returns_none(self, monkeypatch):
+        """_call_llm returns None after all retries are exhausted."""
+        call_count = 0
+
+        def mock_local_llm(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            return None
+
+        monkeypatch.setattr(pdf_tools, "_call_local_llm", mock_local_llm)
+        monkeypatch.setattr(pdf_tools, "_get_llm_backend", lambda: "local")
+        monkeypatch.setattr("time.sleep", lambda _: None)
+
+        result = pdf_tools._call_llm("test prompt")
+        assert result is None
+        assert call_count == 3  # 1 initial + 2 retries
+
+    def test_max_retries_zero_no_retry(self, monkeypatch):
+        """_call_llm with max_retries=0 doesn't retry on failure."""
+        call_count = 0
+
+        def mock_local_llm(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            return None
+
+        monkeypatch.setattr(pdf_tools, "_call_local_llm", mock_local_llm)
+        monkeypatch.setattr(pdf_tools, "_get_llm_backend", lambda: "local")
+
+        result = pdf_tools._call_llm("test prompt", max_retries=0)
+        assert result is None
+        assert call_count == 1
+
+    def test_retry_uses_exponential_backoff(self, monkeypatch):
+        """Backoff delays increase exponentially: 1s, 2s."""
+        delays = []
+
+        def mock_sleep(seconds):
+            delays.append(seconds)
+
+        def mock_local_llm(*args, **kwargs):
+            return None
+
+        monkeypatch.setattr(pdf_tools, "_call_local_llm", mock_local_llm)
+        monkeypatch.setattr(pdf_tools, "_get_llm_backend", lambda: "local")
+        monkeypatch.setattr("time.sleep", mock_sleep)
+
+        pdf_tools._call_llm("test prompt", max_retries=2)
+        assert delays == [1.0, 2.0]
+
+    def test_retry_logs_attempts(self, monkeypatch, caplog):
+        """Retry attempts are logged at DEBUG level."""
+        import logging
+
+        def mock_local_llm(*args, **kwargs):
+            return None
+
+        monkeypatch.setattr(pdf_tools, "_call_local_llm", mock_local_llm)
+        monkeypatch.setattr(pdf_tools, "_get_llm_backend", lambda: "local")
+        monkeypatch.setattr("time.sleep", lambda _: None)
+
+        with caplog.at_level(logging.DEBUG, logger="pdf_mcp.pdf_tools"):
+            pdf_tools._call_llm("test prompt", max_retries=1)
+
+        retry_msgs = [
+            r.message for r in caplog.records
+            if r.name == "pdf_mcp.pdf_tools" and "retry" in r.message.lower()
+        ]
+        assert len(retry_msgs) >= 1, (
+            f"Expected retry log, got: {[r.message for r in caplog.records]}"
+        )
+
+    def test_retry_logs_final_failure(self, monkeypatch, caplog):
+        """Final failure after all retries is logged."""
+        import logging
+
+        def mock_local_llm(*args, **kwargs):
+            return None
+
+        monkeypatch.setattr(pdf_tools, "_call_local_llm", mock_local_llm)
+        monkeypatch.setattr(pdf_tools, "_get_llm_backend", lambda: "local")
+        monkeypatch.setattr("time.sleep", lambda _: None)
+
+        with caplog.at_level(logging.DEBUG, logger="pdf_mcp.pdf_tools"):
+            pdf_tools._call_llm("test prompt", max_retries=1)
+
+        fail_msgs = [
+            r.message for r in caplog.records
+            if r.name == "pdf_mcp.pdf_tools" and "failed" in r.message.lower()
+        ]
+        assert len(fail_msgs) >= 1, (
+            f"Expected failure log, got: {[r.message for r in caplog.records]}"
+        )
+
+    def test_no_backend_returns_none_no_retry(self, monkeypatch):
+        """_call_llm returns None immediately when no backend available."""
+        monkeypatch.setattr(pdf_tools, "_get_llm_backend", lambda: "")
+        monkeypatch.setattr("time.sleep", lambda _: None)
+
+        result = pdf_tools._call_llm("test prompt")
+        assert result is None

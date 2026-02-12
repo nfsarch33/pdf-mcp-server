@@ -6,6 +6,14 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 1.2.9 - 2026-02-12
+
+### Added
+- **LLM retry with exponential backoff**: `_call_llm()` now retries up to 2 times (3 total attempts) on transient failures with exponential backoff (1s, 2s delays).
+  - New `max_retries` parameter (default: 2) for caller control.
+  - Retry attempts and final failures logged at DEBUG level.
+  - 8 new tests in `TestLLMRetryLogic` covering: first-success no-retry, recovery on 2nd attempt, exhaustion, zero-retries, exponential delays, logging, and no-backend edge case.
+
 ## 1.2.8 - 2026-02-12
 
 ### Added
