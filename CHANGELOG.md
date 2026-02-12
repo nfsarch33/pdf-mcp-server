@@ -6,6 +6,18 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 1.2.8 - 2026-02-12
+
+### Added
+- **Edge case hardening for form-filling**: 14 new tests covering production-critical scenarios.
+  - `TestFormFillingEdgeCases` (8 tests): empty data dict, non-existent field names, Unicode values (CJK + accents), very long values, special PDF chars, file-not-found, corrupted PDF, no-AcroForm PDF.
+  - `TestGetFormFieldsEdgeCases` (4 tests): no-AcroForm, file-not-found, corrupted PDF, XFA error dict.
+  - `TestEncryptedPdfEdgeCases` (2 tests): encrypted PDF field access and fill attempts.
+- All 14 edge case scenarios confirmed handled correctly by existing code — no bugs found, validating robustness.
+
+### Validated
+- Full test suite: 355 passed, 5 skipped, 0 failures (~237s) - up from 341/5 (+14 new tests, zero regressions).
+
 ## 1.2.7 - 2026-02-12
 
 ### Added

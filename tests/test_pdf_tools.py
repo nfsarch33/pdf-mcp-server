@@ -4,7 +4,7 @@ from typing import Dict
 
 import pymupdf
 import pytest
-from pypdf import PdfWriter
+from pypdf import PdfReader, PdfWriter
 from pypdf.generic import (
     ArrayObject,
     BooleanObject,
@@ -2453,4 +2453,152 @@ class TestStructuredLogging:
         assert len(fallback_msgs) >= 1, (
             f"Expected checkbox fallback log, got: {[r.message for r in caplog.records]}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Edge Case Hardening Tests (v1.2.8)
+# ---------------------------------------------------------------------------
+
+
+class TestFormFillingEdgeCases:
+    """Edge case tests for form-filling robustness."""
+
+    def test_fill_pdf_form_empty_data_dict(self, tmp_path):
+        """fill_pdf_form with empty data dict should succeed without error."""
+        src = _make_form_pdf(tmp_path / "empty_data.pdf")
+        out = tmp_path / "empty_data_out.pdf"
+        result = pdf_tools.fill_pdf_form(str(src), str(out), {})
+        assert Path(result["output_path"]).exists()
+        # Field should remain empty
+        reader = PdfReader(str(out))
+        fields = reader.get_fields() or {}
+        if "Name" in fields:
+            val = fields["Name"].get("/V", "")
+            assert val == "" or val is None or str(val) == ""
+
+    def test_fill_pdf_form_nonexistent_field_names(self, tmp_path):
+        """fill_pdf_form with field names not in form should not crash."""
+        src = _make_form_pdf(tmp_path / "bad_names.pdf")
+        out = tmp_path / "bad_names_out.pdf"
+        data = {"NonExistentField": "value", "AnotherFake": "data"}
+        result = pdf_tools.fill_pdf_form(str(src), str(out), data)
+        assert Path(result["output_path"]).exists()
+
+    def test_fill_pdf_form_unicode_values(self, tmp_path):
+        """fill_pdf_form should handle Unicode values (CJK, accents)."""
+        src = _make_form_pdf(tmp_path / "unicode.pdf")
+        out = tmp_path / "unicode_out.pdf"
+        data = {"Name": "张三 José García"}
+        result = pdf_tools.fill_pdf_form(str(src), str(out), data)
+        assert Path(result["output_path"]).exists()
+        # Verify the value was written
+        reader = PdfReader(str(out))
+        fields = reader.get_fields() or {}
+        if "Name" in fields:
+            assert "张三" in str(fields["Name"].get("/V", ""))
+
+    def test_fill_pdf_form_very_long_value(self, tmp_path):
+        """fill_pdf_form with very long string should not crash."""
+        src = _make_form_pdf(tmp_path / "long_val.pdf")
+        out = tmp_path / "long_val_out.pdf"
+        data = {"Name": "A" * 5000}
+        result = pdf_tools.fill_pdf_form(str(src), str(out), data)
+        assert Path(result["output_path"]).exists()
+
+    def test_fill_pdf_form_special_chars(self, tmp_path):
+        """fill_pdf_form with special PDF chars should not corrupt output."""
+        src = _make_form_pdf(tmp_path / "special.pdf")
+        out = tmp_path / "special_out.pdf"
+        data = {"Name": "O'Brien & Co. <test> (parentheses)"}
+        result = pdf_tools.fill_pdf_form(str(src), str(out), data)
+        assert Path(result["output_path"]).exists()
+        # Verify output is a valid PDF
+        reader = PdfReader(str(out))
+        assert len(reader.pages) >= 1
+
+    def test_fill_pdf_form_file_not_found(self, tmp_path):
+        """fill_pdf_form with non-existent input should raise PdfToolError."""
+        out = tmp_path / "nofile_out.pdf"
+        with pytest.raises(PdfToolError, match="File not found"):
+            pdf_tools.fill_pdf_form(
+                str(tmp_path / "does_not_exist.pdf"),
+                str(out),
+                {"Name": "test"},
+            )
+
+    def test_fill_pdf_form_corrupted_pdf(self, tmp_path):
+        """fill_pdf_form with truncated/corrupt PDF should raise error."""
+        corrupted = tmp_path / "corrupted.pdf"
+        corrupted.write_bytes(b"%PDF-1.4\ntruncated garbage")
+        out = tmp_path / "corrupted_out.pdf"
+        with pytest.raises(Exception):
+            pdf_tools.fill_pdf_form(str(corrupted), str(out), {"Name": "x"})
+
+    def test_fill_pdf_form_no_acroform(self, tmp_path):
+        """fill_pdf_form on PDF without form fields should still produce output."""
+        src = _make_pdf(tmp_path / "noform.pdf")
+        out = tmp_path / "noform_out.pdf"
+        result = pdf_tools.fill_pdf_form(str(src), str(out), {"Name": "test"})
+        assert Path(result["output_path"]).exists()
+
+
+class TestGetFormFieldsEdgeCases:
+    """Edge case tests for get_pdf_form_fields robustness."""
+
+    def test_get_fields_no_acroform(self, tmp_path):
+        """get_pdf_form_fields on PDF without fields returns count=0."""
+        src = _make_pdf(tmp_path / "nofields.pdf")
+        result = pdf_tools.get_pdf_form_fields(str(src))
+        assert result["count"] == 0
+
+    def test_get_fields_file_not_found(self, tmp_path):
+        """get_pdf_form_fields with non-existent file raises PdfToolError."""
+        with pytest.raises(PdfToolError, match="File not found"):
+            pdf_tools.get_pdf_form_fields(
+                str(tmp_path / "nonexistent.pdf")
+            )
+
+    def test_get_fields_corrupted_pdf(self, tmp_path):
+        """get_pdf_form_fields with corrupted PDF raises error."""
+        corrupted = tmp_path / "corrupt_fields.pdf"
+        corrupted.write_bytes(b"%PDF-1.4\nbroken")
+        with pytest.raises(Exception):
+            pdf_tools.get_pdf_form_fields(str(corrupted))
+
+    def test_get_fields_xfa_returns_error_dict(self, tmp_path):
+        """get_pdf_form_fields on XFA form returns error dict, not raise."""
+        src = _make_xfa_pdf(tmp_path / "xfa_fields.pdf")
+        result = pdf_tools.get_pdf_form_fields(str(src))
+        assert "error" in result
+        assert result["xfa"] is True
+
+
+class TestEncryptedPdfEdgeCases:
+    """Edge case tests for encrypted PDF handling."""
+
+    def _make_encrypted_pdf(self, path: Path, password: str = "secret") -> Path:
+        """Create a simple encrypted PDF for testing."""
+        writer = PdfWriter()
+        writer.add_blank_page(width=200, height=200)
+        writer.encrypt(password)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("wb") as f:
+            writer.write(f)
+        return path
+
+    def test_get_fields_encrypted_pdf_raises(self, tmp_path):
+        """get_pdf_form_fields on encrypted PDF raises or returns error."""
+        src = self._make_encrypted_pdf(tmp_path / "encrypted.pdf")
+        # pypdf raises when accessing encrypted content without password
+        with pytest.raises(Exception):
+            pdf_tools.get_pdf_form_fields(str(src))
+
+    def test_fill_encrypted_pdf_raises(self, tmp_path):
+        """fill_pdf_form on encrypted PDF raises error."""
+        src = self._make_encrypted_pdf(tmp_path / "enc_fill.pdf")
+        out = tmp_path / "enc_fill_out.pdf"
+        with pytest.raises(Exception):
+            pdf_tools.fill_pdf_form(
+                str(src), str(out), {"Name": "test"}
+            )
 
