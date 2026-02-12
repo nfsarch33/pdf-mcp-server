@@ -683,6 +683,19 @@ def create_pdf_form_from_template(output_path: str, template_name: str) -> Dict[
     return create_pdf_form(output_path=output_path, fields=template["fields"], pages=1)
 
 
+def _compute_fill_stats(data: Dict, reader_fields: Dict) -> Dict:
+    """Compute form fill statistics: matched vs unmatched data keys."""
+    field_names = set(reader_fields.keys()) if reader_fields else set()
+    data_keys = set(data.keys())
+    matched = data_keys & field_names
+    unmatched = sorted(data_keys - field_names)
+    return {
+        "filled_fields_count": len(matched),
+        "total_form_fields": len(field_names),
+        "unmatched_fields": unmatched,
+    }
+
+
 def get_pdf_form_fields(pdf_path: str) -> Dict:
     path = _ensure_file(pdf_path)
     reader = PdfReader(str(path))
@@ -711,7 +724,9 @@ def fill_pdf_form(
         raise PdfToolError(
             "XFA forms are not supported. Convert to AcroForm or flatten first."
         )
-    has_fields = bool(reader.get_fields())
+    raw_fields = reader.get_fields() or {}
+    has_fields = bool(raw_fields)
+    fill_stats = _compute_fill_stats(data, raw_fields)
 
     if _HAS_FILLPDF and has_fields:
         # Prefer fillpdf when possible for robust form filling on real AcroForm PDFs.
@@ -748,7 +763,7 @@ def fill_pdf_form(
                 logger.debug("fillpdf verification error (non-fatal): %s", exc)
             else:
                 logger.debug("fill_pdf_form completed with fillpdf engine")
-                return {"output_path": str(dst), "flattened": flatten, "filled_with": "fillpdf"}
+                return {"output_path": str(dst), "flattened": flatten, "filled_with": "fillpdf", **fill_stats}
 
     writer = PdfWriter()
     # Important: When updating form fields with pypdf, the PdfWriter must have
@@ -771,7 +786,7 @@ def fill_pdf_form(
         writer.write(output_file)
 
     logger.debug("fill_pdf_form completed with pypdf engine")
-    return {"output_path": str(dst), "flattened": flatten, "filled_with": "pypdf"}
+    return {"output_path": str(dst), "flattened": flatten, "filled_with": "pypdf", **fill_stats}
 
 
 def fill_pdf_form_any(

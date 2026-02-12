@@ -6,6 +6,14 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 1.2.10 - 2026-02-12
+
+### Added
+- **Form fill diagnostics**: `fill_pdf_form()` now returns `filled_fields_count`, `total_form_fields`, and `unmatched_fields` in the result dict.
+  - Detects data keys that don't match any form field (catches typos and wrong field names).
+  - New DRY helper `_compute_fill_stats()` shared by both fillpdf and pypdf code paths.
+  - 6 new tests in `TestFormFillDiagnostics`: matched count, total fields, typo detection, all-match, all-unmatched, empty data.
+
 ## 1.2.9 - 2026-02-12
 
 ### Added

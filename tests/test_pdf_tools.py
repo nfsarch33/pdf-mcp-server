@@ -2747,3 +2747,71 @@ class TestLLMRetryLogic:
 
         result = pdf_tools._call_llm("test prompt")
         assert result is None
+
+
+# ---------------------------------------------------------------------------
+# Form Fill Diagnostics Tests (v1.2.10)
+# ---------------------------------------------------------------------------
+
+
+class TestFormFillDiagnostics:
+    """Tests for fill_pdf_form returning unmatched field diagnostics."""
+
+    def test_fill_returns_filled_fields_count(self, tmp_path):
+        """fill_pdf_form returns filled_fields_count matching data keys."""
+        src = _make_form_pdf(tmp_path / "diag1.pdf")
+        out = tmp_path / "diag1_out.pdf"
+        result = pdf_tools.fill_pdf_form(
+            str(src), str(out), {"Name": "Alice"},
+        )
+        assert "filled_fields_count" in result
+        assert result["filled_fields_count"] == 1
+
+    def test_fill_returns_total_form_fields(self, tmp_path):
+        """fill_pdf_form returns total_form_fields count."""
+        src = _make_form_pdf(tmp_path / "diag2.pdf")
+        out = tmp_path / "diag2_out.pdf"
+        result = pdf_tools.fill_pdf_form(
+            str(src), str(out), {"Name": "Bob"},
+        )
+        assert "total_form_fields" in result
+        assert result["total_form_fields"] >= 1
+
+    def test_fill_returns_unmatched_fields_on_typo(self, tmp_path):
+        """fill_pdf_form reports unmatched fields when keys don't exist."""
+        src = _make_form_pdf(tmp_path / "diag3.pdf")
+        out = tmp_path / "diag3_out.pdf"
+        result = pdf_tools.fill_pdf_form(
+            str(src), str(out), {"Nmae": "Alice", "Name": "Alice"},
+        )
+        assert "unmatched_fields" in result
+        assert "Nmae" in result["unmatched_fields"]
+
+    def test_fill_no_unmatched_when_all_match(self, tmp_path):
+        """fill_pdf_form has empty unmatched_fields when all keys match."""
+        src = _make_form_pdf(tmp_path / "diag4.pdf")
+        out = tmp_path / "diag4_out.pdf"
+        result = pdf_tools.fill_pdf_form(
+            str(src), str(out), {"Name": "Carol"},
+        )
+        assert result.get("unmatched_fields") == []
+
+    def test_fill_all_unmatched(self, tmp_path):
+        """fill_pdf_form with all-wrong keys has zero filled count."""
+        src = _make_form_pdf(tmp_path / "diag5.pdf")
+        out = tmp_path / "diag5_out.pdf"
+        result = pdf_tools.fill_pdf_form(
+            str(src), str(out), {"Bad1": "X", "Bad2": "Y"},
+        )
+        assert result["filled_fields_count"] == 0
+        assert sorted(result["unmatched_fields"]) == ["Bad1", "Bad2"]
+
+    def test_fill_empty_data_zero_filled(self, tmp_path):
+        """fill_pdf_form with empty data has zero filled count."""
+        src = _make_form_pdf(tmp_path / "diag6.pdf")
+        out = tmp_path / "diag6_out.pdf"
+        result = pdf_tools.fill_pdf_form(
+            str(src), str(out), {},
+        )
+        assert result["filled_fields_count"] == 0
+        assert result["unmatched_fields"] == []

@@ -1,6 +1,6 @@
 [project]
 name = "pdf-mcp"
-version = "1.2.9"
+version = "1.2.10"
 description = "Local MCP server for PDF form filling, editing, and OCR text extraction"
 authors = [{ name = "Local User" }]
 requires-python = ">=3.10"
