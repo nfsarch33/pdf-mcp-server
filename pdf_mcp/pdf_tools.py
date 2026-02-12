@@ -4620,6 +4620,46 @@ def _normalize_issue_date(value: str) -> Optional[str]:
     return None
 
 
+def _sanitize_mrz_name(name: Optional[str]) -> tuple:
+    """Remove OCR-garbled MRZ filler characters from extracted names.
+
+    MRZ names are padded with '<' fillers. OCR sometimes misreads these
+    as repeated characters (e.g., 'sssss', 'KKKK') or symbols ('££').
+    This function detects and removes such trailing garbage.
+
+    Args:
+        name: Raw name extracted from MRZ (may contain OCR garbage).
+
+    Returns:
+        Tuple of (cleaned_name, confidence_penalty).
+        penalty is 0.0 if clean, higher if garbage was removed.
+    """
+    if not name:
+        return name, 0.0
+
+    words = name.upper().split()
+    clean_words = []
+
+    for word in words:
+        # Stop at first non-alpha word (e.g., "123abc", "££SSSK")
+        if not word.isalpha():
+            break
+        # Stop at word with 3+ consecutive identical chars (OCR garbage)
+        if re.search(r"(.)\1{2,}", word):
+            break
+        clean_words.append(word)
+
+    cleaned = " ".join(clean_words)
+
+    # If nothing survived, return original with heavy penalty
+    if not cleaned:
+        return name, 0.5
+
+    # If we removed content, apply moderate penalty
+    penalty = 0.2 if cleaned != name.upper().strip() else 0.0
+    return cleaned, penalty
+
+
 def _normalize_mrz_candidate(candidate: str, target_len: int) -> Optional[str]:
     """Normalize an MRZ candidate line to the target length.
 
@@ -4891,10 +4931,15 @@ def _extract_passport_fields(full_text: str) -> tuple[Dict[str, Any], Dict[str, 
             names = line1[5:]
             surname = ""
             given_names = ""
+            surname_penalty = 0.0
+            given_penalty = 0.0
             if "<<" in names:
                 surname_part, given_part = names.split("<<", 1)
                 surname = surname_part.replace("<", " ").strip()
                 given_names = given_part.replace("<", " ").strip()
+                # Sanitize OCR garbage from names (BUG-006)
+                surname, surname_penalty = _sanitize_mrz_name(surname)
+                given_names, given_penalty = _sanitize_mrz_name(given_names)
             passport_number = line2[0:9].replace("<", "").strip()
             passport_check = int(line2[9]) if line2[9].isdigit() else -1
             nationality = line2[10:13].replace("<", "").strip()
@@ -4935,8 +4980,8 @@ def _extract_passport_fields(full_text: str) -> tuple[Dict[str, Any], Dict[str, 
                 "passport_number": 0.95 if pn_valid else 0.7,
                 "issuing_country": 0.8,
                 "nationality": 0.8,
-                "surname": 0.75,
-                "given_names": 0.75,
+                "surname": max(0.3, 0.75 - surname_penalty),
+                "given_names": max(0.3, 0.75 - given_penalty),
                 "birth_date": 0.95 if bd_valid else 0.7,
                 "sex": 0.9,
                 "expiry_date": 0.95 if ed_valid else 0.7,
@@ -4958,10 +5003,15 @@ def _extract_passport_fields(full_text: str) -> tuple[Dict[str, Any], Dict[str, 
         name_part = line3.rstrip("<")
         surname = ""
         given_names = ""
+        surname_penalty = 0.0
+        given_penalty = 0.0
         if "<<" in name_part:
             surname_part, given_part = name_part.split("<<", 1)
             surname = surname_part.replace("<", " ").strip()
             given_names = given_part.replace("<", " ").strip()
+            # Sanitize OCR garbage from names (BUG-006)
+            surname, surname_penalty = _sanitize_mrz_name(surname)
+            given_names, given_penalty = _sanitize_mrz_name(given_names)
 
         birth_date = _parse_mrz_date(birth_raw)
         expiry_date = _parse_mrz_date(expiry_raw, is_expiry=True)
@@ -4981,8 +5031,8 @@ def _extract_passport_fields(full_text: str) -> tuple[Dict[str, Any], Dict[str, 
             "passport_number": 0.8,
             "issuing_country": 0.8,
             "nationality": 0.8,
-            "surname": 0.75,
-            "given_names": 0.75,
+            "surname": max(0.3, 0.75 - surname_penalty),
+            "given_names": max(0.3, 0.75 - given_penalty),
             "birth_date": 0.8,
             "sex": 0.9,
             "expiry_date": 0.8,
@@ -5147,6 +5197,11 @@ def extract_structured_data(
             # Also request passport_number if MRZ failed to extract it
             if "passport_number" not in extracted_data or confidence.get("passport_number", 0) < 0.7:
                 viz_fields.append("passport_number")
+            # Request names from VLM when MRZ names are garbage (BUG-006)
+            if confidence.get("surname", 0) < 0.7:
+                viz_fields.append("surname")
+            if confidence.get("given_names", 0) < 0.7:
+                viz_fields.append("given_names")
             fields_needed = [
                 f for f in viz_fields
                 if f not in extracted_data or confidence.get(f, 0) < 0.7

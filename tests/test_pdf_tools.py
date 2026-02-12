@@ -2815,3 +2815,64 @@ class TestFormFillDiagnostics:
         )
         assert result["filled_fields_count"] == 0
         assert result["unmatched_fields"] == []
+
+
+# ---------------------------------------------------------------------------
+# MRZ Name Sanitization Tests (v1.2.11 - BUG-006 fix)
+# ---------------------------------------------------------------------------
+
+
+class TestMRZNameSanitization:
+    """Tests for _sanitize_mrz_name to fix BUG-006 garbage names."""
+
+    def test_clean_name_unchanged(self):
+        """Normal MRZ name passes through unmodified."""
+        name, penalty = pdf_tools._sanitize_mrz_name("XIUYING")
+        assert name == "XIUYING"
+        assert penalty == 0.0
+
+    def test_multi_word_clean_name(self):
+        """Multi-word name without garbage passes through."""
+        name, penalty = pdf_tools._sanitize_mrz_name("MARY JANE")
+        assert name == "MARY JANE"
+        assert penalty == 0.0
+
+    def test_trailing_repeated_chars_removed(self):
+        """Trailing OCR garbage (3+ repeated chars) is removed."""
+        name, penalty = pdf_tools._sanitize_mrz_name(
+            "XILUYING KKsssss sssssssss",
+        )
+        assert "sssss" not in name
+        assert "XILU" in name or "XILUYING" in name
+        assert penalty > 0
+
+    def test_all_garbage_returns_original_high_penalty(self):
+        """Completely garbage name returns original with high penalty."""
+        name, penalty = pdf_tools._sanitize_mrz_name(
+            "££SSSKEKKKKK",
+        )
+        # When nothing can be recovered, original is returned
+        assert penalty >= 0.4
+
+    def test_empty_name_passthrough(self):
+        """Empty string passes through without error."""
+        name, penalty = pdf_tools._sanitize_mrz_name("")
+        assert name == ""
+        assert penalty == 0.0
+
+    def test_none_name_passthrough(self):
+        """None passes through without error."""
+        name, penalty = pdf_tools._sanitize_mrz_name(None)
+        assert name is None
+        assert penalty == 0.0
+
+    def test_name_with_non_alpha_garbage(self):
+        """Name followed by non-alpha chars is truncated."""
+        name, penalty = pdf_tools._sanitize_mrz_name("JIZHI 123abc")
+        assert name == "JIZHI"
+        assert penalty > 0
+
+    def test_uppercase_normalization(self):
+        """Names are returned in uppercase (MRZ standard)."""
+        name, _ = pdf_tools._sanitize_mrz_name("Xiuying")
+        assert name == "XIUYING"

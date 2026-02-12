@@ -41,7 +41,7 @@ Quality bar
 - Feature-ready with unit + E2E coverage before pushing.
 - Test every MCP tool end-to-end with dummy PDFs (multiple fixtures if needed).
 - Always verify outputs by re-opening PDFs and re-reading metadata/fields.
-- 369 passed, 5 skipped, 0 failures (depends on optional backends and OCR availability).
+- 377 passed, 5 skipped, 0 failures (depends on optional backends and OCR availability).
 
 Workflow expectations
 - Use safe git workflow (branching + PRs); never change main directly.

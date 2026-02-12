@@ -6,6 +6,15 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 1.2.11 - 2026-02-12
+
+### Fixed
+- **BUG-006 (HIGH)**: Passport `given_names` and `surname` containing OCR garbage characters from MRZ filler misreads.
+  - New `_sanitize_mrz_name()` helper detects and removes OCR-garbled filler characters (repeated chars like "sssss", non-alpha symbols like "££").
+  - Applied to both TD3 (passport) and TD1 (ID card) MRZ extraction paths (DRY).
+  - Names with detected garbage get reduced confidence, triggering VLM fallback for name extraction.
+  - 8 new tests in `TestMRZNameSanitization`: clean names, multi-word, trailing garbage, all-garbage, empty/None, non-alpha, uppercase normalization.
+
 ## 1.2.10 - 2026-02-12
 
 ### Added
