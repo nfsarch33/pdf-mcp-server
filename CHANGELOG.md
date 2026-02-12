@@ -6,6 +6,20 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 1.2.16 - 2026-02-16
+
+### Fixed
+- **BUG-009 (CRITICAL)**: `extract_tables` crash with `"object of type 'TableFinder' has no len()"`.
+  - PyMuPDF >= 1.24 returns `TableFinder` object instead of list from `page.find_tables()`.
+  - New `_get_tables_list()` helper normalizes `TableFinder`, plain list, and iterable returns to a plain list.
+  - Applied to both initial table detection and BUG-007 text-strategy retry path.
+  - 5 new tests: `TestTableFinderCompat` (4 unit) + `TestExtractTablesTableFinder` (1 integration).
+- **consensus_runs not exposed in MCP schema**: Added `consensus_runs` parameter to `server.py` `extract_structured_data()` wrapper with default=1.
+  - 1 new test: `TestConsensusRunsMCPExposure`.
+  - Now accessible via MCP tool calls (e.g., `extract_structured_data(..., consensus_runs=3)`).
+- **MRZ name parsing**: Added 2 new regression tests for `_parse_mrz_names` with garbled `<<` delimiter scenarios.
+- Full regression: 428 passed, 5 skipped, 0 failures.
+
 ## 1.2.15 - 2026-02-16
 
 ### Added

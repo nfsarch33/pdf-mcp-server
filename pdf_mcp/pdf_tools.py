@@ -2445,6 +2445,26 @@ def get_ocr_languages() -> Dict[str, Any]:
 _VALID_TABLE_STRATEGIES = frozenset({"lines", "lines_strict", "text"})
 
 
+def _get_tables_list(find_tables_result: object) -> list:
+    """Convert PyMuPDF find_tables() result to a plain list.
+
+    PyMuPDF >= 1.24 returns a ``TableFinder`` object instead of a list.
+    ``TableFinder`` is iterable and has a ``.tables`` attribute but does
+    NOT support ``len()``.  This helper normalises both old and new
+    return types to a plain list (BUG-009).
+    """
+    if find_tables_result is None:
+        return []
+    if isinstance(find_tables_result, list):
+        return find_tables_result
+    if hasattr(find_tables_result, "tables"):
+        return find_tables_result.tables
+    try:
+        return list(find_tables_result)
+    except TypeError:
+        return []
+
+
 def _is_collapsed_table(raw_data: List[List]) -> bool:
     """Return True if all data is in the first column and others are empty.
 
@@ -2512,7 +2532,7 @@ def extract_tables(
             }
 
             try:
-                tabs = page.find_tables(strategy=strategy)
+                tabs = _get_tables_list(page.find_tables(strategy=strategy))
 
                 for table_idx, table in enumerate(tabs):
                     raw_data = table.extract()
@@ -2525,7 +2545,9 @@ def extract_tables(
                         strategy != "text"
                         and _is_collapsed_table(raw_data)
                     ):
-                        text_tabs = page.find_tables(strategy="text")
+                        text_tabs = _get_tables_list(
+                            page.find_tables(strategy="text")
+                        )
                         if text_tabs and len(text_tabs) > table_idx:
                             retry_data = text_tabs[table_idx].extract()
                             if retry_data and not _is_collapsed_table(

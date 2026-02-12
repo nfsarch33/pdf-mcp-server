@@ -1093,6 +1093,7 @@ def extract_structured_data(
     ocr_language: str = "eng",
     model: str = "auto",
     backend: Optional[str] = None,
+    consensus_runs: int = 1,
 ) -> Dict[str, Any]:
     """
     Extract structured data from PDF using pattern matching or LLM.
@@ -1112,6 +1113,7 @@ def extract_structured_data(
         ocr_language: Tesseract language code (default: "eng")
         model: Model to use (default: auto-select based on backend)
         backend: Force specific backend: "local", "ollama", or "openai" (default: auto)
+        consensus_runs: Number of VLM calls for majority-vote consensus (default: 1)
 
     Returns:
         Dict with extracted data, confidence scores, extraction method, and backend used
@@ -1125,6 +1127,7 @@ def extract_structured_data(
         ocr_language=ocr_language,
         model=model,
         backend=backend,
+        consensus_runs=consensus_runs,
     )
 
 

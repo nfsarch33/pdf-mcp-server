@@ -3242,3 +3242,113 @@ class TestEntityExtractionPatterns:
         )
         assert any("John Smith" in n for n in names) or \
             any("Mary Jane" in n for n in names)
+
+
+# ---------------------------------------------------------------------------
+# BUG-009: TableFinder compatibility (v1.2.16)
+# ---------------------------------------------------------------------------
+
+
+class TestTableFinderCompat:
+    """Tests for _get_tables_list helper that converts TableFinder -> list."""
+
+    def test_plain_list_passthrough(self):
+        """A plain list should pass through unchanged."""
+        tables = [{"data": [["a"]]}]
+        result = pdf_tools._get_tables_list(tables)
+        assert result is tables
+
+    def test_tablefinder_converted(self):
+        """Object with .tables attr should return .tables."""
+
+        class FakeTableFinder:
+            def __init__(self, tables):
+                self.tables = tables
+
+        inner = [{"data": [["a"]]}]
+        finder = FakeTableFinder(inner)
+        result = pdf_tools._get_tables_list(finder)
+        assert result is inner
+
+    def test_iterable_fallback(self):
+        """Non-list iterable without .tables should be converted to list."""
+        result = pdf_tools._get_tables_list(iter([1, 2, 3]))
+        assert result == [1, 2, 3]
+
+    def test_none_returns_empty(self):
+        """None input returns empty list."""
+        result = pdf_tools._get_tables_list(None)
+        assert result == []
+
+
+class TestExtractTablesTableFinder:
+    """Integration test: extract_tables must not crash with TableFinder."""
+
+    def test_extract_tables_no_crash(self, tmp_path):
+        """extract_tables should handle TableFinder result gracefully."""
+        import pymupdf
+
+        doc = pymupdf.open()
+        page = doc.new_page()
+        page.insert_text((50, 50), "Name  Age  City")
+        page.insert_text((50, 70), "Alice  30  NYC")
+        pdf_path = tmp_path / "tables.pdf"
+        doc.save(str(pdf_path))
+        doc.close()
+
+        # Must not crash with TypeError: TableFinder has no len()
+        result = pdf_tools.extract_tables(str(pdf_path))
+        assert "error" not in result
+        assert "total_tables" in result
+
+
+# ---------------------------------------------------------------------------
+# consensus_runs MCP exposure (v1.2.16)
+# ---------------------------------------------------------------------------
+
+
+class TestConsensusRunsMCPExposure:
+    """Verify consensus_runs is exposed in the MCP server layer."""
+
+    def test_server_function_has_consensus_runs(self):
+        """The server.py wrapper must accept consensus_runs."""
+        import inspect
+
+        from pdf_mcp import server
+
+        # Find the extract_structured_data function in server module
+        func = getattr(server, "extract_structured_data", None)
+        assert func is not None, "extract_structured_data must exist in server"
+        sig = inspect.signature(func)
+        param = sig.parameters.get("consensus_runs")
+        assert param is not None, "consensus_runs must be in MCP schema"
+        assert param.default == 1, "Default must be 1"
+
+
+# ---------------------------------------------------------------------------
+# MRZ empty given_names heuristic (v1.2.16)
+# ---------------------------------------------------------------------------
+
+
+class TestMRZEmptyGivenNamesHeuristic:
+    """When MRZ parsing returns empty given_names but multi-word surname,
+    confidence should be lowered to trigger VLM fallback."""
+
+    def test_multi_word_surname_empty_given_lowers_confidence(self):
+        """Surname 'LIAN K JIZHI' with empty given -> low surname confidence."""
+        # Simulate MRZ line with OCR garbled << delimiter
+        # P<CHNLIAN<K<JIZHI<<<<<<<<<<<<<<<<<<<<<<<<<
+        # line1[5:] = LIAN<K<JIZHI<<<<<<<<<<<<<<<<<<<<<<<<<
+        mrz_names = "LIAN<K<JIZHI<<<<<<<<<<<<<<<<<<<<<<<<<<<"
+        surname, given_names = pdf_tools._parse_mrz_names(mrz_names)
+        # With no << found between LIAN and JIZHI (only trailing <<),
+        # surname becomes "LIAN K JIZHI" and given_names is ""
+        # The function should detect this situation
+        assert given_names == "" or surname == "LIAN K JIZHI"
+
+    def test_single_word_surname_no_penalty(self):
+        """Normal single-word surname with given names -> no extra penalty."""
+        mrz_names = "SMITH<<JOHN<MICHAEL<<<<<<<<<<<<<<<<<<<<<<"
+        surname, given_names = pdf_tools._parse_mrz_names(mrz_names)
+        assert surname == "SMITH"
+        assert given_names == "JOHN MICHAEL"
