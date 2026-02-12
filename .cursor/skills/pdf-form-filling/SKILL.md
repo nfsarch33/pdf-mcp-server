@@ -28,7 +28,7 @@ description: Fills PDF forms with client data using pdf-mcp-server MCP tools, ex
 | `get_pdf_form_fields` | List fields, types (/Tx=text, /Btn=checkbox), current values |
 | `fill_pdf_form` | Fill AcroForm fields; checkboxes: "Yes"/"No" as NameObjects |
 | `fill_pdf_form_any` | Fill non-standard forms via label detection heuristics |
-| `extract_structured_data` | Extract passport/invoice/receipt data with VLM |
+| `extract_structured_data` | Extract passport/invoice/receipt data with VLM; use `consensus_runs=3` for critical documents |
 | `extract_text` | Extract text (native, OCR, auto modes) |
 | `analyze_pdf_content` | Document analysis, entity extraction, summarization |
 | `flatten_pdf` | Make filled form non-editable for final submission |

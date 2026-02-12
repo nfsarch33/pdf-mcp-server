@@ -3003,6 +3003,115 @@ class TestMRZNameParsing:
 
 
 # ---------------------------------------------------------------------------
+# Multi-run VLM Consensus (v1.2.15)
+# ---------------------------------------------------------------------------
+
+
+class TestVLMFieldConsensus:
+    """Tests for _vlm_field_consensus helper -- majority vote per field."""
+
+    def test_unanimous_agreement(self):
+        """All runs return same values -> highest confidence."""
+        responses = [
+            {"surname": "SMITH", "given_names": "JOHN"},
+            {"surname": "SMITH", "given_names": "JOHN"},
+            {"surname": "SMITH", "given_names": "JOHN"},
+        ]
+        data, conf = pdf_tools._vlm_field_consensus(responses)
+        assert data["surname"] == "SMITH"
+        assert data["given_names"] == "JOHN"
+        assert conf["surname"] >= 0.9
+        assert conf["given_names"] >= 0.9
+
+    def test_majority_vote_2_of_3(self):
+        """2/3 agree on a field -> picks majority, lower confidence."""
+        responses = [
+            {"surname": "SMITH", "issue_date": "2020-01-15"},
+            {"surname": "SMITH", "issue_date": "2020-01-16"},
+            {"surname": "SMITH", "issue_date": "2020-01-15"},
+        ]
+        data, conf = pdf_tools._vlm_field_consensus(responses)
+        assert data["surname"] == "SMITH"
+        assert data["issue_date"] == "2020-01-15"
+        assert conf["surname"] >= 0.9
+        assert conf["issue_date"] < conf["surname"]
+
+    def test_null_values_excluded(self):
+        """None and VLM-null strings are excluded from voting."""
+        responses = [
+            {"surname": "SMITH", "place_of_birth": None},
+            {"surname": "SMITH", "place_of_birth": "NULL"},
+            {"surname": "SMITH", "place_of_birth": "BEIJING"},
+        ]
+        data, conf = pdf_tools._vlm_field_consensus(responses)
+        assert data["surname"] == "SMITH"
+        assert data["place_of_birth"] == "BEIJING"
+
+    def test_all_null_field_excluded(self):
+        """Field with only null values across runs is not included."""
+        responses = [
+            {"surname": "SMITH", "place_of_birth": None},
+            {"surname": "SMITH", "place_of_birth": "NULL"},
+            {"surname": "SMITH"},
+        ]
+        data, conf = pdf_tools._vlm_field_consensus(responses)
+        assert data["surname"] == "SMITH"
+        assert "place_of_birth" not in data
+
+    def test_empty_responses_list(self):
+        """No responses returns empty dicts."""
+        data, conf = pdf_tools._vlm_field_consensus([])
+        assert data == {}
+        assert conf == {}
+
+    def test_single_response(self):
+        """Single response acts as passthrough."""
+        responses = [{"surname": "WANG", "given_names": "MEI"}]
+        data, conf = pdf_tools._vlm_field_consensus(responses)
+        assert data["surname"] == "WANG"
+        assert data["given_names"] == "MEI"
+        # Single run confidence should be moderate
+        assert conf["surname"] <= 0.9
+
+    def test_three_way_tie_picks_first(self):
+        """When all values differ, picks the most common or first."""
+        responses = [
+            {"issue_date": "2020-01-15"},
+            {"issue_date": "2020-01-16"},
+            {"issue_date": "2020-01-17"},
+        ]
+        data, conf = pdf_tools._vlm_field_consensus(responses)
+        # All different -> picks first occurrence of most-common (any is valid)
+        assert "issue_date" in data
+        # Low confidence since no agreement
+        assert conf["issue_date"] <= 0.7
+
+    def test_case_insensitive_matching(self):
+        """Consensus normalizes case for comparison."""
+        responses = [
+            {"surname": "SMITH"},
+            {"surname": "Smith"},
+            {"surname": "SMITH"},
+        ]
+        data, conf = pdf_tools._vlm_field_consensus(responses)
+        # Should agree (case-insensitive) with high confidence
+        assert data["surname"].upper() == "SMITH"
+        assert conf["surname"] >= 0.9
+
+
+class TestConsensusRunsParam:
+    """Tests for consensus_runs parameter on extract_structured_data."""
+
+    def test_default_consensus_runs_is_one(self):
+        """Default behavior: single VLM call (backward compatible)."""
+        import inspect
+        sig = inspect.signature(pdf_tools.extract_structured_data)
+        param = sig.parameters.get("consensus_runs")
+        assert param is not None, "consensus_runs parameter must exist"
+        assert param.default == 1, "Default must be 1 for backward compatibility"
+
+
+# ---------------------------------------------------------------------------
 # BUG-007: Collapsed Table Detection (v1.2.13)
 # ---------------------------------------------------------------------------
 

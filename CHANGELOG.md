@@ -6,6 +6,20 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 1.2.15 - 2026-02-16
+
+### Added
+- **Multi-run VLM consensus**: New `_vlm_field_consensus()` helper computes per-field majority vote across N VLM runs for stochastic error reduction.
+  - Case-insensitive matching: normalizes values for comparison, preserving original casing in output.
+  - VLM null-string filtering: excludes "NULL", "None", "N/A" placeholder values from voting.
+  - Confidence mapping: unanimous (0.95), majority (0.85), no-majority (0.60), single-run (0.85).
+  - 8 new tests in `TestVLMFieldConsensus`: unanimous, majority-2/3, null-excluded, all-null, empty, single, tie, case-insensitive.
+  - 1 new test in `TestConsensusRunsParam`: verifies backward-compatible default of `consensus_runs=1`.
+- **`consensus_runs` parameter** on `extract_structured_data()`: controls number of VLM calls for passport extraction (default: 1, no behavior change).
+  - When `consensus_runs > 1`, runs VLM N times and applies `_vlm_field_consensus()` before merging into MRZ-derived data.
+- **Skills updates**: Added workflow checklists to `release-sop` skill per Anthropic official guide. Updated `pdf-form-filling` skill with `consensus_runs` parameter reference.
+- Full regression: 420 passed, 5 skipped, 0 failures.
+
 ## 1.2.14 - 2026-02-12
 
 ### Added

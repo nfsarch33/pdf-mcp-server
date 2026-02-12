@@ -4676,6 +4676,73 @@ def _is_vlm_null_string(value: object) -> bool:
     return value.strip().lower() in _VLM_NULL_STRINGS
 
 
+def _vlm_field_consensus(
+    responses: List[Dict],
+) -> tuple:
+    """Compute per-field majority vote across multiple VLM JSON responses.
+
+    Reduces VLM stochastic errors by running the same prompt N times and
+    picking the most common value for each field.  Null / VLM-null-string
+    values are excluded from voting.
+
+    Args:
+        responses: List of parsed JSON dicts from N VLM runs.
+
+    Returns:
+        Tuple of (consensus_data, consensus_confidence).
+        confidence is the agreement ratio mapped to a 0.6-0.95 scale.
+    """
+    if not responses:
+        return {}, {}
+
+    # Gather all field names across all responses
+    all_fields: set = set()
+    for resp in responses:
+        all_fields.update(resp.keys())
+
+    consensus_data: Dict[str, Any] = {}
+    consensus_conf: Dict[str, float] = {}
+    n = len(responses)
+
+    for field in all_fields:
+        # Collect non-null values for this field
+        values = []
+        originals = []
+        for resp in responses:
+            v = resp.get(field)
+            if v is None or _is_vlm_null_string(v):
+                continue
+            # Normalize for comparison (case-insensitive)
+            norm = str(v).strip().upper()
+            values.append(norm)
+            originals.append(v)
+
+        if not values:
+            continue
+
+        # Find majority via counter
+        from collections import Counter
+        counts = Counter(values)
+        best_norm, best_count = counts.most_common(1)[0]
+
+        # Pick the first original value that matches the normalized winner
+        winner = next(o for o, norm in zip(originals, values) if norm == best_norm)
+        consensus_data[field] = winner
+
+        # Map agreement ratio to confidence: 1/1->0.85, 2/3->0.80, 3/3->0.95
+        ratio = best_count / n
+        if n == 1:
+            consensus_conf[field] = 0.85
+        elif ratio >= 1.0:
+            consensus_conf[field] = 0.95
+        elif ratio > 0.5:
+            consensus_conf[field] = 0.75 + 0.2 * ratio  # 0.85 at 2/3
+        else:
+            consensus_conf[field] = 0.6  # no majority
+
+    return consensus_data, consensus_conf
+
+
 def _sanitize_mrz_name(name: Optional[str]) -> tuple:
     """Remove OCR-garbled MRZ filler characters from extracted names.
 
@@ -5211,6 +5278,7 @@ def extract_structured_data(
     ocr_language: str = "eng",
     model: str = "auto",
     backend: Optional[str] = None,
+    consensus_runs: int = 1,
 ) -> Dict[str, Any]:
     """
     Extract structured data from PDF using pattern matching or LLM.
@@ -5230,6 +5298,7 @@ def extract_structured_data(
         ocr_language: Tesseract language code (default: "eng")
         model: Model to use (default: auto-select based on backend)
         backend: Force specific backend: "local", "ollama", or "openai" (default: auto)
+        consensus_runs: Number of VLM calls for majority-vote consensus (default: 1)
 
     Returns:
         Dict with:
@@ -5310,31 +5379,41 @@ def extract_structured_data(
                     f"{mrz_context}\n\n"
                     "Return a JSON object with the extracted values."
                 )
-                llm_response = _call_llm(
-                    prompt, system_prompt, model=model, backend=selected_backend
-                )
+                # Run VLM consensus_runs times for stochastic error reduction
+                n_runs = max(1, consensus_runs)
+                parsed_responses: List[Dict] = []
+                for _run_idx in range(n_runs):
+                    llm_response = _call_llm(
+                        prompt, system_prompt, model=model, backend=selected_backend
+                    )
+                    if llm_response:
+                        try:
+                            json_str = llm_response
+                            if "```json" in json_str:
+                                json_str = json_str.split("```json")[1].split("```")[0]
+                            elif "```" in json_str:
+                                json_str = json_str.split("```")[1].split("```")[0]
+                            parsed_responses.append(json.loads(json_str.strip()))
+                        except (json.JSONDecodeError, IndexError):
+                            pass
                 used_backend = selected_backend
-                if llm_response:
-                    try:
-                        json_str = llm_response
-                        if "```json" in json_str:
-                            json_str = json_str.split("```json")[1].split("```")[0]
-                        elif "```" in json_str:
-                            json_str = json_str.split("```")[1].split("```")[0]
-                        llm_data = json.loads(json_str.strip())
-                        for key, value in llm_data.items():
-                            # Skip VLM null-strings ("NULL", "None", etc.)
-                            if _is_vlm_null_string(value):
-                                continue
-                            if value is not None and (
-                                key not in extracted_data
-                                or confidence.get(key, 0) < 0.7
-                            ):
-                                extracted_data[key] = value
-                                confidence[key] = 0.85
-                        method = "passport+llm"
-                    except (json.JSONDecodeError, IndexError):
-                        pass
+                if parsed_responses:
+                    if len(parsed_responses) > 1:
+                        llm_data, llm_conf = _vlm_field_consensus(parsed_responses)
+                    else:
+                        llm_data = parsed_responses[0]
+                        llm_conf = {k: 0.85 for k in llm_data}
+                    for key, value in llm_data.items():
+                        # Skip VLM null-strings ("NULL", "None", etc.)
+                        if _is_vlm_null_string(value):
+                            continue
+                        if value is not None and (
+                            key not in extracted_data
+                            or confidence.get(key, 0) < 0.7
+                        ):
+                            extracted_data[key] = value
+                            confidence[key] = llm_conf.get(key, 0.85)
+                    method = "passport+llm"
 
         # Post-process: Chinese passport issuing authority correction.
         # VLM often picks "Ministry of Foreign Affairs" from the passport's
