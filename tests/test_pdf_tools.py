@@ -2838,13 +2838,16 @@ class TestMRZNameSanitization:
         assert penalty == 0.0
 
     def test_trailing_repeated_chars_removed(self):
-        """Trailing OCR garbage (3+ repeated chars) is removed."""
+        """Trailing OCR garbage removed, small penalty keeps confidence."""
         name, penalty = pdf_tools._sanitize_mrz_name(
             "XILUYING KKsssss sssssssss",
         )
         assert "sssss" not in name
         assert "XILU" in name or "XILUYING" in name
         assert penalty > 0
+        # Successful recovery should use small penalty so
+        # confidence stays >= 0.7 (avoids unnecessary VLM fallback)
+        assert penalty <= 0.05
 
     def test_all_garbage_returns_original_high_penalty(self):
         """Completely garbage name returns original with high penalty."""
@@ -2876,3 +2879,64 @@ class TestMRZNameSanitization:
         """Names are returned in uppercase (MRZ standard)."""
         name, _ = pdf_tools._sanitize_mrz_name("Xiuying")
         assert name == "XIUYING"
+
+    def test_successful_recovery_confidence_above_threshold(self):
+        """Recovered name keeps confidence >= 0.7 (no VLM fallback)."""
+        _, penalty = pdf_tools._sanitize_mrz_name(
+            "XILUYING KKsssss sssssssss",
+        )
+        confidence = 0.75 - penalty
+        assert confidence >= 0.7, (
+            f"Confidence {confidence} < 0.7 would trigger VLM fallback"
+        )
+
+    def test_non_alpha_recovery_confidence_above_threshold(self):
+        """Name with non-alpha garbage keeps confidence >= 0.7."""
+        _, penalty = pdf_tools._sanitize_mrz_name("JIZHI 123abc")
+        confidence = 0.75 - penalty
+        assert confidence >= 0.7
+
+
+# ---------------------------------------------------------------------------
+# VLM Null-String Filter Tests (v1.2.12 - BUG-006a fix)
+# ---------------------------------------------------------------------------
+
+
+class TestVLMNullStringFilter:
+    """Tests for _is_vlm_null_string to fix BUG-006a regression."""
+
+    def test_literal_null_string_detected(self):
+        """VLM 'NULL' string is detected as null."""
+        assert pdf_tools._is_vlm_null_string("NULL") is True
+
+    def test_lowercase_null_detected(self):
+        """VLM 'null' string is detected as null."""
+        assert pdf_tools._is_vlm_null_string("null") is True
+
+    def test_none_string_detected(self):
+        """VLM 'None' string is detected as null."""
+        assert pdf_tools._is_vlm_null_string("None") is True
+
+    def test_na_string_detected(self):
+        """VLM 'N/A' string is detected as null."""
+        assert pdf_tools._is_vlm_null_string("N/A") is True
+
+    def test_empty_string_detected(self):
+        """Empty string is detected as null."""
+        assert pdf_tools._is_vlm_null_string("") is True
+
+    def test_whitespace_only_detected(self):
+        """Whitespace-only string is detected as null."""
+        assert pdf_tools._is_vlm_null_string("   ") is True
+
+    def test_valid_value_not_filtered(self):
+        """Normal value is NOT detected as null."""
+        assert pdf_tools._is_vlm_null_string("XIUYING") is False
+
+    def test_date_value_not_filtered(self):
+        """Date value is NOT detected as null."""
+        assert pdf_tools._is_vlm_null_string("2020-01-15") is False
+
+    def test_python_none_not_string(self):
+        """Python None is not a string, returns False."""
+        assert pdf_tools._is_vlm_null_string(None) is False

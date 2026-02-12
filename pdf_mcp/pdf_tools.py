@@ -4620,6 +4620,21 @@ def _normalize_issue_date(value: str) -> Optional[str]:
     return None
 
 
+_VLM_NULL_STRINGS = frozenset({"null", "none", "n/a", ""})
+
+
+def _is_vlm_null_string(value: object) -> bool:
+    """Return True if *value* is a VLM placeholder string (BUG-006a).
+
+    VLMs sometimes return literal "NULL", "None", or "N/A" instead of
+    JSON null when they cannot extract a field.  These must be filtered
+    to prevent overwriting valid MRZ-derived data.
+    """
+    if not isinstance(value, str):
+        return False
+    return value.strip().lower() in _VLM_NULL_STRINGS
+
+
 def _sanitize_mrz_name(name: Optional[str]) -> tuple:
     """Remove OCR-garbled MRZ filler characters from extracted names.
 
@@ -4655,8 +4670,10 @@ def _sanitize_mrz_name(name: Optional[str]) -> tuple:
     if not cleaned:
         return name, 0.5
 
-    # If we removed content, apply moderate penalty
-    penalty = 0.2 if cleaned != name.upper().strip() else 0.0
+    # If we removed content but recovered valid words, small penalty.
+    # A heavy penalty triggers VLM fallback which can return "NULL" strings
+    # that are worse than the recovered MRZ name (BUG-006a).
+    penalty = 0.05 if cleaned != name.upper().strip() else 0.0
     return cleaned, penalty
 
 
@@ -5247,6 +5264,9 @@ def extract_structured_data(
                             json_str = json_str.split("```")[1].split("```")[0]
                         llm_data = json.loads(json_str.strip())
                         for key, value in llm_data.items():
+                            # Skip VLM null-strings ("NULL", "None", etc.)
+                            if _is_vlm_null_string(value):
+                                continue
                             if value is not None and (
                                 key not in extracted_data
                                 or confidence.get(key, 0) < 0.7

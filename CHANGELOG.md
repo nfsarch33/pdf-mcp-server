@@ -6,6 +6,15 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 1.2.12 - 2026-02-12
+
+### Fixed
+- **BUG-006a (HIGH)**: v1.2.11 regression -- VLM returning literal "NULL" string accepted at 0.85 confidence, overwriting valid MRZ-recovered names.
+  - New `_is_vlm_null_string()` helper filters VLM placeholder strings ("NULL", "None", "N/A", empty) before they can overwrite extracted data.
+  - Reduced `_sanitize_mrz_name()` penalty from 0.2 to 0.05 for successful recoveries, keeping confidence >= 0.7 to avoid unnecessary VLM fallback.
+  - 9 new tests in `TestVLMNullStringFilter` + 2 new confidence-threshold tests in `TestMRZNameSanitization`.
+  - Full regression: 388 passed, 5 skipped, 0 failures.
+
 ## 1.2.11 - 2026-02-12
 
 ### Fixed
