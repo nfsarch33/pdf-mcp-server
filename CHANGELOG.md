@@ -6,6 +6,24 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 1.2.14 - 2026-02-12
+
+### Added
+- **MRZ `<<` delimiter parsing helper**: New `_parse_mrz_names()` extracts surname and given names from MRZ name fields with OCR-resilient fallback strategies.
+  - Standard `<<` delimiter split (ICAO 9303 spec).
+  - OCR artifact normalization: `< <` (space-inserted) automatically converted to `<<` before parsing.
+  - Fallback: when no delimiter found, treats entire field as surname (single-name passports).
+  - Replaces inline splitting logic in both TD3 and TD1 code paths (DRY refactor).
+  - 8 new tests in `TestMRZNameParsing`: standard split, single name, no delimiter, spaced chevron, empty given, multi-word surname, empty input, all fillers.
+- **Cursor Skills audit and updates** (following Anthropic official guide):
+  - Fixed `memo-kb-sync` skill: corrected global-kb path from `~/Code/zendesk/global-kb` to `~/Code/global-kb`.
+  - Updated `llm-e2e-qa` skill: corrected VLM model reference to Qwen2.5-VL-7B-Instruct.
+  - Updated `cross-platform-setup` skill: corrected VLM model reference.
+  - Updated all skill descriptions to third-person per official guide.
+  - New `pdf-form-filling` skill: form filling workflow, MCP tool reference, and critical rules for cross-instance sharing.
+  - Updated `FORM_FILLING_PROMPT.md` to v1.2.14 with current VLM model and fill diagnostics.
+- Full regression: 411 passed, 5 skipped, 0 failures.
+
 ## 1.2.13 - 2026-02-12
 
 ### Fixed

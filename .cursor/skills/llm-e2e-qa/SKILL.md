@@ -1,6 +1,6 @@
 ---
 name: llm-e2e-qa
-description: Run and verify LLM E2E tests for local VLM and Ollama, and document manual QA steps. Use when validating LLM integrations.
+description: Runs and verifies LLM E2E tests for local VLM (vLLM on NVIDIA GPU) and Ollama, and documents manual QA steps. Use when validating LLM integrations before release or reproducing E2E results.
 ---
 # LLM E2E QA
 
@@ -10,8 +10,8 @@ description: Run and verify LLM E2E tests for local VLM and Ollama, and document
 - Performing manual QA for local VLM and Ollama
 
 ## Instructions
-1. Confirm local model server:
-   - `curl -s http://localhost:8100/health`
+1. Confirm local model server (vLLM with Qwen2.5-VL-7B-Instruct on RTX 3090):
+   - `curl -s http://localhost:8100/v1/models`
 2. Confirm Ollama service and model:
    - `ollama list`
 3. Run LLM status check:
@@ -25,7 +25,7 @@ description: Run and verify LLM E2E tests for local VLM and Ollama, and document
 
 ## Manual QA Checklist
 - `auto_fill_pdf_form` returns results with a real local model
-- `extract_structured_data` works on sample PDF
+- `extract_structured_data` works on sample PDF (passport, invoice)
 - `analyze_pdf_content` returns summary and entities
 - Ollama backend responds to a simple prompt
 

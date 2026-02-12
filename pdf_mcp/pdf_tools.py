@@ -23,8 +23,8 @@ import json
 import logging
 import os
 import re
-import time
 import secrets
+import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -4975,6 +4975,38 @@ def _cross_validate_passport_dates(
         pass
 
 
+def _parse_mrz_names(name_field: str) -> tuple:
+    """Parse MRZ name field into surname and given names.
+
+    ICAO 9303 defines '<<' as the delimiter between surname and given names,
+    and '<' as a word separator within each part.  OCR may garble '<<' into
+    '< <' (space inserted) or drop it entirely.  This helper tries fallback
+    strategies when the standard delimiter is missing.
+
+    Args:
+        name_field: Raw characters from the MRZ name zone (e.g. line1[5:]).
+
+    Returns:
+        Tuple of (surname, given_names) with filler characters removed.
+    """
+    if not name_field:
+        return "", ""
+
+    # Normalize OCR artifact: '< <' is always a garbled '<<' (not valid ICAO)
+    normalized = name_field.replace("< <", "<<")
+
+    # Standard '<<' delimiter split (ICAO 9303 spec)
+    if "<<" in normalized:
+        surname_part, given_part = normalized.split("<<", 1)
+        surname = surname_part.replace("<", " ").strip()
+        given_names = given_part.replace("<", " ").strip()
+        return surname, given_names
+
+    # No delimiter found -- treat entire field as surname
+    surname = normalized.replace("<", " ").strip()
+    return surname, ""
+
+
 def _extract_passport_fields(full_text: str) -> tuple[Dict[str, Any], Dict[str, float]]:
     extracted: Dict[str, Any] = {}
     confidence: Dict[str, float] = {}
@@ -4987,17 +5019,10 @@ def _extract_passport_fields(full_text: str) -> tuple[Dict[str, Any], Dict[str, 
         if line1.startswith("P<") or line1[0] == "P":
             issuing_country = line1[2:5].replace("<", "").strip()
             names = line1[5:]
-            surname = ""
-            given_names = ""
-            surname_penalty = 0.0
-            given_penalty = 0.0
-            if "<<" in names:
-                surname_part, given_part = names.split("<<", 1)
-                surname = surname_part.replace("<", " ").strip()
-                given_names = given_part.replace("<", " ").strip()
-                # Sanitize OCR garbage from names (BUG-006)
-                surname, surname_penalty = _sanitize_mrz_name(surname)
-                given_names, given_penalty = _sanitize_mrz_name(given_names)
+            surname, given_names = _parse_mrz_names(names)
+            # Sanitize OCR garbage from names (BUG-006)
+            surname, surname_penalty = _sanitize_mrz_name(surname)
+            given_names, given_penalty = _sanitize_mrz_name(given_names)
             passport_number = line2[0:9].replace("<", "").strip()
             passport_check = int(line2[9]) if line2[9].isdigit() else -1
             nationality = line2[10:13].replace("<", "").strip()
@@ -5059,17 +5084,10 @@ def _extract_passport_fields(full_text: str) -> tuple[Dict[str, Any], Dict[str, 
 
         # Names from line 3
         name_part = line3.rstrip("<")
-        surname = ""
-        given_names = ""
-        surname_penalty = 0.0
-        given_penalty = 0.0
-        if "<<" in name_part:
-            surname_part, given_part = name_part.split("<<", 1)
-            surname = surname_part.replace("<", " ").strip()
-            given_names = given_part.replace("<", " ").strip()
-            # Sanitize OCR garbage from names (BUG-006)
-            surname, surname_penalty = _sanitize_mrz_name(surname)
-            given_names, given_penalty = _sanitize_mrz_name(given_names)
+        surname, given_names = _parse_mrz_names(name_part)
+        # Sanitize OCR garbage from names (BUG-006)
+        surname, surname_penalty = _sanitize_mrz_name(surname)
+        given_names, given_penalty = _sanitize_mrz_name(given_names)
 
         birth_date = _parse_mrz_date(birth_raw)
         expiry_date = _parse_mrz_date(expiry_raw, is_expiry=True)

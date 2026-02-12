@@ -1,6 +1,6 @@
 ---
 name: cross-platform-setup
-description: Set up pdf-mcp-server on a new machine (macOS, Linux, or Windows WSL) with GPU-aware VLM support. Use when migrating to a new environment or onboarding a new workstation.
+description: Sets up pdf-mcp-server on a new machine (macOS, Linux, or Windows WSL) with GPU-aware VLM support. Use when migrating to a new environment, onboarding a new workstation, or configuring local VLM serving.
 ---
 # Cross-Platform Setup
 
@@ -112,7 +112,7 @@ Edit `~/.cursor/mcp.json`:
   GPU 0: NVIDIA GeForce RTX 4070 Ti Super (16384MB VRAM)
   GPU 1: NVIDIA GeForce RTX 3090 (24576MB VRAM)
 [OK]   Auto-selected GPU 1 (24576MB VRAM)
-[INFO] Starting vLLM server on port 8100 with model Qwen/Qwen3-VL-30B-A3B-Instruct
+[INFO] Starting vLLM server on port 8100 with model Qwen/Qwen2.5-VL-7B-Instruct
 ```
 
 The RTX 3090 (24GB) is automatically selected for the heavy VLM model.

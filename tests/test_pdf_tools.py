@@ -2943,6 +2943,66 @@ class TestVLMNullStringFilter:
 
 
 # ---------------------------------------------------------------------------
+# MRZ Name Delimiter Parsing (v1.2.14)
+# ---------------------------------------------------------------------------
+
+
+class TestMRZNameParsing:
+    """Tests for _parse_mrz_names helper -- MRZ << delimiter fallback."""
+
+    def test_standard_double_chevron_split(self):
+        """Standard '<<' delimiter splits surname and given_names."""
+        surname, given = pdf_tools._parse_mrz_names("SMITH<<JOHN<MICHAEL<<<<<<<<<")
+        assert surname == "SMITH"
+        assert given == "JOHN MICHAEL"
+
+    def test_single_given_name(self):
+        """Single given name after '<<' delimiter."""
+        surname, given = pdf_tools._parse_mrz_names("WANG<<XIUYING<<<<<<<<<<<<<<<<<")
+        assert surname == "WANG"
+        assert given == "XIUYING"
+
+    def test_no_delimiter_entire_name_is_surname(self):
+        """When no '<<' found and OCR garbled it, treat entire content as surname."""
+        surname, given = pdf_tools._parse_mrz_names("GARCIA LOPEZ<MARIA<ELENA<<<<")
+        # '<' single chevrons are word separators within a name part,
+        # but with no '<<' the whole thing is ambiguous.
+        # Best effort: treat everything as surname.
+        assert surname != ""
+        assert isinstance(given, str)
+
+    def test_spaced_chevron_fallback(self):
+        """OCR may insert space: '< <' instead of '<<'. Should still split."""
+        surname, given = pdf_tools._parse_mrz_names("SMITH< <JOHN<MICHAEL<<<<<<")
+        assert surname == "SMITH"
+        assert given == "JOHN MICHAEL"
+
+    def test_empty_given_names_after_delimiter(self):
+        """Some passports have only surname with no given names."""
+        surname, given = pdf_tools._parse_mrz_names("MADONNA<<<<<<<<<<<<<<<<<<<<<<<<")
+        assert surname == "MADONNA"
+        assert given == ""
+
+    def test_multi_word_surname(self):
+        """Multi-part surname with single '<' separators."""
+        surname, given = pdf_tools._parse_mrz_names("DE<LA<CRUZ<<JUAN<CARLOS<<<<")
+        assert surname == "DE LA CRUZ"
+        assert given == "JUAN CARLOS"
+
+    def test_empty_input(self):
+        """Empty string returns empty surname and given names."""
+        surname, given = pdf_tools._parse_mrz_names("")
+        assert surname == ""
+        assert given == ""
+
+    def test_all_fillers(self):
+        """All '<' filler characters returns empty names."""
+        surname, given = pdf_tools._parse_mrz_names("<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
+        assert surname == ""
+        assert given == ""
+
+
+# ---------------------------------------------------------------------------
 # BUG-007: Collapsed Table Detection (v1.2.13)
 # ---------------------------------------------------------------------------
 

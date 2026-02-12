@@ -1,6 +1,6 @@
 ---
 name: memo-kb-sync
-description: Perform bi-directional sync for memo and global-kb repos and update release artifacts. Use when the user requests memory sync or after releases.
+description: Performs bi-directional sync for memo and global-kb repos and updates release artifacts. Use when the user requests memory sync, after releases, or before planning next release.
 ---
 # Memo and KB Sync
 
@@ -11,11 +11,11 @@ description: Perform bi-directional sync for memo and global-kb repos and update
 
 ## Instructions
 1. Pull latest from both repos:
-   - `~/memo`
-   - `~/Code/zendesk/global-kb`
+   - `~/memo` (Pepper Memory Bank)
+   - `~/Code/global-kb` (permanent archive)
 2. Apply updates:
    - Pepper memory updates in `~/memo/global-memories/`
-   - Release notes in `~/Code/zendesk/global-kb/architecture/`
+   - Release notes and architecture docs in `~/Code/global-kb/`
 3. Commit with conventional messages:
    - `sync:` or `update:` or `archive:`
 4. Push both repos.

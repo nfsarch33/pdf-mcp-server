@@ -1,6 +1,6 @@
 ---
 name: release-sop
-description: Execute the pdf-mcp-server release SOP end-to-end, including version consistency, tests, tags, and memo/kb sync. Use when preparing a release or running pre-release checks.
+description: Executes the pdf-mcp-server release SOP end-to-end, including version consistency checks, test validation, tagging, and memo/kb sync. Use when preparing a release, running pre-release checks, or verifying post-release state.
 ---
 # Release SOP
 
