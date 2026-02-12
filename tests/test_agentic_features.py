@@ -1374,6 +1374,61 @@ class TestFormHeuristicsLcs:
         assert score >= 1
 
 
+class TestFieldAliasMatching:
+    """Tests for field alias groups -- semantically equivalent field names
+    should match at score 3 (exact equivalent), not just fuzzy score 1."""
+
+    def test_dob_matches_date_of_birth(self):
+        """'dob' and 'date_of_birth' are aliases and should score 3."""
+        score = pdf_tools._score_label_match("dob", "dateofbirth", ["date", "birth"])
+        assert score == 3, f"Expected alias score 3, got {score}"
+
+    def test_first_name_matches_given_name(self):
+        """'first_name' and 'given_name' are aliases and should score 3."""
+        score = pdf_tools._score_label_match(
+            "first_name", "givenname", ["given", "name"]
+        )
+        assert score == 3, f"Expected alias score 3, got {score}"
+
+    def test_last_name_matches_surname(self):
+        """'last_name' and 'surname' are aliases."""
+        score = pdf_tools._score_label_match("last_name", "surname", ["surname"])
+        assert score == 3, f"Expected alias score 3, got {score}"
+
+    def test_phone_matches_telephone(self):
+        """'phone' and 'telephone' are aliases."""
+        score = pdf_tools._score_label_match("phone", "telephone", ["telephone"])
+        assert score == 3, f"Expected alias score 3, got {score}"
+
+    def test_sex_matches_gender(self):
+        """'sex' and 'gender' are aliases."""
+        score = pdf_tools._score_label_match("sex", "gender", ["gender"])
+        assert score == 3, f"Expected alias score 3, got {score}"
+
+    def test_zip_matches_postal_code(self):
+        """'zip' and 'postal_code' are aliases."""
+        score = pdf_tools._score_label_match("zip", "postalcode", ["postal", "code"])
+        assert score == 3, f"Expected alias score 3, got {score}"
+
+    def test_email_matches_email_address(self):
+        """'email' and 'email_address' are aliases."""
+        score = pdf_tools._score_label_match("email", "emailaddress", ["email", "address"])
+        assert score == 3, f"Expected alias score 3, got {score}"
+
+    def test_non_alias_still_works(self):
+        """Non-alias fields should still use regular scoring."""
+        score = pdf_tools._score_label_match("company", "organization", ["organization"])
+        assert score < 3, f"Non-alias should not score 3, got {score}"
+
+    def test_alias_is_bidirectional(self):
+        """Alias matching should work in both directions."""
+        score_a = pdf_tools._score_label_match("surname", "lastname", ["last", "name"])
+        score_b = pdf_tools._score_label_match("last_name", "surname", ["surname"])
+        assert score_a == 3 and score_b == 3, (
+            f"Alias should be bidirectional: {score_a}, {score_b}"
+        )
+
+
 class TestFormHeuristicsGeometricCheckbox:
     """Tests for geometric checkbox/radio button detection."""
 
@@ -2129,4 +2184,14 @@ class TestBug005IssueDateOffByOneDay:
         # The prompt should NOT contain "10 years BEFORE the expiry"
         assert "10 years BEFORE the expiry" not in source, (
             "BUG-005: VLM prompt should not instruct derivation of issue_date"
+        )
+
+    def test_derived_flag_on_corrected_dates(self):
+        """When issue_date is derived from expiry, the output should include
+        a 'derived_fields' key listing fields that were computed, not read."""
+        data = {"issue_date": "2023-04-06", "expiry_date": "2033-04-06"}
+        conf = {"issue_date": 0.85, "expiry_date": 0.95}
+        pdf_tools._cross_validate_passport_dates(data, conf)
+        assert "issue_date" in data.get("derived_fields", []), (
+            "BUG-005: derived dates should be flagged in 'derived_fields'"
         )

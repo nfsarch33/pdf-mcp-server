@@ -6,6 +6,18 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 1.2.5 - 2026-02-16
+
+### Added
+- **Field alias groups**: 19 alias groups (DOB/date_of_birth, first_name/given_name, sex/gender, phone/telephone, etc.) for score-3 matching in `fill_pdf_form_any`. Non-standard forms with common label variations now match at maximum confidence.
+- `_FIELD_ALIAS_GROUPS` constant with O(1) reverse lookup via `_ALIAS_LOOKUP` dict.
+- `_are_aliases()` helper for symmetric alias checking.
+- `derived_fields` key in passport output: tracks fields computed (not directly read) by `_cross_validate_passport_dates`. Addresses BUG-005 recommendation #4.
+- 10 new tests: alias matching (9), derived flag (1).
+
+### Validated
+- Full test suite: 325 passed, 9 skipped, 0 failures (~255s) - up from 315/9 (+10 new tests, zero regressions).
+
 ## 1.2.4 - 2026-02-16
 
 ### Fixed

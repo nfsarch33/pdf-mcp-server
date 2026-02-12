@@ -269,6 +269,43 @@ def _apply_form_field_values(writer: PdfWriter, data: Dict[str, str]) -> int:
     return updated
 
 
+# Symmetric alias groups: semantically equivalent field names.
+# If both key and label belong to the same group, they score 3 (exact equivalent).
+_FIELD_ALIAS_GROUPS: List[frozenset] = [
+    frozenset({"dob", "dateofbirth", "birthdate"}),
+    frozenset({"firstname", "givenname", "forename", "fname"}),
+    frozenset({"lastname", "familyname", "surname", "lname"}),
+    frozenset({"phone", "telephone", "tel", "mobile", "cell", "contactnumber"}),
+    frozenset({"email", "emailaddress"}),
+    frozenset({"address", "streetaddress", "mailingaddress", "addr"}),
+    frozenset({"zip", "zipcode", "postalcode", "postcode"}),
+    frozenset({"city", "town", "municipality"}),
+    frozenset({"state", "province", "region"}),
+    frozenset({"country", "nation", "nationality"}),
+    frozenset({"sex", "gender"}),
+    frozenset({"signature", "sig"}),
+    frozenset({"passportnumber", "passport", "traveldocument"}),
+    frozenset({"expirydate", "expiry", "expiration", "expirationdate", "exp"}),
+    frozenset({"issuedate", "dateofissue", "iss"}),
+    frozenset({"fullname", "completename"}),
+    frozenset({"middlename", "middleinitial"}),
+    frozenset({"occupation", "job", "profession"}),
+    frozenset({"placeofbirth", "birthplace", "pob"}),
+]
+
+# Build reverse lookup: normalized_key -> group index (for O(1) alias check)
+_ALIAS_LOOKUP: Dict[str, int] = {}
+for _idx, _group in enumerate(_FIELD_ALIAS_GROUPS):
+    for _key in _group:
+        _ALIAS_LOOKUP[_key] = _idx
+
+
+def _are_aliases(a_normalized: str, b_normalized: str) -> bool:
+    """Check if two normalized field keys are semantic aliases."""
+    group_a = _ALIAS_LOOKUP.get(a_normalized)
+    return group_a is not None and group_a == _ALIAS_LOOKUP.get(b_normalized)
+
+
 def _normalize_field_key(value: str) -> str:
     return re.sub(r"[^a-z0-9]", "", value.lower())
 
@@ -322,13 +359,16 @@ def _lcs_similarity(a: str, b: str) -> float:
 def _score_label_match(key: str, label_normalized: str, label_tokens: List[str]) -> int:
     """Score how well a data key matches a detected label.
 
-    Uses exact match, substring containment, token overlap, and LCS fuzzy matching.
-    Returns 0 (no match) to 3 (exact match).
+    Uses exact match, alias groups, substring containment, token overlap,
+    and LCS fuzzy matching.  Returns 0 (no match) to 3 (exact match).
     """
     key_normalized = _normalize_field_key(key)
     if not key_normalized:
         return 0
     if key_normalized == label_normalized:
+        return 3
+    # Check semantic alias groups (e.g., "dob" <-> "dateofbirth")
+    if _are_aliases(key_normalized, label_normalized):
         return 3
     if key_normalized in label_normalized or label_normalized in key_normalized:
         return 2
@@ -4660,11 +4700,18 @@ def _cross_validate_passport_dates(
     except (ValueError, TypeError):
         return
 
+    def _flag_derived(field: str) -> None:
+        """Track that a field was derived (computed), not directly read."""
+        derived = extracted_data.setdefault("derived_fields", [])
+        if field not in derived:
+            derived.append(field)
+
     # Scenario 1: VLM returned expiry date as issue date (same YYMMDD)
     if issue_norm == expiry_norm:
         corrected = _derive_issue_from_expiry(expiry_date)
         extracted_data["issue_date"] = corrected.strftime("%Y-%m-%d")
         confidence["issue_date"] = 0.50  # Low confidence for derived date
+        _flag_derived("issue_date")
         return
 
     # Scenario 2: VLM derived issue = expiry - 10 years (BUG-005 pattern)
@@ -4690,6 +4737,7 @@ def _cross_validate_passport_dates(
             corrected = _derive_issue_from_expiry(expiry_date)
             extracted_data["issue_date"] = corrected.strftime("%Y-%m-%d")
             confidence["issue_date"] = 0.50  # Low confidence for derived date
+            _flag_derived("issue_date")
     except (ValueError, TypeError):
         pass
 
