@@ -6,6 +6,20 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 1.2.7 - 2026-02-12
+
+### Added
+- **Structured diagnostic logging**: `pdf_tools` module now uses Python `logging` for visibility into critical decision points. All log messages use `DEBUG` level to avoid noise in production.
+- Logging in `fill_pdf_form`: logs which engine completed the fill (`fillpdf` vs `pypdf`), fillpdf fallback reasons, and pypdf checkbox/button fallback triggers.
+- Logging in LLM backend selection: `_get_llm_backend()` logs which backend was selected and why (override, auto-detect, or unavailable).
+- Logging in LLM calls: `_call_local_llm`, `_call_ollama_llm`, `_call_openai_llm` log failure reasons instead of silently returning `None`.
+- Logging in model resolution: `_resolve_local_model_name()` logs auto-detected vs default model.
+- Logging in health check: `_check_local_model_server()` logs unreachable or non-200 status.
+- 6 new tests in `TestStructuredLogging`: logger existence, fill engine log, backend selection log, LLM failure log, model resolution log, checkbox fallback log.
+
+### Validated
+- Full test suite: 341 passed, 5 skipped, 0 failures (~248s) - up from 335/5 (+6 new tests, zero regressions).
+
 ## 1.2.6 - 2026-02-12
 
 ### Fixed

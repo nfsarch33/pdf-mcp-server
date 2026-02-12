@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import re
 import secrets
@@ -28,6 +29,8 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence
+
+logger = logging.getLogger(__name__)
 
 import pymupdf
 from pypdf import PdfReader, PdfWriter
@@ -715,10 +718,10 @@ def fill_pdf_form(
             fillpdfs.write_fillable_pdf(str(src), str(dst), data)
             if flatten:
                 fillpdfs.flatten_pdf(str(dst), str(dst))
-        except Exception:
+        except Exception as exc:
             # fillpdf uses pdfrw which can fail on PDFs with compressed object streams
             # (common in some Adobe InDesign exports). Fall back to pypdf path below.
-            pass
+            logger.debug("fillpdf fill failed, falling back to pypdf: %s", exc)
         # Some real-world PDFs get their appearances updated but don't persist /V values.
         # Verify and fall back to pypdf if needed so that filled contents are durable.
         if not flatten:
@@ -736,13 +739,14 @@ def fill_pdf_form(
                     raise PdfToolError(
                         "fillpdf did not persist field values for: " + ", ".join(mismatched)
                     )
-            except PdfToolError:
+            except PdfToolError as exc:
                 # Fall back to pypdf path below.
-                pass
-            except Exception:
+                logger.debug("fillpdf verification failed, falling back to pypdf: %s", exc)
+            except Exception as exc:
                 # Defensive: don't fail the operation just due to verification issues.
-                pass
+                logger.debug("fillpdf verification error (non-fatal): %s", exc)
             else:
+                logger.debug("fill_pdf_form completed with fillpdf engine")
                 return {"output_path": str(dst), "flattened": flatten, "filled_with": "fillpdf"}
 
     writer = PdfWriter()
@@ -753,10 +757,10 @@ def fill_pdf_form(
         for page in writer.pages:
             try:
                 writer.update_page_form_field_values(page, data)
-            except (KeyError, Exception):
+            except (KeyError, Exception) as exc:
                 # pypdf may crash on checkbox/radio widgets lacking /AP appearances.
                 # Our _apply_form_field_values handles all field types as fallback.
-                pass
+                logger.debug("pypdf update_page_form_field_values fallback (button/checkbox): %s", exc)
         _apply_form_field_values(writer, data)
 
     if flatten:
@@ -765,6 +769,7 @@ def fill_pdf_form(
     with dst.open("wb") as output_file:
         writer.write(output_file)
 
+    logger.debug("fill_pdf_form completed with pypdf engine")
     return {"output_path": str(dst), "flattened": flatten, "filled_with": "pypdf"}
 
 
@@ -4063,8 +4068,12 @@ def _check_local_model_server() -> bool:
         return False
     try:
         response = _requests.get(f"{LOCAL_MODEL_SERVER_URL}/health", timeout=2)
-        return response.status_code == 200
-    except Exception:
+        available = response.status_code == 200
+        if not available:
+            logger.debug("Local model server health check failed: status=%s", response.status_code)
+        return available
+    except Exception as exc:
+        logger.debug("Local model server unreachable: %s", exc)
         return False
 
 
@@ -4078,18 +4087,23 @@ def _get_llm_backend() -> str:
     # Check for explicit override
     override = os.environ.get("PDF_MCP_LLM_BACKEND", "").lower()
     if override in (LLM_BACKEND_LOCAL, LLM_BACKEND_OLLAMA, LLM_BACKEND_OPENAI):
+        logger.debug("LLM backend override via env: %s", override)
         return override
     
     # Auto-detect: prefer local (free) over paid APIs
     if _check_local_model_server():
+        logger.debug("LLM backend selected: local (auto-detected)")
         return LLM_BACKEND_LOCAL
     
     if _HAS_OLLAMA:
+        logger.debug("LLM backend selected: ollama (local unavailable)")
         return LLM_BACKEND_OLLAMA
     
     if _HAS_OPENAI and os.environ.get("OPENAI_API_KEY"):
+        logger.debug("LLM backend selected: openai (local/ollama unavailable)")
         return LLM_BACKEND_OPENAI
     
+    logger.debug("No LLM backend available")
     return ""  # No backend available
 
 
@@ -4138,8 +4152,10 @@ def _call_local_llm(
             choices = data.get("choices", [])
             if choices:
                 return choices[0].get("message", {}).get("content", "")
+        logger.debug("Local LLM returned non-200: status=%s", response.status_code)
         return None
-    except Exception:
+    except Exception as exc:
+        logger.debug("Local LLM call failed: %s", exc)
         return None
 
 
@@ -4154,9 +4170,12 @@ def _resolve_local_model_name() -> str:
         if response.status_code == 200:
             data = response.json().get("data", [])
             if data:
-                return data[0].get("id", LOCAL_VLM_MODEL)
-    except Exception:
-        pass
+                model_id = data[0].get("id", LOCAL_VLM_MODEL)
+                logger.debug("Resolved local model: %s (auto-detected)", model_id)
+                return model_id
+    except Exception as exc:
+        logger.debug("Model resolution failed, using default: %s", exc)
+    logger.debug("Using default local model: %s", LOCAL_VLM_MODEL)
     return LOCAL_VLM_MODEL
 
 
@@ -4203,7 +4222,8 @@ def _call_ollama_llm(
         )
         # Ollama returns Pydantic ChatResponse; access via attribute
         return response.message.content
-    except Exception:
+    except Exception as exc:
+        logger.debug("Ollama LLM call failed: %s", exc)
         return None
 
 
@@ -4245,7 +4265,8 @@ def _call_openai_llm(
             temperature=temperature,
         )
         return response.choices[0].message.content
-    except Exception:
+    except Exception as exc:
+        logger.debug("OpenAI LLM call failed: %s", exc)
         return None
 
 

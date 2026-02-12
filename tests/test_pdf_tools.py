@@ -2359,3 +2359,98 @@ def test_deprecation_warnings():
         # We'll just check that the warning mechanism works
         assert len(w) >= 0  # Just verifying setup works
 
+
+# ---------------------------------------------------------------------------
+# Structured Logging Tests (v1.2.7)
+# ---------------------------------------------------------------------------
+
+
+class TestStructuredLogging:
+    """Verify diagnostic logging is emitted at critical decision points."""
+
+    def test_logger_exists(self):
+        """pdf_tools module must expose a logger for diagnostic visibility."""
+        import logging
+        logger = logging.getLogger("pdf_mcp.pdf_tools")
+        assert isinstance(logger, logging.Logger)
+
+    def test_fill_pdf_form_fillpdf_fallback_logs_debug(self, tmp_path, caplog):
+        """When fillpdf fails and falls back to pypdf, a debug message is emitted."""
+        import logging
+        src = _make_form_pdf(tmp_path / "log_fill.pdf")
+        out = tmp_path / "log_fill_out.pdf"
+        with caplog.at_level(logging.DEBUG, logger="pdf_mcp.pdf_tools"):
+            pdf_tools.fill_pdf_form(str(src), str(out), {"Name": "Test"})
+        # Should log which fill method was used
+        assert any(
+            "fill" in rec.message.lower() for rec in caplog.records
+            if rec.name == "pdf_mcp.pdf_tools"
+        ), f"Expected fill-method log, got: {[r.message for r in caplog.records]}"
+
+    def test_llm_backend_selection_logs_debug(self, caplog):
+        """_get_llm_backend logs which backend was selected."""
+        import logging
+        with caplog.at_level(logging.DEBUG, logger="pdf_mcp.pdf_tools"):
+            pdf_tools._get_llm_backend()
+        backend_msgs = [
+            r.message for r in caplog.records
+            if r.name == "pdf_mcp.pdf_tools" and "backend" in r.message.lower()
+        ]
+        assert len(backend_msgs) >= 1, (
+            f"Expected backend selection log, got: {[r.message for r in caplog.records]}"
+        )
+
+    def test_local_llm_failure_logs_debug(self, caplog):
+        """When _call_local_llm fails, a debug message with the error is emitted."""
+        import logging
+        from unittest.mock import patch
+        # Force a connection error
+        with caplog.at_level(logging.DEBUG, logger="pdf_mcp.pdf_tools"):
+            with patch.object(
+                pdf_tools, "_HAS_REQUESTS", True
+            ):
+                with patch.object(
+                    pdf_tools._requests, "post",
+                    side_effect=ConnectionError("test connection refused"),
+                ):
+                    result = pdf_tools._call_local_llm("test prompt")
+        assert result is None
+        error_msgs = [
+            r.message for r in caplog.records
+            if r.name == "pdf_mcp.pdf_tools" and "local" in r.message.lower()
+        ]
+        assert len(error_msgs) >= 1, (
+            f"Expected local LLM error log, got: {[r.message for r in caplog.records]}"
+        )
+
+    def test_model_resolution_logs_debug(self, caplog):
+        """_resolve_local_model_name logs the resolved model."""
+        import logging
+        with caplog.at_level(logging.DEBUG, logger="pdf_mcp.pdf_tools"):
+            pdf_tools._resolve_local_model_name()
+        model_msgs = [
+            r.message for r in caplog.records
+            if r.name == "pdf_mcp.pdf_tools" and "model" in r.message.lower()
+        ]
+        assert len(model_msgs) >= 1, (
+            f"Expected model resolution log, got: {[r.message for r in caplog.records]}"
+        )
+
+    def test_pypdf_checkbox_fallback_logs_debug(self, tmp_path, caplog):
+        """When pypdf update_page_form_field_values fails on checkboxes, it logs."""
+        import logging
+        src = _make_checkbox_form_pdf(tmp_path / "log_cb.pdf")
+        out = tmp_path / "log_cb_out.pdf"
+        with caplog.at_level(logging.DEBUG, logger="pdf_mcp.pdf_tools"):
+            pdf_tools.fill_pdf_form(str(src), str(out), {"Agree": "Yes"})
+        # The checkbox widget without /AP should trigger the except block
+        fallback_msgs = [
+            r.message for r in caplog.records
+            if r.name == "pdf_mcp.pdf_tools"
+            and ("fallback" in r.message.lower() or "checkbox" in r.message.lower()
+                 or "button" in r.message.lower())
+        ]
+        assert len(fallback_msgs) >= 1, (
+            f"Expected checkbox fallback log, got: {[r.message for r in caplog.records]}"
+        )
+
