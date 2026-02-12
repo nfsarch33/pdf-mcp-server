@@ -2442,26 +2442,54 @@ def get_ocr_languages() -> Dict[str, Any]:
 # =============================================================================
 
 
+_VALID_TABLE_STRATEGIES = frozenset({"lines", "lines_strict", "text"})
+
+
+def _is_collapsed_table(raw_data: List[List]) -> bool:
+    """Return True if all data is in the first column and others are empty.
+
+    Detects tables where PyMuPDF's line-based strategy failed to split
+    columns, concatenating everything into column 0 (BUG-007).
+    """
+    if not raw_data or len(raw_data) < 2 or len(raw_data[0]) < 2:
+        return False
+    # Check data rows (skip header row)
+    for row in raw_data[1:]:
+        if len(row) < 2:
+            continue
+        non_first = [c for c in row[1:] if c is not None and str(c).strip()]
+        if non_first:
+            return False  # Found real data in another column
+    return True
+
+
 def extract_tables(
     pdf_path: str,
     pages: Optional[List[int]] = None,
     output_format: str = "list",
+    strategy: str = "lines",
 ) -> Dict[str, Any]:
     """
     Extract tables from PDF pages.
 
     Uses PyMuPDF's table detection to find and extract tabular data.
+    Auto-retries with ``"text"`` strategy when column collapse is detected.
 
     Args:
         pdf_path: Path to PDF file
         pages: Optional list of 1-based page numbers (default: all pages)
         output_format: "list" for list of lists, "dict" for list of dicts with headers
+        strategy: Table detection strategy: "lines" (default), "lines_strict", or "text"
 
     Returns:
         Dict with extracted tables per page
     """
     if output_format not in ("list", "dict"):
         raise PdfToolError("output_format must be 'list' or 'dict'")
+    if strategy not in _VALID_TABLE_STRATEGIES:
+        raise PdfToolError(
+            f"strategy must be one of {sorted(_VALID_TABLE_STRATEGIES)}"
+        )
 
     path = _ensure_file(pdf_path)
     doc = pymupdf.open(str(path))
@@ -2483,16 +2511,27 @@ def extract_tables(
                 "tables": [],
             }
 
-            # Use PyMuPDF's table finder
             try:
-                tabs = page.find_tables()
+                tabs = page.find_tables(strategy=strategy)
 
                 for table_idx, table in enumerate(tabs):
-                    # Extract table data
                     raw_data = table.extract()
 
                     if not raw_data:
                         continue
+
+                    # Auto-retry with "text" strategy if collapsed (BUG-007)
+                    if (
+                        strategy != "text"
+                        and _is_collapsed_table(raw_data)
+                    ):
+                        text_tabs = page.find_tables(strategy="text")
+                        if text_tabs and len(text_tabs) > table_idx:
+                            retry_data = text_tabs[table_idx].extract()
+                            if retry_data and not _is_collapsed_table(
+                                retry_data
+                            ):
+                                raw_data = retry_data
 
                     table_info: Dict[str, Any] = {
                         "table_index": table_idx,
@@ -2502,8 +2541,10 @@ def extract_tables(
                     }
 
                     if output_format == "dict" and len(raw_data) > 1:
-                        # Use first row as headers
-                        headers = [str(h) if h else f"col_{i}" for i, h in enumerate(raw_data[0])]
+                        headers = [
+                            str(h) if h else f"col_{i}"
+                            for i, h in enumerate(raw_data[0])
+                        ]
                         table_info["headers"] = headers
                         table_info["data"] = [
                             {headers[i]: cell for i, cell in enumerate(row)}
@@ -5403,6 +5444,54 @@ Return a JSON object with the extracted values."""
     }
 
 
+# Phone pattern requires at least one separator to avoid matching bare
+# reference numbers like "1950687535" (BUG-008).
+_PHONE_PATTERN = re.compile(
+    r"\b(?:\+?1[-.\s])?\(?[0-9]{3}\)?[-.\s][0-9]{3}[-.\s]?[0-9]{4}\b"
+)
+
+# Individual words that are never person names (used in name filtering).
+_NON_NAME_WORDS = frozenset(
+    w.lower()
+    for w in [
+        # Locations / orgs
+        "Department", "Affairs", "Ministry", "Government", "Authority",
+        # Document structure
+        "Page", "Break", "Section", "Appendix", "Attachment", "Record",
+        "Summary", "Total", "Reference", "Number", "Description",
+        # Form / application terminology
+        "Application", "Type", "Evidence", "Document", "Filename",
+        "Responses", "Privacy", "Sensitive", "Personal",
+        # Months
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December",
+    ]
+)
+
+
+def _extract_phones(text: str) -> List[str]:
+    """Extract phone numbers requiring at least one separator (BUG-008)."""
+    return list(set(_PHONE_PATTERN.findall(text)[:5]))
+
+
+def _extract_names(text: str) -> List[str]:
+    """Extract person names from text, filtering document fragments (BUG-008).
+
+    Excludes multi-line fragments and common document/form words.
+    """
+    # Only match within single lines ([^\S\n] = whitespace but not newline)
+    name_pattern = r"\b([A-Z][a-z]+(?:[^\S\n]+[A-Z][a-z]+){1,3})\b"
+    candidates = re.findall(name_pattern, text)
+    filtered = []
+    for name in candidates:
+        # Skip if any word in the name is a common non-name word
+        words = name.split()
+        if any(w.lower() in _NON_NAME_WORDS for w in words):
+            continue
+        filtered.append(name)
+    return list(set(filtered[:10]))
+
+
 def analyze_pdf_content(
     pdf_path: str,
     include_summary: bool = True,
@@ -5508,20 +5597,15 @@ def analyze_pdf_content(
         if emails:
             entities["emails"] = list(set(emails[:5]))
 
-        # Phone numbers
-        phone_pattern = r"\b(?:\+?1[-.\s]?)?\(?[0-9]{3}\)?[-.\s]?[0-9]{3}[-.\s]?[0-9]{4}\b"
-        phones = re.findall(phone_pattern, full_text)
+        # Phone numbers (requires separators, BUG-008)
+        phones = _extract_phones(full_text)
         if phones:
-            entities["phones"] = list(set(phones[:5]))
+            entities["phones"] = phones
 
-        # Names (simple pattern - capitalized words)
-        name_pattern = r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b"
-        names = re.findall(name_pattern, full_text)
+        # Names (filters document fragments, BUG-008)
+        names = _extract_names(full_text)
         if names:
-            # Filter common non-names
-            filtered_names = [n for n in names if n.lower() not in 
-                           ["new york", "los angeles", "united states", "january", "february"]]
-            entities["names"] = list(set(filtered_names[:10]))
+            entities["names"] = names
 
         result["entities"] = entities
 

@@ -2940,3 +2940,136 @@ class TestVLMNullStringFilter:
     def test_python_none_not_string(self):
         """Python None is not a string, returns False."""
         assert pdf_tools._is_vlm_null_string(None) is False
+
+
+# ---------------------------------------------------------------------------
+# BUG-007: Collapsed Table Detection (v1.2.13)
+# ---------------------------------------------------------------------------
+
+
+class TestCollapsedTableDetection:
+    """Tests for _is_collapsed_table helper (BUG-007)."""
+
+    def test_collapsed_table_detected(self):
+        """All data in first column, rest None -> collapsed."""
+        raw_data = [
+            ["Header1", "Header2", "Header3"],
+            ["all data here", None, None],
+            ["more data", None, None],
+        ]
+        assert pdf_tools._is_collapsed_table(raw_data) is True
+
+    def test_normal_table_not_collapsed(self):
+        """Data spread across columns -> not collapsed."""
+        raw_data = [
+            ["Col1", "Col2", "Col3"],
+            ["a", "b", "c"],
+            ["d", "e", "f"],
+        ]
+        assert pdf_tools._is_collapsed_table(raw_data) is False
+
+    def test_single_column_table_not_collapsed(self):
+        """Single column table is not 'collapsed'."""
+        raw_data = [
+            ["Header"],
+            ["data1"],
+            ["data2"],
+        ]
+        assert pdf_tools._is_collapsed_table(raw_data) is False
+
+    def test_empty_data_not_collapsed(self):
+        """Empty data is not collapsed."""
+        assert pdf_tools._is_collapsed_table([]) is False
+
+    def test_header_only_not_collapsed(self):
+        """Header-only table (no data rows) is not collapsed."""
+        raw_data = [["Col1", "Col2"]]
+        assert pdf_tools._is_collapsed_table(raw_data) is False
+
+    def test_mixed_none_and_empty_detected(self):
+        """Columns with None AND empty strings -> collapsed."""
+        raw_data = [
+            ["H1", "H2", "H3"],
+            ["data", None, ""],
+            ["more", "", None],
+        ]
+        assert pdf_tools._is_collapsed_table(raw_data) is True
+
+    def test_partial_data_not_collapsed(self):
+        """Some rows have data in other columns -> not collapsed."""
+        raw_data = [
+            ["H1", "H2"],
+            ["a", None],
+            ["b", "has data"],
+        ]
+        assert pdf_tools._is_collapsed_table(raw_data) is False
+
+
+class TestExtractTablesStrategy:
+    """Tests for extract_tables strategy parameter (BUG-007)."""
+
+    def test_strategy_parameter_accepted(self):
+        """extract_tables accepts strategy parameter."""
+        pdf_path = str(Path(__file__).parent / "1006.pdf")
+        if not Path(pdf_path).exists():
+            pytest.skip("1006.pdf not available")
+        result = pdf_tools.extract_tables(pdf_path, strategy="text")
+        assert "total_tables" in result
+
+    def test_invalid_strategy_raises(self):
+        """Invalid strategy raises PdfToolError."""
+        pdf_path = str(Path(__file__).parent / "1006.pdf")
+        if not Path(pdf_path).exists():
+            pytest.skip("1006.pdf not available")
+        with pytest.raises(PdfToolError):
+            pdf_tools.extract_tables(pdf_path, strategy="invalid")
+
+
+# ---------------------------------------------------------------------------
+# BUG-008: Entity Extraction Improvements (v1.2.13)
+# ---------------------------------------------------------------------------
+
+
+class TestEntityExtractionPatterns:
+    """Tests for improved entity extraction patterns (BUG-008)."""
+
+    def test_bare_digits_not_phone(self):
+        """Bare 10-digit number should NOT match as phone."""
+        # "1950687535" is a reference number, not a phone
+        phones = pdf_tools._extract_phones("Reference: 1950687535")
+        assert "1950687535" not in phones
+
+    def test_formatted_phone_matches(self):
+        """Properly formatted phone number should match."""
+        phones = pdf_tools._extract_phones("Call (123) 456-7890")
+        assert len(phones) > 0
+
+    def test_phone_with_separators_matches(self):
+        """Phone with dashes/dots should match."""
+        phones = pdf_tools._extract_phones("Phone: 123-456-7890")
+        assert len(phones) > 0
+
+    def test_names_exclude_newline_fragments(self):
+        """Document fragments with newlines are NOT names."""
+        names = pdf_tools._extract_names(
+            "Sensitive\nPersonal Privacy\nDepartment"
+        )
+        assert "Sensitive\nPersonal" not in names
+        assert "Personal Privacy\nDepartment" not in names
+
+    def test_names_exclude_document_words(self):
+        """Common document/form words are NOT names."""
+        names = pdf_tools._extract_names(
+            "Page Break\nApplication Type\nHome Affairs"
+        )
+        for name in names:
+            assert "Page Break" not in name
+            assert "Application Type" not in name
+
+    def test_names_find_real_names(self):
+        """Real person names should be found."""
+        names = pdf_tools._extract_names(
+            "Applicant: John Smith and Mary Jane"
+        )
+        assert any("John Smith" in n for n in names) or \
+            any("Mary Jane" in n for n in names)

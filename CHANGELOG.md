@@ -6,6 +6,20 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 1.2.13 - 2026-02-12
+
+### Fixed
+- **BUG-007 (MEDIUM)**: `extract_tables` column splitting fails on PDFs without ruling lines.
+  - New `_is_collapsed_table()` helper detects when all data concatenates into the first column.
+  - Auto-retries with `"text"` strategy when collapse is detected.
+  - New `strategy` parameter: `"lines"` (default), `"lines_strict"`, or `"text"`.
+  - 7 new tests in `TestCollapsedTableDetection` + 2 in `TestExtractTablesStrategy`.
+- **BUG-008 (LOW)**: `analyze_pdf_content` entity extraction misidentifies IDs as phones, returns document fragments as names.
+  - New `_extract_phones()` helper requires separator characters (rejects bare 10-digit reference numbers).
+  - New `_extract_names()` helper filters newline-spanning matches and common document/form words.
+  - 6 new tests in `TestEntityExtractionPatterns`.
+  - Full regression: 403 passed, 5 skipped, 0 failures.
+
 ## 1.2.12 - 2026-02-12
 
 ### Fixed
