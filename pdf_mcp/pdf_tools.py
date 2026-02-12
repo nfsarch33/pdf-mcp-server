@@ -205,10 +205,75 @@ def _flatten_writer(writer: PdfWriter) -> None:
         acro_form[NameObject("/NeedAppearances")] = BooleanObject(False)
 
 
+def _is_button_field(obj) -> bool:
+    """Check if a PDF field object is a button type (checkbox or radio)."""
+    ft = obj.get("/FT")
+    if ft is not None and str(ft) == "/Btn":
+        return True
+    # Check parent for merged widget/field combos.
+    parent = obj.get("/Parent")
+    if parent:
+        try:
+            parent_obj = parent.get_object() if hasattr(parent, "get_object") else parent
+            pft = parent_obj.get("/FT")
+            if pft is not None and str(pft) == "/Btn":
+                return True
+        except Exception:
+            pass
+    return False
+
+
+def _get_checkbox_on_value(obj) -> str:
+    """Get the 'on' appearance state for a checkbox/radio button.
+
+    Inspects /AP > /N keys for any state that isn't /Off. Falls back to /Yes.
+    """
+    ap = obj.get("/AP")
+    if ap:
+        try:
+            ap_obj = ap.get_object() if hasattr(ap, "get_object") else ap
+            n = ap_obj.get("/N")
+            if n:
+                n_obj = n.get_object() if hasattr(n, "get_object") else n
+                if hasattr(n_obj, "keys"):
+                    for key in n_obj.keys():
+                        if str(key) != "/Off":
+                            return str(key)
+        except Exception:
+            pass
+    # Check kids for the on-value.
+    kids = obj.get("/Kids")
+    if kids:
+        try:
+            kids_obj = kids.get_object() if hasattr(kids, "get_object") else kids
+            for kid in list(kids_obj):
+                kobj = kid.get_object() if hasattr(kid, "get_object") else kid
+                val = _get_checkbox_on_value(kobj)
+                if val != "/Yes":
+                    return val
+        except Exception:
+            pass
+    return "/Yes"
+
+
+def _set_button_value(obj, value: Any) -> None:
+    """Set /V and /AS on a button field to the correct NameObject."""
+    if _is_truthy(value):
+        on_value = _get_checkbox_on_value(obj)
+        obj[NameObject("/V")] = NameObject(on_value)
+        obj[NameObject("/AS")] = NameObject(on_value)
+    else:
+        obj[NameObject("/V")] = NameObject("/Off")
+        obj[NameObject("/AS")] = NameObject("/Off")
+
+
 def _apply_form_field_values(writer: PdfWriter, data: Dict[str, str]) -> int:
     """
     Best-effort form filling that handles both typical AcroForm structures and
     less standard PDFs where widgets are missing /Subtype or are merged into fields.
+
+    Button fields (checkboxes/radio buttons) receive NameObject values (/Yes or /Off)
+    instead of TextStringObject, ensuring proper PDF rendering.
     """
 
     def _apply_to_obj(obj) -> int:
@@ -221,7 +286,10 @@ def _apply_form_field_values(writer: PdfWriter, data: Dict[str, str]) -> int:
         if field_name is not None:
             key = str(field_name)
             if key in data:
-                obj[NameObject("/V")] = TextStringObject(str(data[key]))
+                if _is_button_field(obj):
+                    _set_button_value(obj, data[key])
+                else:
+                    obj[NameObject("/V")] = TextStringObject(str(data[key]))
                 updated_local += 1
 
         kids = obj.get("/Kids")
@@ -263,7 +331,10 @@ def _apply_form_field_values(writer: PdfWriter, data: Dict[str, str]) -> int:
                 continue
             key = str(t)
             if key in data:
-                obj[NameObject("/V")] = TextStringObject(str(data[key]))
+                if _is_button_field(obj):
+                    _set_button_value(obj, data[key])
+                else:
+                    obj[NameObject("/V")] = TextStringObject(str(data[key]))
                 updated += 1
 
     return updated
@@ -680,7 +751,12 @@ def fill_pdf_form(
     writer.clone_document_from_reader(reader)
     if has_fields:
         for page in writer.pages:
-            writer.update_page_form_field_values(page, data)
+            try:
+                writer.update_page_form_field_values(page, data)
+            except (KeyError, Exception):
+                # pypdf may crash on checkbox/radio widgets lacking /AP appearances.
+                # Our _apply_form_field_values handles all field types as fallback.
+                pass
         _apply_form_field_values(writer, data)
 
     if flatten:

@@ -350,6 +350,180 @@ def test_fill_pdf_form_fallback_when_fillpdf_raises(tmp_path: Path, monkeypatch)
     assert str(f["Name"].get("/V")) == "X"
 
 
+def _make_checkbox_form_pdf(path: Path) -> Path:
+    """Create a PDF with both text and checkbox AcroForm fields."""
+    writer = PdfWriter()
+    page = writer.add_blank_page(width=300, height=300)
+
+    font = DictionaryObject(
+        {
+            NameObject("/Type"): NameObject("/Font"),
+            NameObject("/Subtype"): NameObject("/Type1"),
+            NameObject("/BaseFont"): NameObject("/Helvetica"),
+            NameObject("/Encoding"): NameObject("/WinAnsiEncoding"),
+        }
+    )
+    font_ref = writer._add_object(font)
+
+    # Text field: "Name"
+    text_field = DictionaryObject(
+        {
+            NameObject("/FT"): NameObject("/Tx"),
+            NameObject("/T"): TextStringObject("Name"),
+            NameObject("/Ff"): NumberObject(0),
+            NameObject("/V"): TextStringObject(""),
+        }
+    )
+    text_ref = writer._add_object(text_field)
+
+    text_widget = DictionaryObject(
+        {
+            NameObject("/Type"): NameObject("/Annot"),
+            NameObject("/Subtype"): NameObject("/Widget"),
+            NameObject("/Rect"): ArrayObject(
+                [NumberObject(50), NumberObject(200), NumberObject(250), NumberObject(230)]
+            ),
+            NameObject("/F"): NumberObject(4),
+            NameObject("/Parent"): text_ref,
+        }
+    )
+    text_widget_ref = writer._add_object(text_widget)
+    text_field[NameObject("/Kids")] = ArrayObject([text_widget_ref])
+
+    # Checkbox field: "Agree"
+    cb_field = DictionaryObject(
+        {
+            NameObject("/FT"): NameObject("/Btn"),
+            NameObject("/T"): TextStringObject("Agree"),
+            NameObject("/V"): NameObject("/Off"),
+            NameObject("/AS"): NameObject("/Off"),
+        }
+    )
+    cb_ref = writer._add_object(cb_field)
+
+    cb_widget = DictionaryObject(
+        {
+            NameObject("/Type"): NameObject("/Annot"),
+            NameObject("/Subtype"): NameObject("/Widget"),
+            NameObject("/Rect"): ArrayObject(
+                [NumberObject(50), NumberObject(100), NumberObject(70), NumberObject(120)]
+            ),
+            NameObject("/F"): NumberObject(4),
+            NameObject("/Parent"): cb_ref,
+        }
+    )
+    cb_widget_ref = writer._add_object(cb_widget)
+    cb_field[NameObject("/Kids")] = ArrayObject([cb_widget_ref])
+
+    page[NameObject("/Annots")] = ArrayObject([text_widget_ref, cb_widget_ref])
+
+    acro_form = DictionaryObject(
+        {
+            NameObject("/Fields"): ArrayObject([text_ref, cb_ref]),
+            NameObject("/NeedAppearances"): BooleanObject(True),
+            NameObject("/DA"): TextStringObject("/Helv 12 Tf 0 g"),
+            NameObject("/DR"): DictionaryObject(
+                {NameObject("/Font"): DictionaryObject({NameObject("/Helv"): font_ref})}
+            ),
+        }
+    )
+    writer._root_object.update({NameObject("/AcroForm"): writer._add_object(acro_form)})
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("wb") as f:
+        writer.write(f)
+    return path
+
+
+# ============================================================================
+# Tests: AcroForm checkbox/radio button proper toggle
+# ============================================================================
+
+
+class TestCheckboxRadioFormFilling:
+    """Tests for proper AcroForm checkbox/radio button handling in fill_pdf_form."""
+
+    def test_fill_checkbox_with_truthy_sets_name_object(self, tmp_path):
+        """Filling a checkbox with a truthy value should set /V and /AS as NameObject, not TextStringObject."""
+        src = _make_checkbox_form_pdf(tmp_path / "cb_form.pdf")
+        out = tmp_path / "cb_filled.pdf"
+        pdf_tools.fill_pdf_form(str(src), str(out), {"Name": "Alice", "Agree": "Yes"}, flatten=False)
+
+        from pypdf import PdfReader
+        r = PdfReader(str(out))
+        fields = r.get_fields() or {}
+
+        # Text field should be filled normally
+        assert str(fields["Name"].get("/V")) == "Alice"
+
+        # Checkbox field: /V should be a NameObject (e.g. /Yes), NOT a TextStringObject
+        agree_v = fields["Agree"].get("/V")
+        assert agree_v is not None
+        assert str(agree_v) == "/Yes", f"Expected /Yes but got {agree_v!r}"
+
+    def test_fill_checkbox_with_true_bool(self, tmp_path):
+        """Boolean True should check the checkbox."""
+        src = _make_checkbox_form_pdf(tmp_path / "cb_form.pdf")
+        out = tmp_path / "cb_filled.pdf"
+        pdf_tools.fill_pdf_form(str(src), str(out), {"Agree": "True"}, flatten=False)
+
+        from pypdf import PdfReader
+        r = PdfReader(str(out))
+        fields = r.get_fields() or {}
+        assert str(fields["Agree"].get("/V")) == "/Yes"
+
+    def test_fill_checkbox_with_falsy_sets_off(self, tmp_path):
+        """Filling a checkbox with a falsy value should set /V to /Off."""
+        src = _make_checkbox_form_pdf(tmp_path / "cb_form.pdf")
+        out = tmp_path / "cb_filled.pdf"
+        pdf_tools.fill_pdf_form(str(src), str(out), {"Agree": "No"}, flatten=False)
+
+        from pypdf import PdfReader
+        r = PdfReader(str(out))
+        fields = r.get_fields() or {}
+        assert str(fields["Agree"].get("/V")) == "/Off"
+
+    def test_fill_checkbox_preserves_text_field_values(self, tmp_path):
+        """Checkbox handling should not break normal text field filling."""
+        src = _make_checkbox_form_pdf(tmp_path / "cb_form.pdf")
+        out = tmp_path / "cb_filled.pdf"
+        pdf_tools.fill_pdf_form(str(src), str(out), {"Name": "Bob", "Agree": "Yes"}, flatten=False)
+
+        from pypdf import PdfReader
+        r = PdfReader(str(out))
+        fields = r.get_fields() or {}
+        # Text field must still be a plain string value
+        assert str(fields["Name"].get("/V")) == "Bob"
+
+    def test_fill_checkbox_with_x_is_truthy(self, tmp_path):
+        """'X' should be recognized as truthy for checkbox."""
+        src = _make_checkbox_form_pdf(tmp_path / "cb_form.pdf")
+        out = tmp_path / "cb_filled.pdf"
+        pdf_tools.fill_pdf_form(str(src), str(out), {"Agree": "X"}, flatten=False)
+
+        from pypdf import PdfReader
+        r = PdfReader(str(out))
+        fields = r.get_fields() or {}
+        assert str(fields["Agree"].get("/V")) == "/Yes"
+
+    def test_create_and_fill_checkbox_roundtrip(self, tmp_path):
+        """create_pdf_form with checkbox -> fill_pdf_form -> verify roundtrip."""
+        form_path = tmp_path / "created_cb.pdf"
+        pdf_tools.create_pdf_form(str(form_path), [
+            {"name": "FullName", "type": "text", "rect": [50, 100, 250, 130]},
+            {"name": "Consent", "type": "checkbox", "rect": [50, 60, 70, 80]},
+        ])
+
+        filled_path = tmp_path / "created_cb_filled.pdf"
+        pdf_tools.fill_pdf_form(str(form_path), str(filled_path), {"FullName": "Charlie", "Consent": "Yes"}, flatten=False)
+
+        from pypdf import PdfReader
+        r = PdfReader(str(filled_path))
+        fields = r.get_fields() or {}
+        assert str(fields["FullName"].get("/V")) == "Charlie"
+        assert str(fields["Consent"].get("/V")) == "/Yes"
+
+
 def test_clear_pdf_form_fields(tmp_path: Path):
     src = _make_form_pdf(tmp_path / "real_form.pdf")
     out = tmp_path / "filled_real.pdf"

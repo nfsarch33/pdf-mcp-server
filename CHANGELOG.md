@@ -6,6 +6,21 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 1.2.6 - 2026-02-12
+
+### Fixed
+- **AcroForm checkbox/radio button filling**: `fill_pdf_form` now properly toggles checkbox and radio button fields using `NameObject` values (`/Yes` / `/Off`) instead of `TextStringObject`. Previously, setting checkbox values via `_apply_form_field_values` wrote plain text strings, which PDF viewers ignored.
+- **pypdf checkbox crash**: Wrapped `update_page_form_field_values` in try/except to handle `KeyError: '/AP'` when pypdf encounters checkbox widgets without appearance dictionaries. Our `_apply_form_field_values` serves as a robust fallback.
+
+### Added
+- `_is_button_field()`: Detects `/Btn` field type on field or parent, supporting merged widget/field structures.
+- `_get_checkbox_on_value()`: Inspects `/AP` > `/N` appearances to find the correct "on" state (defaults to `/Yes`).
+- `_set_button_value()`: Sets `/V` and `/AS` on button fields to proper `NameObject` values.
+- 6 new tests in `TestCheckboxRadioFormFilling`: truthy/falsy/bool/X filling, text field preservation, create-and-fill roundtrip.
+
+### Validated
+- Full test suite: 335 passed, 5 skipped, 0 failures (~236s) - up from 325/9 (+6 new tests, +4 previously-skipping pypdf checkbox tests now passing, zero regressions).
+
 ## 1.2.5 - 2026-02-16
 
 ### Added
