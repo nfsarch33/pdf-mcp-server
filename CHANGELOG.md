@@ -6,6 +6,19 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 1.2.18 - 2026-02-13
+
+### Fixed
+- **BUG-011**: `server_version` in `get_llm_backend_info` returned stale pip-installed version ("1.2.0") instead of current version from `pyproject.toml`. ([#41](https://github.com/nfsarch33/pdf-mcp-server/issues/41))
+  - Root cause: `importlib.metadata.version()` reads the version from the last `pip install`, not the current source checkout.
+  - Fix: `pdf_mcp/__init__._get_version()` now reads directly from `pyproject.toml` (single source of truth) with `importlib.metadata` as fallback for non-editable installs.
+  - 2 new tests in `TestServerVersionExposure`: `test_version_matches_pyproject`, `test_version_from_init_matches_pyproject`.
+
+### Added
+- **Passport surname cleanup integration tests**: 2 new tests in `TestPassportSurnameSingleLetterCleanup` to verify MRZ garbled delimiter recovery at the `_extract_passport_fields` level.
+- **Release SOP**: Added "Step 5: Version consistency check" and "Step 8: pip reinstall" to release-sop skill (lesson learned from BUG-011).
+- Full regression: 437 passed, 5 skipped, 0 failures.
+
 ## 1.2.17 - 2026-02-13
 
 ### Fixed

@@ -3390,3 +3390,69 @@ class TestServerVersionExposure:
         version = info["server_version"]
         assert isinstance(version, str)
         assert len(version) > 0
+
+    def test_version_matches_pyproject(self):
+        """BUG-011: server_version must match pyproject.toml, not stale pip metadata."""
+        import re
+        from pathlib import Path
+
+        pyproject = Path(__file__).resolve().parent.parent / "pyproject.toml"
+        text = pyproject.read_text(encoding="utf-8")
+        m = re.search(r'^version\s*=\s*"([^"]+)"', text, re.MULTILINE)
+        assert m, "Could not parse version from pyproject.toml"
+        expected = m.group(1)
+
+        info = pdf_tools.get_llm_backend_info()
+        assert info["server_version"] == expected, (
+            f"server_version {info['server_version']!r} != pyproject {expected!r} (BUG-011)"
+        )
+
+    def test_version_from_init_matches_pyproject(self):
+        """__version__ in pdf_mcp must match pyproject.toml."""
+        import re
+        from pathlib import Path
+
+        pyproject = Path(__file__).resolve().parent.parent / "pyproject.toml"
+        text = pyproject.read_text(encoding="utf-8")
+        m = re.search(r'^version\s*=\s*"([^"]+)"', text, re.MULTILINE)
+        assert m, "Could not parse version from pyproject.toml"
+        expected = m.group(1)
+
+        from pdf_mcp import __version__
+        assert __version__ == expected, (
+            f"__version__ {__version__!r} != pyproject {expected!r}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Post-processing: Single-letter artifact cleanup in passport surname
+# ---------------------------------------------------------------------------
+
+
+class TestPassportSurnameSingleLetterCleanup:
+    """Test second-layer heuristic: fix single-letter artifacts in surnames.
+
+    After MRZ parsing and sanitization, a surname like "LIAN K JIZHI" (where
+    'K' is a garbled MRZ delimiter letter) should be split into surname="LIAN"
+    and given_names="JIZHI".  This runs as a post-processing step in
+    _extract_passport_fields.
+    """
+
+    def test_single_letter_artifact_removed(self):
+        """Surname 'LIAN K JIZHI' with empty given_names -> split at 'K'."""
+        fields, conf = pdf_tools._extract_passport_fields(
+            # Simulate MRZ text that produces 'LIAN K JIZHI' as surname
+            "P<CHNLIAN<K<JIZHI<<<<<<<<<<<<<<<<<<<<<<<<<<<\n"
+            "EK25447701CHN5003139M3304050<<<<<<<<<<<<<<<06\n"
+        )
+        assert fields.get("surname") == "LIAN", f"got surname={fields.get('surname')!r}"
+        assert fields.get("given_names") == "JIZHI", f"got given_names={fields.get('given_names')!r}"
+
+    def test_no_artifact_normal_name(self):
+        """Normal MRZ name -> no modification."""
+        fields, conf = pdf_tools._extract_passport_fields(
+            "P<CHNSMITH<<JOHN<MICHAEL<<<<<<<<<<<<<<<<<<<\n"
+            "EK25447701CHN5003139M3304050<<<<<<<<<<<<<<<06\n"
+        )
+        assert fields.get("surname") == "SMITH"
+        assert fields.get("given_names") == "JOHN MICHAEL"
