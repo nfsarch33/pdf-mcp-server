@@ -6,6 +6,17 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 1.2.17 - 2026-02-13
+
+### Fixed
+- **MRZ garbled delimiter recovery**: When OCR misreads one `<` in the `<<` surname/given separator as a letter (e.g., `K`), `_parse_mrz_names` now detects `<X<` patterns and recovers the correct split. Fixes LIAN surname contamination ("LIAN K JIZHI" -> "LIAN" / "JIZHI").
+  - 5 new tests in `TestMRZGarbledDelimiterHeuristic`: K-garbled, L-garbled, normal split preserved, legitimate single-letter name, single-name passport.
+
+### Added
+- **Server version in `get_llm_backend_info`**: Response now includes `server_version` field for deployment verification (recommendation from v1.2.16 E2E report).
+  - 2 new tests in `TestServerVersionExposure`.
+- Full regression: 433 passed, 5 skipped, 0 failures.
+
 ## 1.2.16 - 2026-02-16
 
 ### Fixed

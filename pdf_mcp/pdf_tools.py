@@ -4414,9 +4414,12 @@ def get_llm_backend_info() -> Dict[str, Any]:
     Get information about available LLM backends.
     
     Returns:
-        Dict with backend availability and current selection
+        Dict with backend availability, current selection, and server version
     """
+    from pdf_mcp import __version__
+
     return {
+        "server_version": __version__,
         "current_backend": _get_llm_backend(),
         "backends": {
             "local": {
@@ -5069,8 +5072,9 @@ def _parse_mrz_names(name_field: str) -> tuple:
 
     ICAO 9303 defines '<<' as the delimiter between surname and given names,
     and '<' as a word separator within each part.  OCR may garble '<<' into
-    '< <' (space inserted) or drop it entirely.  This helper tries fallback
-    strategies when the standard delimiter is missing.
+    '< <' (space inserted) or misread one '<' as a letter (e.g. 'K').
+    This helper tries fallback strategies when the standard delimiter is
+    missing or garbled.
 
     Args:
         name_field: Raw characters from the MRZ name zone (e.g. line1[5:]).
@@ -5089,6 +5093,24 @@ def _parse_mrz_names(name_field: str) -> tuple:
         surname_part, given_part = normalized.split("<<", 1)
         surname = surname_part.replace("<", " ").strip()
         given_names = given_part.replace("<", " ").strip()
+
+        # Heuristic: if given_names is empty but surname_part contains a
+        # '<X<' pattern (single letter between chevrons), OCR likely misread
+        # one '<' of the '<<' delimiter as a letter.  Try recovering by
+        # treating the first '<X<' as '<<<' (restored '<<' + filler '<').
+        if not given_names and surname:
+            import re
+
+            match = re.search(r"<([A-Z])<", surname_part)
+            if match:
+                fixed = surname_part[: match.start()] + "<<<" + surname_part[match.end() :]
+                parts = fixed.split("<<", 1)
+                if len(parts) == 2:
+                    new_surname = parts[0].replace("<", " ").strip()
+                    new_given = parts[1].replace("<", " ").strip()
+                    if new_surname and new_given:
+                        return new_surname, new_given
+
         return surname, given_names
 
     # No delimiter found -- treat entire field as surname

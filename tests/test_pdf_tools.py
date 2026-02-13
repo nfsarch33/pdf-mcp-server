@@ -3330,25 +3330,63 @@ class TestConsensusRunsMCPExposure:
 # ---------------------------------------------------------------------------
 
 
-class TestMRZEmptyGivenNamesHeuristic:
-    """When MRZ parsing returns empty given_names but multi-word surname,
-    confidence should be lowered to trigger VLM fallback."""
+class TestMRZGarbledDelimiterHeuristic:
+    """Tests for _parse_mrz_names '<X<' garbled delimiter recovery.
 
-    def test_multi_word_surname_empty_given_lowers_confidence(self):
-        """Surname 'LIAN K JIZHI' with empty given -> low surname confidence."""
-        # Simulate MRZ line with OCR garbled << delimiter
+    When OCR misreads one '<' in the '<<' surname/given separator as a
+    letter (e.g., 'K'), the function should recover by detecting '<X<'
+    patterns in the surname part when given_names is empty.
+    """
+
+    def test_garbled_k_delimiter_recovers_lian(self):
+        """OCR reads '<<' as '<K<' -> should still split LIAN / JIZHI."""
         # P<CHNLIAN<K<JIZHI<<<<<<<<<<<<<<<<<<<<<<<<<
-        # line1[5:] = LIAN<K<JIZHI<<<<<<<<<<<<<<<<<<<<<<<<<
         mrz_names = "LIAN<K<JIZHI<<<<<<<<<<<<<<<<<<<<<<<<<<<"
         surname, given_names = pdf_tools._parse_mrz_names(mrz_names)
-        # With no << found between LIAN and JIZHI (only trailing <<),
-        # surname becomes "LIAN K JIZHI" and given_names is ""
-        # The function should detect this situation
-        assert given_names == "" or surname == "LIAN K JIZHI"
+        assert surname == "LIAN"
+        assert given_names == "JIZHI"
 
-    def test_single_word_surname_no_penalty(self):
-        """Normal single-word surname with given names -> no extra penalty."""
+    def test_garbled_l_delimiter(self):
+        """OCR reads '<<' as '<L<' -> should still split."""
+        mrz_names = "WANG<L<MING<HUA<<<<<<<<<<<<<<<<<<<<<<<<"
+        surname, given_names = pdf_tools._parse_mrz_names(mrz_names)
+        assert surname == "WANG"
+        assert given_names == "MING HUA"
+
+    def test_normal_split_not_affected(self):
+        """Standard '<<' delimiter -> no change in behavior."""
         mrz_names = "SMITH<<JOHN<MICHAEL<<<<<<<<<<<<<<<<<<<<<<"
         surname, given_names = pdf_tools._parse_mrz_names(mrz_names)
         assert surname == "SMITH"
         assert given_names == "JOHN MICHAEL"
+
+    def test_legitimate_single_letter_name_preserved(self):
+        """Surname with single-letter component where given_names exist."""
+        # 'VAN<A<DE<BERG<<JOHN' -> given_names present, no heuristic needed
+        mrz_names = "VAN<A<DE<BERG<<JOHN<<<<<<<<<<<<<<<<<<<<"
+        surname, given_names = pdf_tools._parse_mrz_names(mrz_names)
+        assert surname == "VAN A DE BERG"
+        assert given_names == "JOHN"
+
+    def test_single_name_passport_no_false_positive(self):
+        """Single-name passport (e.g., 'MADONNA') -> no given_names."""
+        mrz_names = "MADONNA<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<"
+        surname, given_names = pdf_tools._parse_mrz_names(mrz_names)
+        assert surname == "MADONNA"
+        assert given_names == ""
+
+
+class TestServerVersionExposure:
+    """Verify server version is included in get_llm_backend_info."""
+
+    def test_version_key_present(self):
+        """get_llm_backend_info must include a 'server_version' key."""
+        info = pdf_tools.get_llm_backend_info()
+        assert "server_version" in info, "server_version must be in backend info"
+
+    def test_version_is_string(self):
+        """Version must be a non-empty string."""
+        info = pdf_tools.get_llm_backend_info()
+        version = info["server_version"]
+        assert isinstance(version, str)
+        assert len(version) > 0
