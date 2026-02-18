@@ -27,10 +27,11 @@ Your system has three memory layers that work together automatically:
 ### Layer 3: global-kb (Permanent Archive)
 
 - Location: ~/Code/global-kb/
+- Repo: git@github-agtc:nfsarch33/cursor-global-kb.git
 - Completed investigations and research
 - Architecture decision records (ADRs)
 - Historical documentation
-- Synced to GitHub private repo
+- NOTE: macOS SSH uses `github-agtc` host alias for nfsarch33 repos
 
 ## Memory Actions (Follow This Decision Tree)
 
@@ -86,15 +87,25 @@ Say "daily memo sync" to trigger a manual run of:
 - Portable KB items intended for Pepper sync live under `PROJECT_MEMO/PEPPER_SYNC/memories-and-kb/`
 - Pepper memory should be updated from that sync source on a regular cadence
 
+## Agent-to-Agent Handoff
+
+When a conversation reaches substantial progress or context exhaustion:
+1. Create a handoff: `python ~/.agents/skills/session-handoff/scripts/create_handoff.py [slug]`
+2. Handoffs stored in `.cursor/handoffs/` (gitignored, local to machine)
+3. For cross-machine persistence, also update Pepper `pdf-mcp-server-status.md`
+4. Next agent: check `.cursor/handoffs/` and Pepper status on session start
+
 ## SOP Pointers (Cross-Workstation)
 
-- `memory-sop.md` (routing rules and automation)
+- `memory-sop.md` (routing rules, skills index, writing standards)
 - `sync-policy.md` (cross-machine sync and GitHub backup)
-- `agent-self-evaluation-sop.md` (self-check loop before final output)
 
 ## Professional Standards
 
 - No emojis in code, configs, commits, or documentation
 - Lowercase log messages with structured fields
-- Conventional commits: `type: description`
+- Conventional commits: `type: short description` (one line, no filler)
   - Type examples: `add`, `update`, `fix`, `archive`, `sync`
+- No AI attribution in any artifact (see writing-standards.rules)
+- Skills-first: check Agent Skills before starting any task
+- Machine-aware: MCP server availability varies per workstation
