@@ -1,58 +1,46 @@
-# Memory Sync Policy v9.0
+# Memory Sync Policy v12.1
 
-## Three-Layer Architecture
+## Canonical Paths (Both Machines)
 
-### Layer 1: .cursor/rules (Auto-Injected)
+| Repo | Path | Remote |
+|------|------|--------|
+| Pepper (memo) | ~/memo | github.com:nfsarch33/cursor-memory-bank |
+| global-kb | ~/Code/global-kb | github.com:nfsarch33/cursor-global-kb |
 
-- Memory strategy and self-regulation
-- Development standards
-- Status: Always in context
+No Zendesk-specific nesting. Both repos serve all projects (personal and work).
 
-### Layer 2: Pepper Memory Bank (MCP-Accessed)
-
-- ~/memo/global-memories/
-- Detailed procedures and patterns
-- Status: On-demand via MCP
-
-### Layer 3: global-kb (Archived)
-
-- ~/Code/global-kb/
-- Completed investigations and decisions
-- Status: Permanent record with git history
-
-## Memory Actions
-
-| Trigger | Action |
-| --- | --- |
-| User contradicts | DELETE Cursor memory |
-| New pattern | CREATE Cursor + UPDATE Pepper |
-| Procedure | UPDATE Pepper only |
-| Investigation | WRITE to global-kb/ |
-
-## GitHub Backup
-
-**Repositories**:
-
-- Pepper: `git@github.com:nfsarch33/cursor-memory-bank.git`
-- KB: `git@github.com:nfsarch33/cursor-global-kb.git`
-
-**Sync Commands**:
+## Manual sync commands
 
 ```bash
-# Push to GitHub
+# push
 cd ~/memo && git add -A && git commit -m "sync: update" && git push origin main
 cd ~/Code/global-kb && git add -A && git commit -m "sync: update" && git push origin main
 
-# Pull from GitHub
-cd ~/memo && git pull origin main
-cd ~/Code/global-kb && git pull origin main
+# pull
+cd ~/memo && git pull --ff-only origin main
+cd ~/Code/global-kb && git pull --ff-only origin main
 ```
 
-## Cross-Machine Sync
+## Automated sync
 
-When switching machines:
+`~/memo/tools/daily_refresh.sh` handles pull/commit/push for both repos.
+Also syncs workspace rules: global-kb/cursor-config/rules/ -> known workspace targets.
 
-1. Configure SSH key
-2. Clone from GitHub (fast)
-3. Configure MCP
-4. Verify with "health check"
+## global-kb-path.txt
+
+Machine-specific. In .gitignore (not tracked in git).
+Each machine sets once after cloning:
+
+```bash
+echo "$HOME/Code/global-kb" > ~/memo/tools/global-kb-path.txt
+```
+
+The `detect_global_kb()` function in daily_refresh.sh has a fallback search order if the file is missing.
+
+## Cross-machine setup
+
+See Agent Skill SKILL.md "Cross-Machine Bootstrap" section.
+
+## WSL scheduling
+
+Use Windows Task Scheduler. See `~/memo/tools/install-wsl-task-scheduler.ps1`.

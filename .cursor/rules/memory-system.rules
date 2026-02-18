@@ -1,111 +1,15 @@
 ---
-description: "Cursor Memory System - Workspace Rules"
+description: "Cursor Memory System"
 globs: ["**/*"]
 alwaysApply: true
 ---
 
-# Memory Strategy
+# Memory System
 
-## Three-Layer Architecture
+Layers: `.cursor/rules/` (always) | `~/memo/` (Pepper, on-demand) | `~/Code/global-kb/` (archive).
 
-Your system has three memory layers that work together automatically:
+Route: every-chat rule -> rules/ | procedure -> Pepper | investigation -> global-kb.
 
-### Layer 1: .cursor/rules (Always in Context)
+Commands: "health check" | "daily memo sync"
 
-- Memory strategy and self-regulation
-- Development standards and patterns
-- This file is auto-injected into every conversation
-- System health check: if this file is visible, the system is healthy
-
-### Layer 2: Pepper Memory Bank (On-Demand via MCP)
-
-- Location: ~/memo/global-memories/
-- Detailed procedures, guides, and error solutions
-- Framework-specific patterns and best practices
-- Search and access via MCP memory tools
-
-### Layer 3: global-kb (Permanent Archive)
-
-- Location: ~/Code/global-kb/
-- Repo: git@github-agtc:nfsarch33/cursor-global-kb.git
-- Completed investigations and research
-- Architecture decision records (ADRs)
-- Historical documentation
-- NOTE: macOS SSH uses `github-agtc` host alias for nfsarch33 repos
-
-## Memory Actions (Follow This Decision Tree)
-
-### When You Discover New Information
-
-| Situation | Action | Where |
-| --- | --- | --- |
-| User contradicts existing info | Delete Cursor memory | Layer 1 |
-| New pattern needed every chat | Create Cursor + update Pepper | Layer 1 + 2 |
-| Procedure or guide discovered | Update Pepper only | Layer 2 |
-| Investigation completed | Write to global-kb/ | Layer 3 |
-
-## Tool Usage Priority
-
-- Prefer MCP tools first for relevant operations; use shell only when no suitable MCP tool exists.
-
-### Quality Gates (Before Creating Cursor Memory)
-
-1. Is this needed every conversation?
-   - Yes: continue to next gate
-   - No: put in Pepper Memory Bank only
-2. Does it fit in one paragraph?
-   - Yes: create Cursor memory
-   - No: put in Pepper Memory Bank
-3. Is it a rule or pattern, not a task?
-   - Yes: can memorize
-   - No: do not memorize
-
-## Self-Regulation (Automatic)
-
-### Implicit Health Check
-
-- Rules file is visible in this context = system healthy
-- If not visible, check `.cursor/rules` exists
-- If MCP servers fail, system falls back to rules only
-
-### Explicit Health Check
-
-Say "health check" in any conversation to verify:
-1. Rules file loads correctly
-2. Pepper Memory Bank accessible
-3. All MCP servers responsive
-4. System status is healthy or issues reported
-
-### Explicit Sync Trigger
-
-Say "daily memo sync" to trigger a manual run of:
-- `~/memo/tools/daily_refresh.sh`
-
-## Repository Memory Sources
-
-- Canonical onboarding/runbooks are under `PROJECT_MEMO/`
-- Portable KB items intended for Pepper sync live under `PROJECT_MEMO/PEPPER_SYNC/memories-and-kb/`
-- Pepper memory should be updated from that sync source on a regular cadence
-
-## Agent-to-Agent Handoff
-
-When a conversation reaches substantial progress or context exhaustion:
-1. Create a handoff: `python ~/.agents/skills/session-handoff/scripts/create_handoff.py [slug]`
-2. Handoffs stored in `.cursor/handoffs/` (gitignored, local to machine)
-3. For cross-machine persistence, also update Pepper `pdf-mcp-server-status.md`
-4. Next agent: check `.cursor/handoffs/` and Pepper status on session start
-
-## SOP Pointers (Cross-Workstation)
-
-- `memory-sop.md` (routing rules, skills index, writing standards)
-- `sync-policy.md` (cross-machine sync and GitHub backup)
-
-## Professional Standards
-
-- No emojis in code, configs, commits, or documentation
-- Lowercase log messages with structured fields
-- Conventional commits: `type: short description` (one line, no filler)
-  - Type examples: `add`, `update`, `fix`, `archive`, `sync`
-- No AI attribution in any artifact (see writing-standards.rules)
-- Skills-first: check Agent Skills before starting any task
-- Machine-aware: MCP server availability varies per workstation
+Prefer MCP tools over shell. No emojis in code/docs. Conventional commits.
