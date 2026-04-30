@@ -3,7 +3,7 @@ VENV ?= .venv
 PY ?= $(VENV)/bin/python
 PIP ?= $(UV) pip
 
-.PHONY: venv install install-ocr install-llm install-llm-models test test-ocr test-quick test-llm test-e2e clean
+.PHONY: venv install install-dev install-ocr install-llm install-llm-models test test-ocr test-quick test-llm test-e2e clean
 .PHONY: smoke prepush
 .PHONY: lint format-check
 .PHONY: check-tesseract check-llm
@@ -17,19 +17,25 @@ $(VENV)/bin/python:
 install: venv
 	. $(VENV)/bin/activate && $(PIP) install -r requirements.txt
 
+# Dev extras (pytest, pytest-cov, pre-commit, ruff) -- needed for
+# ``make test`` because v1.3.0+ pyproject.toml enforces a coverage gate
+# via [tool.pytest.ini_options].addopts (--cov / --cov-fail-under=75).
+install-dev: install
+	. $(VENV)/bin/activate && $(PIP) install -e ".[dev]"
+
 install-ocr: install
 	. $(VENV)/bin/activate && $(PIP) install -e ".[ocr]"
 	@echo "OCR dependencies installed. Ensure Tesseract is installed:"
 	@echo "  macOS: brew install tesseract"
 	@echo "  Linux: sudo apt-get install tesseract-ocr"
 
-test: install
+test: install-dev
 	. $(VENV)/bin/activate && PYTHONWARNINGS=default pytest
 
-test-ocr: install-ocr
+test-ocr: install-dev install-ocr
 	. $(VENV)/bin/activate && PYTHONWARNINGS=default pytest tests/test_ocr.py tests/test_phase2_features.py -v
 
-test-quick: install
+test-quick: install-dev
 	. $(VENV)/bin/activate && PYTHONWARNINGS=default pytest -q --tb=short
 
 check-tesseract:

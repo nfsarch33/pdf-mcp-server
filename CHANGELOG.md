@@ -81,6 +81,25 @@ This project follows Keep a Changelog and Semantic Versioning.
   caching, frozen-dataclass invariants, and that the registry order is
   identical to `server.py`'s `@mcp.tool()` AST order. **Commit 1 of 4
   for TICKET-05**.
+- **`pytest --cov=pdf_mcp` coverage gate at 75% (TICKET-08 c2)**. New
+  `[tool.pytest.ini_options].addopts` in `pyproject.toml` enables
+  line + branch coverage measurement on every test run, writes
+  `coverage.xml` for downstream tooling, and enforces
+  `--cov-fail-under=75`. Baseline at branch-cut: **80.69%**
+  (`pdf_mcp/__init__.py` 60%, `cli.py` 92%, `llm_setup.py` 81%,
+  `logging.py` 77%, `pdf_tools.py` 83%, `registry.py` 95%,
+  `server.py` 94%); the 5pp gap below baseline absorbs occasional
+  dips for defensive fast-fail paths without breaking CI. New
+  `make install-dev` target installs `pdf_mcp[dev]` (`pytest`,
+  `pytest-cov>=5`, `pre-commit`, `ruff`); `make test` now depends on
+  it so `pytest` always finds `pytest-cov`. CI uploads `coverage.xml`
+  as a 14-day retention artefact on the Python 3.12 leg.
+- **`tests/test_ocr.py::test_native_extraction_performance` threshold
+  bumped from 1.0s -> 5.0s** to absorb the 5-10x overhead of
+  `coverage.py` line + branch tracing under load. Test intent (fast
+  relative to OCR / VLM) is preserved.
+- **`.gitignore`** now covers `.coverage`, `.coverage.*`,
+  `coverage.xml`, `htmlcov/`.
 
 ### Changed
 - **`pdf_mcp/server.py` is now registry-driven (1175 → 94 LOC, ~92%

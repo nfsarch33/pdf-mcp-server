@@ -11,6 +11,12 @@ env/
 .mypy_cache/
 .pytest_cache/
 
+# Coverage artefacts (TICKET-08 c2 coverage gate)
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
 # Build / dist
 build/
 dist/
