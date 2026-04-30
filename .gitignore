@@ -42,4 +42,3 @@ cursor-memory-complete-setup-guide.md
 
 # direnv (contains GH_TOKEN, never commit)
 .envrc
-
