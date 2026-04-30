@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import ast
 import importlib
 import sys
 from pathlib import Path
@@ -10,19 +9,18 @@ import pytest
 
 
 def _server_tool_names() -> list[str]:
-    server_path = Path(__file__).resolve().parents[1] / "pdf_mcp" / "server.py"
-    module = ast.parse(server_path.read_text())
-    names: list[str] = []
+    """Return the live FastMCP tool names registered by ``pdf_mcp.server``.
 
-    for node in module.body:
-        if not isinstance(node, ast.FunctionDef):
-            continue
-        for decorator in node.decorator_list:
-            if isinstance(decorator, ast.Call) and getattr(decorator.func, "attr", None) == "tool":
-                names.append(node.name)
-                break
+    Pre-v1.3.0 this helper AST-parsed ``server.py`` looking for
+    ``@mcp.tool()`` decorators. After the registry refactor (TICKET-05
+    commit 2) ``server.py`` no longer carries decorators -- it loops
+    over :func:`pdf_mcp.registry.iter_all` and calls ``mcp.tool()``
+    imperatively. The runtime introspection below is cheap (server
+    startup is a single pass) and gives a true contract check.
+    """
+    import pdf_mcp.server as server  # noqa: PLC0415  (intentional lazy import)
 
-    return names
+    return [tool.name for tool in server.mcp._tool_manager.list_tools()]
 
 
 def test_registry_uniqueness(monkeypatch: pytest.MonkeyPatch) -> None:

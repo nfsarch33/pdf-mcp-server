@@ -184,6 +184,7 @@ class TestOptimizePdf:
 
         # Check page count is preserved
         import pymupdf
+
         with pymupdf.open(sample_pdf) as orig:
             with pymupdf.open(output_path) as opt:
                 assert len(opt) == len(orig)
@@ -243,8 +244,7 @@ class TestDetectBarcodes:
             pdf_tools.detect_barcodes("/nonexistent/file.pdf")
 
     @pytest.mark.skipif(
-        not hasattr(pdf_tools, "_HAS_PYZBAR") or not pdf_tools._HAS_PYZBAR,
-        reason="pyzbar not installed"
+        not hasattr(pdf_tools, "_HAS_PYZBAR") or not pdf_tools._HAS_PYZBAR, reason="pyzbar not installed"
     )
     def test_detect_barcodes_with_pyzbar(self, sample_pdf):
         """Test barcode detection when pyzbar is available."""
@@ -369,8 +369,9 @@ class TestComparePdfs:
 
         # Create a modified PDF
         import pymupdf
+
         modified_path = os.path.join(temp_dir, "modified.pdf")
-        
+
         with pymupdf.open(sample_pdf) as doc:
             # Add some text to first page
             page = doc[0]
@@ -391,8 +392,9 @@ class TestComparePdfs:
 
         # Create a PDF with different page count
         import pymupdf
+
         modified_path = os.path.join(temp_dir, "extra_page.pdf")
-        
+
         with pymupdf.open(sample_pdf) as doc:
             # Add a new page
             doc.new_page()
@@ -424,10 +426,7 @@ class TestBatchProcess:
         if len(multiple_pdfs) < 2:
             pytest.skip("Need multiple PDFs for batch testing")
 
-        result = pdf_tools.batch_process(
-            pdf_paths=multiple_pdfs,
-            operation="get_info"
-        )
+        result = pdf_tools.batch_process(pdf_paths=multiple_pdfs, operation="get_info")
 
         assert "operation" in result
         assert "total_files" in result
@@ -441,10 +440,7 @@ class TestBatchProcess:
         if len(multiple_pdfs) < 2:
             pytest.skip("Need multiple PDFs for batch testing")
 
-        result = pdf_tools.batch_process(
-            pdf_paths=multiple_pdfs,
-            operation="get_info"
-        )
+        result = pdf_tools.batch_process(pdf_paths=multiple_pdfs, operation="get_info")
 
         assert result["total_files"] == len(multiple_pdfs)
         assert result["successful"] == len(multiple_pdfs)
@@ -455,10 +451,7 @@ class TestBatchProcess:
         if len(multiple_pdfs) < 2:
             pytest.skip("Need multiple PDFs for batch testing")
 
-        result = pdf_tools.batch_process(
-            pdf_paths=multiple_pdfs,
-            operation="extract_text"
-        )
+        result = pdf_tools.batch_process(pdf_paths=multiple_pdfs, operation="extract_text")
 
         assert result["successful"] >= 1
         for r in result["results"]:
@@ -470,10 +463,7 @@ class TestBatchProcess:
         if len(multiple_pdfs) < 2:
             pytest.skip("Need multiple PDFs for batch testing")
 
-        result = pdf_tools.batch_process(
-            pdf_paths=multiple_pdfs,
-            operation="extract_links"
-        )
+        result = pdf_tools.batch_process(pdf_paths=multiple_pdfs, operation="extract_links")
 
         assert result["total_files"] == len(multiple_pdfs)
         for r in result["results"]:
@@ -495,10 +485,7 @@ class TestBatchProcess:
         # Mix valid and invalid paths
         pdf_paths = [sample_pdf, "/nonexistent/file.pdf"]
 
-        result = pdf_tools.batch_process(
-            pdf_paths=pdf_paths,
-            operation="get_info"
-        )
+        result = pdf_tools.batch_process(pdf_paths=pdf_paths, operation="get_info")
 
         assert result["total_files"] == 2
         assert result["successful"] == 1
@@ -509,11 +496,7 @@ class TestBatchProcess:
         if len(multiple_pdfs) < 2:
             pytest.skip("Need multiple PDFs for batch testing")
 
-        result = pdf_tools.batch_process(
-            pdf_paths=multiple_pdfs,
-            operation="optimize",
-            output_dir=temp_dir
-        )
+        result = pdf_tools.batch_process(pdf_paths=multiple_pdfs, operation="optimize", output_dir=temp_dir)
 
         assert result["successful"] >= 1
         # Check files were created
@@ -528,44 +511,45 @@ class TestBatchProcess:
 
 
 class TestMcpLayerPhase3:
-    """Test MCP tool wrappers for Phase 3 features."""
+    """Test MCP tool wrappers for Phase 3 features.
+
+    Pre-v1.3.0 these tools were module-level functions on
+    ``pdf_mcp.server``. After the registry refactor (TICKET-05 commit
+    2) every tool is registered via :func:`pdf_mcp.registry.register_tool`
+    and surfaced through FastMCP's :class:`ToolManager`. The contract
+    these tests enforce is unchanged: the named tool must be reachable
+    on the live MCP surface.
+    """
+
+    @staticmethod
+    def _registered_tool_names() -> set[str]:
+        from pdf_mcp import server
+
+        return {tool.name for tool in server.mcp._tool_manager.list_tools()}
 
     def test_mcp_extract_links_exists(self):
         """Test that MCP extract_links tool exists."""
-        from pdf_mcp import server
-        
-        # Check tool is registered
-        assert hasattr(server, "extract_links")
+        assert "extract_links" in self._registered_tool_names()
 
     def test_mcp_optimize_pdf_exists(self):
         """Test that MCP optimize_pdf tool exists."""
-        from pdf_mcp import server
-        
-        assert hasattr(server, "optimize_pdf")
+        assert "optimize_pdf" in self._registered_tool_names()
 
     def test_mcp_detect_barcodes_exists(self):
         """Test that MCP detect_barcodes tool exists."""
-        from pdf_mcp import server
-        
-        assert hasattr(server, "detect_barcodes")
+        assert "detect_barcodes" in self._registered_tool_names()
 
     def test_mcp_split_pdf_exists(self):
         """Test that MCP split_pdf tool exists."""
-        from pdf_mcp import server
-
-        assert hasattr(server, "split_pdf")
+        assert "split_pdf" in self._registered_tool_names()
 
     def test_mcp_compare_pdfs_exists(self):
         """Test that MCP compare_pdfs tool exists."""
-        from pdf_mcp import server
-        
-        assert hasattr(server, "compare_pdfs")
+        assert "compare_pdfs" in self._registered_tool_names()
 
     def test_mcp_batch_process_exists(self):
         """Test that MCP batch_process tool exists."""
-        from pdf_mcp import server
-        
-        assert hasattr(server, "batch_process")
+        assert "batch_process" in self._registered_tool_names()
 
 
 # =============================================================================
@@ -583,7 +567,7 @@ class TestPhase3Workflows:
 
         # Step 1: Extract links
         links_result = pdf_tools.extract_links(sample_pdf)
-        
+
         # Step 2: Optimize
         output_path = os.path.join(temp_dir, "optimized.pdf")
         opt_result = pdf_tools.optimize_pdf(sample_pdf, output_path)

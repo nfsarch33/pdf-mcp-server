@@ -338,7 +338,9 @@ def test_fill_pdf_form_fallback_when_fillpdf_raises(tmp_path: Path, monkeypatch)
 
     # Only meaningful if fillpdf is available; otherwise pypdf is already used.
     if getattr(pdf_tools, "_HAS_FILLPDF", False) is True:
-        monkeypatch.setattr(pdf_tools.fillpdfs, "write_fillable_pdf", lambda *a, **k: (_ for _ in ()).throw(ValueError("pdfrw fail")))
+        monkeypatch.setattr(
+            pdf_tools.fillpdfs, "write_fillable_pdf", lambda *a, **k: (_ for _ in ()).throw(ValueError("pdfrw fail"))
+        )
 
     result = pdf_tools.fill_pdf_form(str(src), str(out), {"Name": "X"}, flatten=False)
     assert Path(result["output_path"]).exists()
@@ -450,6 +452,7 @@ class TestCheckboxRadioFormFilling:
         pdf_tools.fill_pdf_form(str(src), str(out), {"Name": "Alice", "Agree": "Yes"}, flatten=False)
 
         from pypdf import PdfReader
+
         r = PdfReader(str(out))
         fields = r.get_fields() or {}
 
@@ -468,6 +471,7 @@ class TestCheckboxRadioFormFilling:
         pdf_tools.fill_pdf_form(str(src), str(out), {"Agree": "True"}, flatten=False)
 
         from pypdf import PdfReader
+
         r = PdfReader(str(out))
         fields = r.get_fields() or {}
         assert str(fields["Agree"].get("/V")) == "/Yes"
@@ -479,6 +483,7 @@ class TestCheckboxRadioFormFilling:
         pdf_tools.fill_pdf_form(str(src), str(out), {"Agree": "No"}, flatten=False)
 
         from pypdf import PdfReader
+
         r = PdfReader(str(out))
         fields = r.get_fields() or {}
         assert str(fields["Agree"].get("/V")) == "/Off"
@@ -490,6 +495,7 @@ class TestCheckboxRadioFormFilling:
         pdf_tools.fill_pdf_form(str(src), str(out), {"Name": "Bob", "Agree": "Yes"}, flatten=False)
 
         from pypdf import PdfReader
+
         r = PdfReader(str(out))
         fields = r.get_fields() or {}
         # Text field must still be a plain string value
@@ -502,6 +508,7 @@ class TestCheckboxRadioFormFilling:
         pdf_tools.fill_pdf_form(str(src), str(out), {"Agree": "X"}, flatten=False)
 
         from pypdf import PdfReader
+
         r = PdfReader(str(out))
         fields = r.get_fields() or {}
         assert str(fields["Agree"].get("/V")) == "/Yes"
@@ -509,15 +516,21 @@ class TestCheckboxRadioFormFilling:
     def test_create_and_fill_checkbox_roundtrip(self, tmp_path):
         """create_pdf_form with checkbox -> fill_pdf_form -> verify roundtrip."""
         form_path = tmp_path / "created_cb.pdf"
-        pdf_tools.create_pdf_form(str(form_path), [
-            {"name": "FullName", "type": "text", "rect": [50, 100, 250, 130]},
-            {"name": "Consent", "type": "checkbox", "rect": [50, 60, 70, 80]},
-        ])
+        pdf_tools.create_pdf_form(
+            str(form_path),
+            [
+                {"name": "FullName", "type": "text", "rect": [50, 100, 250, 130]},
+                {"name": "Consent", "type": "checkbox", "rect": [50, 60, 70, 80]},
+            ],
+        )
 
         filled_path = tmp_path / "created_cb_filled.pdf"
-        pdf_tools.fill_pdf_form(str(form_path), str(filled_path), {"FullName": "Charlie", "Consent": "Yes"}, flatten=False)
+        pdf_tools.fill_pdf_form(
+            str(form_path), str(filled_path), {"FullName": "Charlie", "Consent": "Yes"}, flatten=False
+        )
 
         from pypdf import PdfReader
+
         r = PdfReader(str(filled_path))
         fields = r.get_fields() or {}
         assert str(fields["FullName"].get("/V")) == "Charlie"
@@ -931,7 +944,7 @@ def test_mcp_layer_can_call_all_tools(tmp_path: Path):
         )
     )
     assert Path(res["output_path"]).exists()
-    fields = (PdfReader(str(filled)).get_fields() or {})
+    fields = PdfReader(str(filled)).get_fields() or {}
     assert str(fields["Name"].get("/V")) == "MCP User"
 
     # fill_pdf_form_any (non-standard form)
@@ -958,7 +971,7 @@ def test_mcp_layer_can_call_all_tools(tmp_path: Path):
         )
     )
     assert Path(res["output_path"]).exists()
-    fields2 = (PdfReader(str(cleared)).get_fields() or {})
+    fields2 = PdfReader(str(cleared)).get_fields() or {}
     assert str(fields2["Name"].get("/V")) == ""
 
     # encrypt_pdf
@@ -1090,9 +1103,7 @@ def test_mcp_layer_can_call_all_tools(tmp_path: Path):
 
     # add_date_stamp
     stamped = tmp_path / "mcp_stamped.pdf"
-    res = asyncio.run(
-        call("add_date_stamp", {"input_path": str(text_src), "output_path": str(stamped), "pages": [1]})
-    )
+    res = asyncio.run(call("add_date_stamp", {"input_path": str(text_src), "output_path": str(stamped), "pages": [1]}))
     assert Path(res["output_path"]).exists()
 
     # detect_pii_patterns
@@ -1543,9 +1554,16 @@ def test_mcp_layer_real_world_1006_regression(tmp_path: Path):
         )
     )
     assert_has_nm_annotation(t1, page_idx=0, nm="t-1006", expected_present=True)
-    asyncio.run(call("update_text_annotation", {"input_path": str(t1), "output_path": str(t2), "annotation_id": "t-1006", "text": "T2"}))
+    asyncio.run(
+        call(
+            "update_text_annotation",
+            {"input_path": str(t1), "output_path": str(t2), "annotation_id": "t-1006", "text": "T2"},
+        )
+    )
     assert_has_nm_annotation(t2, page_idx=0, nm="t-1006", expected_present=True)
-    asyncio.run(call("remove_text_annotation", {"input_path": str(t2), "output_path": str(t3), "annotation_id": "t-1006"}))
+    asyncio.run(
+        call("remove_text_annotation", {"input_path": str(t2), "output_path": str(t3), "annotation_id": "t-1006"})
+    )
     assert_has_nm_annotation(t3, page_idx=0, nm="t-1006", expected_present=False)
 
     # Signature image then encrypt (visual signature, not cryptographic)
@@ -1554,7 +1572,13 @@ def test_mcp_layer_real_world_1006_regression(tmp_path: Path):
     res = asyncio.run(
         call(
             "add_signature_image",
-            {"input_path": str(t3), "output_path": str(signed), "page": 1, "image_path": str(sig_png), "rect": [50, 50, 150, 100]},
+            {
+                "input_path": str(t3),
+                "output_path": str(signed),
+                "page": 1,
+                "image_path": str(sig_png),
+                "rect": [50, 50, 150, 100],
+            },
         )
     )
     assert signed.exists()
@@ -1604,7 +1628,9 @@ def test_mcp_layer_1006_all_tools_scenario_a(tmp_path: Path):
 
     filled = tmp_path / "a_filled.pdf"
     data = {f1: "A1"} if f2 is None else {f1: "A1", f2: "A2"}
-    asyncio.run(call("fill_pdf_form", {"input_path": str(src), "output_path": str(filled), "data": data, "flatten": False}))
+    asyncio.run(
+        call("fill_pdf_form", {"input_path": str(src), "output_path": str(filled), "data": data, "flatten": False})
+    )
     r = PdfReader(str(filled))
     ff = r.get_fields() or {}
     assert str(ff[f1].get("/V")) == "A1"
@@ -1612,13 +1638,20 @@ def test_mcp_layer_1006_all_tools_scenario_a(tmp_path: Path):
         assert str(ff[f2].get("/V")) == "A2"
 
     updated = tmp_path / "a_updated.pdf"
-    asyncio.run(call("fill_pdf_form", {"input_path": str(filled), "output_path": str(updated), "data": {f1: "A1b"}, "flatten": False}))
+    asyncio.run(
+        call(
+            "fill_pdf_form",
+            {"input_path": str(filled), "output_path": str(updated), "data": {f1: "A1b"}, "flatten": False},
+        )
+    )
     r2 = PdfReader(str(updated))
     ff2 = r2.get_fields() or {}
     assert str(ff2[f1].get("/V")) == "A1b"
 
     cleared = tmp_path / "a_cleared.pdf"
-    asyncio.run(call("clear_pdf_form_fields", {"input_path": str(updated), "output_path": str(cleared), "fields": [f1]}))
+    asyncio.run(
+        call("clear_pdf_form_fields", {"input_path": str(updated), "output_path": str(cleared), "fields": [f1]})
+    )
     r3 = PdfReader(str(cleared))
     ff3 = r3.get_fields() or {}
     assert str(ff3[f1].get("/V")) == ""
@@ -1627,45 +1660,93 @@ def test_mcp_layer_1006_all_tools_scenario_a(tmp_path: Path):
     meta0 = asyncio.run(call("get_pdf_metadata", {"pdf_path": str(cleared)}))
     assert "metadata" in meta0
     meta1 = tmp_path / "a_meta.pdf"
-    asyncio.run(call("set_pdf_metadata", {"input_path": str(cleared), "output_path": str(meta1), "title": "T-A", "author": "Author-A"}))
+    asyncio.run(
+        call(
+            "set_pdf_metadata",
+            {"input_path": str(cleared), "output_path": str(meta1), "title": "T-A", "author": "Author-A"},
+        )
+    )
     meta_after = asyncio.run(call("get_pdf_metadata", {"pdf_path": str(meta1)}))["metadata"]
     assert meta_after.get("Title") == "T-A"
     assert meta_after.get("Author") == "Author-A"
 
     # watermark
     wm = tmp_path / "a_wm.pdf"
-    asyncio.run(call("add_text_watermark", {"input_path": str(meta1), "output_path": str(wm), "text": "WM-A", "pages": [1], "annotation_id": "wm-a"}))
+    asyncio.run(
+        call(
+            "add_text_watermark",
+            {"input_path": str(meta1), "output_path": str(wm), "text": "WM-A", "pages": [1], "annotation_id": "wm-a"},
+        )
+    )
     rwm = PdfReader(str(wm))
     annots = rwm.pages[0].get("/Annots")
     assert annots is not None
 
     # text annotation add/update/remove
     a1 = tmp_path / "a_annot1.pdf"
-    asyncio.run(call("add_text_annotation", {"input_path": str(wm), "output_path": str(a1), "page": 1, "text": "HelloA", "annotation_id": "ann-a"}))
+    asyncio.run(
+        call(
+            "add_text_annotation",
+            {"input_path": str(wm), "output_path": str(a1), "page": 1, "text": "HelloA", "annotation_id": "ann-a"},
+        )
+    )
     a2 = tmp_path / "a_annot2.pdf"
-    asyncio.run(call("update_text_annotation", {"input_path": str(a1), "output_path": str(a2), "annotation_id": "ann-a", "text": "HelloA2"}))
+    asyncio.run(
+        call(
+            "update_text_annotation",
+            {"input_path": str(a1), "output_path": str(a2), "annotation_id": "ann-a", "text": "HelloA2"},
+        )
+    )
     a3 = tmp_path / "a_annot3.pdf"
-    asyncio.run(call("remove_text_annotation", {"input_path": str(a2), "output_path": str(a3), "annotation_id": "ann-a"}))
+    asyncio.run(
+        call("remove_text_annotation", {"input_path": str(a2), "output_path": str(a3), "annotation_id": "ann-a"})
+    )
 
     # managed text insert/edit/remove
     t1 = tmp_path / "a_t1.pdf"
-    asyncio.run(call("add_text_annotation", {"input_path": str(a3), "output_path": str(t1), "page": 1, "text": "T", "annotation_id": "t-a"}))
+    asyncio.run(
+        call(
+            "add_text_annotation",
+            {"input_path": str(a3), "output_path": str(t1), "page": 1, "text": "T", "annotation_id": "t-a"},
+        )
+    )
     t2 = tmp_path / "a_t2.pdf"
-    asyncio.run(call("update_text_annotation", {"input_path": str(t1), "output_path": str(t2), "annotation_id": "t-a", "text": "T2"}))
+    asyncio.run(
+        call(
+            "update_text_annotation",
+            {"input_path": str(t1), "output_path": str(t2), "annotation_id": "t-a", "text": "T2"},
+        )
+    )
     t3 = tmp_path / "a_t3.pdf"
     asyncio.run(call("remove_text_annotation", {"input_path": str(t2), "output_path": str(t3), "annotation_id": "t-a"}))
 
     # remove_annotations (FreeText only so we don't remove /Widget form fields)
     ra = tmp_path / "a_ra.pdf"
-    res = asyncio.run(call("remove_annotations", {"input_path": str(t3), "output_path": str(ra), "pages": [1], "subtype": "FreeText"}))
+    res = asyncio.run(
+        call("remove_annotations", {"input_path": str(t3), "output_path": str(ra), "pages": [1], "subtype": "FreeText"})
+    )
     assert Path(res["output_path"]).exists()
 
     # comments CRUD
     c1 = tmp_path / "a_c1.pdf"
     c2 = tmp_path / "a_c2.pdf"
     c3 = tmp_path / "a_c3.pdf"
-    asyncio.run(call("add_comment", {"input_path": str(ra), "output_path": str(c1), "page": 1, "text": "hello", "pos": [72, 72], "comment_id": "c-a"}))
-    asyncio.run(call("update_comment", {"input_path": str(c1), "output_path": str(c2), "comment_id": "c-a", "text": "updated"}))
+    asyncio.run(
+        call(
+            "add_comment",
+            {
+                "input_path": str(ra),
+                "output_path": str(c1),
+                "page": 1,
+                "text": "hello",
+                "pos": [72, 72],
+                "comment_id": "c-a",
+            },
+        )
+    )
+    asyncio.run(
+        call("update_comment", {"input_path": str(c1), "output_path": str(c2), "comment_id": "c-a", "text": "updated"})
+    )
     asyncio.run(call("remove_comment", {"input_path": str(c2), "output_path": str(c3), "comment_id": "c-a"}))
     doc = pymupdf.open(str(c3))
     try:
@@ -1678,15 +1759,47 @@ def test_mcp_layer_1006_all_tools_scenario_a(tmp_path: Path):
     img1 = _write_test_png(tmp_path / "a_sig1.png")
     img2 = _write_test_png(tmp_path / "a_sig2.png")
     s1 = tmp_path / "a_s1.pdf"
-    res = asyncio.run(call("add_signature_image", {"input_path": str(c3), "output_path": str(s1), "page": 1, "image_path": str(img1), "rect": [50, 50, 150, 100]}))
+    res = asyncio.run(
+        call(
+            "add_signature_image",
+            {
+                "input_path": str(c3),
+                "output_path": str(s1),
+                "page": 1,
+                "image_path": str(img1),
+                "rect": [50, 50, 150, 100],
+            },
+        )
+    )
     xref = int(res["signature_xref"])
     s2 = tmp_path / "a_s2.pdf"
-    asyncio.run(call("update_signature_image", {"input_path": str(s1), "output_path": str(s2), "page": 1, "signature_xref": xref, "image_path": str(img2)}))
+    asyncio.run(
+        call(
+            "update_signature_image",
+            {"input_path": str(s1), "output_path": str(s2), "page": 1, "signature_xref": xref, "image_path": str(img2)},
+        )
+    )
     s3 = tmp_path / "a_s3.pdf"
-    res = asyncio.run(call("update_signature_image", {"input_path": str(s2), "output_path": str(s3), "page": 1, "signature_xref": xref, "rect": [60, 60, 200, 140]}))
+    res = asyncio.run(
+        call(
+            "update_signature_image",
+            {
+                "input_path": str(s2),
+                "output_path": str(s3),
+                "page": 1,
+                "signature_xref": xref,
+                "rect": [60, 60, 200, 140],
+            },
+        )
+    )
     xref2 = int(res["signature_xref"])
     s4 = tmp_path / "a_s4.pdf"
-    asyncio.run(call("remove_signature_image", {"input_path": str(s3), "output_path": str(s4), "page": 1, "signature_xref": xref2}))
+    asyncio.run(
+        call(
+            "remove_signature_image",
+            {"input_path": str(s3), "output_path": str(s4), "page": 1, "signature_xref": xref2},
+        )
+    )
 
     # merge/extract/rotate/insert/remove pages using 1006 as the source
     merged = tmp_path / "a_merged.pdf"
@@ -1698,13 +1811,23 @@ def test_mcp_layer_1006_all_tools_scenario_a(tmp_path: Path):
     assert PdfReader(str(extracted)).get_num_pages() == 2
 
     rotated = tmp_path / "a_rotated.pdf"
-    asyncio.run(call("rotate_pages", {"input_path": str(extracted), "pages": [1], "degrees": 90, "output_path": str(rotated)}))
+    asyncio.run(
+        call("rotate_pages", {"input_path": str(extracted), "pages": [1], "degrees": 90, "output_path": str(rotated)})
+    )
     rr = PdfReader(str(rotated))
     assert rr.pages[0].get("/Rotate") in (90, 450)
 
     inserted = tmp_path / "a_inserted.pdf"
-    asyncio.run(call("insert_pages", {"input_path": str(rotated), "insert_from_path": str(src), "at_page": 2, "output_path": str(inserted)}))
-    assert PdfReader(str(inserted)).get_num_pages() == PdfReader(str(rotated)).get_num_pages() + PdfReader(str(src)).get_num_pages()
+    asyncio.run(
+        call(
+            "insert_pages",
+            {"input_path": str(rotated), "insert_from_path": str(src), "at_page": 2, "output_path": str(inserted)},
+        )
+    )
+    assert (
+        PdfReader(str(inserted)).get_num_pages()
+        == PdfReader(str(rotated)).get_num_pages() + PdfReader(str(src)).get_num_pages()
+    )
 
     removed = tmp_path / "a_removed.pdf"
     asyncio.run(call("remove_pages", {"input_path": str(inserted), "pages": [2], "output_path": str(removed)}))
@@ -1786,33 +1909,75 @@ def test_mcp_layer_1006_all_tools_scenario_b(tmp_path: Path):
 
     # metadata second case
     meta2 = tmp_path / "b_meta.pdf"
-    asyncio.run(call("set_pdf_metadata", {"input_path": str(src), "output_path": str(meta2), "title": "T-B", "keywords": "k1,k2"}))
+    asyncio.run(
+        call(
+            "set_pdf_metadata", {"input_path": str(src), "output_path": str(meta2), "title": "T-B", "keywords": "k1,k2"}
+        )
+    )
     got = asyncio.run(call("get_pdf_metadata", {"pdf_path": str(meta2)}))["metadata"]
     assert got.get("Title") == "T-B"
     assert got.get("Keywords") == "k1,k2"
 
     # watermark second case (two pages)
     wm2 = tmp_path / "b_wm.pdf"
-    asyncio.run(call("add_text_watermark", {"input_path": str(meta2), "output_path": str(wm2), "text": "WM-B", "pages": [1, 2], "annotation_id": "wm-b"}))
+    asyncio.run(
+        call(
+            "add_text_watermark",
+            {
+                "input_path": str(meta2),
+                "output_path": str(wm2),
+                "text": "WM-B",
+                "pages": [1, 2],
+                "annotation_id": "wm-b",
+            },
+        )
+    )
     r = PdfReader(str(wm2))
     assert r.get_num_pages() >= 2
 
     # text annotation second case: add/update/remove by id, then remove_annotations filter
     ann1 = tmp_path / "b_ann1.pdf"
-    asyncio.run(call("add_text_annotation", {"input_path": str(wm2), "output_path": str(ann1), "page": 1, "text": "HelloB", "annotation_id": "ann-b"}))
+    asyncio.run(
+        call(
+            "add_text_annotation",
+            {"input_path": str(wm2), "output_path": str(ann1), "page": 1, "text": "HelloB", "annotation_id": "ann-b"},
+        )
+    )
     ann_upd = tmp_path / "b_ann_upd.pdf"
-    asyncio.run(call("update_text_annotation", {"input_path": str(ann1), "output_path": str(ann_upd), "annotation_id": "ann-b", "text": "HelloB2"}))
+    asyncio.run(
+        call(
+            "update_text_annotation",
+            {"input_path": str(ann1), "output_path": str(ann_upd), "annotation_id": "ann-b", "text": "HelloB2"},
+        )
+    )
     ann2 = tmp_path / "b_ann2.pdf"
-    asyncio.run(call("remove_text_annotation", {"input_path": str(ann_upd), "output_path": str(ann2), "annotation_id": "ann-b"}))
+    asyncio.run(
+        call("remove_text_annotation", {"input_path": str(ann_upd), "output_path": str(ann2), "annotation_id": "ann-b"})
+    )
 
     ann3 = tmp_path / "b_ann3.pdf"
-    asyncio.run(call("remove_annotations", {"input_path": str(ann2), "output_path": str(ann3), "pages": [1], "subtype": "FreeText"}))
+    asyncio.run(
+        call(
+            "remove_annotations",
+            {"input_path": str(ann2), "output_path": str(ann3), "pages": [1], "subtype": "FreeText"},
+        )
+    )
 
     # managed text second case (different id)
     t1 = tmp_path / "b_t1.pdf"
-    asyncio.run(call("add_text_annotation", {"input_path": str(ann3), "output_path": str(t1), "page": 1, "text": "TB", "annotation_id": "t-b"}))
+    asyncio.run(
+        call(
+            "add_text_annotation",
+            {"input_path": str(ann3), "output_path": str(t1), "page": 1, "text": "TB", "annotation_id": "t-b"},
+        )
+    )
     t2 = tmp_path / "b_t2.pdf"
-    asyncio.run(call("update_text_annotation", {"input_path": str(t1), "output_path": str(t2), "annotation_id": "t-b", "text": "TB2"}))
+    asyncio.run(
+        call(
+            "update_text_annotation",
+            {"input_path": str(t1), "output_path": str(t2), "annotation_id": "t-b", "text": "TB2"},
+        )
+    )
     t3 = tmp_path / "b_t3.pdf"
     asyncio.run(call("remove_text_annotation", {"input_path": str(t2), "output_path": str(t3), "annotation_id": "t-b"}))
 
@@ -1831,7 +1996,12 @@ def test_mcp_layer_1006_all_tools_scenario_b(tmp_path: Path):
     assert PdfReader(str(merged)).get_num_pages() == 4
 
     ins = tmp_path / "b_ins.pdf"
-    asyncio.run(call("insert_pages", {"input_path": str(ext), "insert_from_path": str(ext), "at_page": 1, "output_path": str(ins)}))
+    asyncio.run(
+        call(
+            "insert_pages",
+            {"input_path": str(ext), "insert_from_path": str(ext), "at_page": 1, "output_path": str(ins)},
+        )
+    )
     assert PdfReader(str(ins)).get_num_pages() == 4
 
     rem = tmp_path / "b_rem.pdf"
@@ -1869,8 +2039,22 @@ def test_mcp_layer_1006_all_tools_scenario_b(tmp_path: Path):
     c1 = tmp_path / "b_c1.pdf"
     c2 = tmp_path / "b_c2.pdf"
     c3 = tmp_path / "b_c3.pdf"
-    asyncio.run(call("add_comment", {"input_path": str(src), "output_path": str(c1), "page": 1, "text": "hello2", "pos": [80, 80], "comment_id": "c-b"}))
-    asyncio.run(call("update_comment", {"input_path": str(c1), "output_path": str(c2), "comment_id": "c-b", "text": "updated2"}))
+    asyncio.run(
+        call(
+            "add_comment",
+            {
+                "input_path": str(src),
+                "output_path": str(c1),
+                "page": 1,
+                "text": "hello2",
+                "pos": [80, 80],
+                "comment_id": "c-b",
+            },
+        )
+    )
+    asyncio.run(
+        call("update_comment", {"input_path": str(c1), "output_path": str(c2), "comment_id": "c-b", "text": "updated2"})
+    )
     asyncio.run(call("remove_comment", {"input_path": str(c2), "output_path": str(c3), "comment_id": "c-b"}))
     doc = pymupdf.open(str(c3))
     try:
@@ -1883,12 +2067,33 @@ def test_mcp_layer_1006_all_tools_scenario_b(tmp_path: Path):
     img1 = _write_test_png(tmp_path / "b_sig1.png")
     img2 = _write_test_png(tmp_path / "b_sig2.png")
     s1 = tmp_path / "b_s1.pdf"
-    res = asyncio.run(call("add_signature_image", {"input_path": str(src), "output_path": str(s1), "page": 1, "image_path": str(img1), "rect": [40, 40, 140, 90]}))
+    res = asyncio.run(
+        call(
+            "add_signature_image",
+            {
+                "input_path": str(src),
+                "output_path": str(s1),
+                "page": 1,
+                "image_path": str(img1),
+                "rect": [40, 40, 140, 90],
+            },
+        )
+    )
     xref = int(res["signature_xref"])
     s2 = tmp_path / "b_s2.pdf"
-    asyncio.run(call("update_signature_image", {"input_path": str(s1), "output_path": str(s2), "page": 1, "signature_xref": xref, "image_path": str(img2)}))
+    asyncio.run(
+        call(
+            "update_signature_image",
+            {"input_path": str(s1), "output_path": str(s2), "page": 1, "signature_xref": xref, "image_path": str(img2)},
+        )
+    )
     s3 = tmp_path / "b_s3.pdf"
-    asyncio.run(call("remove_signature_image", {"input_path": str(s2), "output_path": str(s3), "page": 1, "signature_xref": xref}))
+    asyncio.run(
+        call(
+            "remove_signature_image", {"input_path": str(s2), "output_path": str(s3), "page": 1, "signature_xref": xref}
+        )
+    )
+
 
 def test_merge_extract_rotate(tmp_path: Path):
     src1 = _make_pdf(tmp_path / "a.pdf", pages=2)
@@ -1914,9 +2119,7 @@ def test_annotations_and_text_tools(tmp_path: Path):
     src = _make_pdf(tmp_path / "base.pdf", pages=1)
 
     annotated = tmp_path / "annotated.pdf"
-    res = pdf_tools.add_text_annotation(
-        str(src), page=1, text="Hello", output_path=str(annotated), annotation_id="a1"
-    )
+    res = pdf_tools.add_text_annotation(str(src), page=1, text="Hello", output_path=str(annotated), annotation_id="a1")
     assert Path(res["output_path"]).exists()
 
     from pypdf import PdfReader
@@ -2223,6 +2426,7 @@ def test_signature_add_update_resize_remove(tmp_path: Path):
     finally:
         doc.close()
 
+
 def test_rotate_invalid_degrees(tmp_path: Path):
     src = _make_pdf(tmp_path / "c.pdf", pages=1)
     out = tmp_path / "rot_invalid.pdf"
@@ -2353,6 +2557,7 @@ def test_export_pdf_invalid_format(tmp_path: Path):
 def test_deprecation_warnings():
     """Test that deprecated functions emit deprecation warnings."""
     import warnings
+
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
         # These should trigger deprecation warnings when called
@@ -2371,88 +2576,81 @@ class TestStructuredLogging:
     def test_logger_exists(self):
         """pdf_tools module must expose a logger for diagnostic visibility."""
         import logging
+
         logger = logging.getLogger("pdf_mcp.pdf_tools")
         assert isinstance(logger, logging.Logger)
 
     def test_fill_pdf_form_fillpdf_fallback_logs_debug(self, tmp_path, caplog):
         """When fillpdf fails and falls back to pypdf, a debug message is emitted."""
         import logging
+
         src = _make_form_pdf(tmp_path / "log_fill.pdf")
         out = tmp_path / "log_fill_out.pdf"
         with caplog.at_level(logging.DEBUG, logger="pdf_mcp.pdf_tools"):
             pdf_tools.fill_pdf_form(str(src), str(out), {"Name": "Test"})
         # Should log which fill method was used
-        assert any(
-            "fill" in rec.message.lower() for rec in caplog.records
-            if rec.name == "pdf_mcp.pdf_tools"
-        ), f"Expected fill-method log, got: {[r.message for r in caplog.records]}"
+        assert any("fill" in rec.message.lower() for rec in caplog.records if rec.name == "pdf_mcp.pdf_tools"), (
+            f"Expected fill-method log, got: {[r.message for r in caplog.records]}"
+        )
 
     def test_llm_backend_selection_logs_debug(self, caplog):
         """_get_llm_backend logs which backend was selected."""
         import logging
+
         with caplog.at_level(logging.DEBUG, logger="pdf_mcp.pdf_tools"):
             pdf_tools._get_llm_backend()
         backend_msgs = [
-            r.message for r in caplog.records
-            if r.name == "pdf_mcp.pdf_tools" and "backend" in r.message.lower()
+            r.message for r in caplog.records if r.name == "pdf_mcp.pdf_tools" and "backend" in r.message.lower()
         ]
-        assert len(backend_msgs) >= 1, (
-            f"Expected backend selection log, got: {[r.message for r in caplog.records]}"
-        )
+        assert len(backend_msgs) >= 1, f"Expected backend selection log, got: {[r.message for r in caplog.records]}"
 
     def test_local_llm_failure_logs_debug(self, caplog):
         """When _call_local_llm fails, a debug message with the error is emitted."""
         import logging
         from unittest.mock import patch
+
         # Force a connection error
         with caplog.at_level(logging.DEBUG, logger="pdf_mcp.pdf_tools"):
-            with patch.object(
-                pdf_tools, "_HAS_REQUESTS", True
-            ):
+            with patch.object(pdf_tools, "_HAS_REQUESTS", True):
                 with patch.object(
-                    pdf_tools._requests, "post",
+                    pdf_tools._requests,
+                    "post",
                     side_effect=ConnectionError("test connection refused"),
                 ):
                     result = pdf_tools._call_local_llm("test prompt")
         assert result is None
         error_msgs = [
-            r.message for r in caplog.records
-            if r.name == "pdf_mcp.pdf_tools" and "local" in r.message.lower()
+            r.message for r in caplog.records if r.name == "pdf_mcp.pdf_tools" and "local" in r.message.lower()
         ]
-        assert len(error_msgs) >= 1, (
-            f"Expected local LLM error log, got: {[r.message for r in caplog.records]}"
-        )
+        assert len(error_msgs) >= 1, f"Expected local LLM error log, got: {[r.message for r in caplog.records]}"
 
     def test_model_resolution_logs_debug(self, caplog):
         """_resolve_local_model_name logs the resolved model."""
         import logging
+
         with caplog.at_level(logging.DEBUG, logger="pdf_mcp.pdf_tools"):
             pdf_tools._resolve_local_model_name()
         model_msgs = [
-            r.message for r in caplog.records
-            if r.name == "pdf_mcp.pdf_tools" and "model" in r.message.lower()
+            r.message for r in caplog.records if r.name == "pdf_mcp.pdf_tools" and "model" in r.message.lower()
         ]
-        assert len(model_msgs) >= 1, (
-            f"Expected model resolution log, got: {[r.message for r in caplog.records]}"
-        )
+        assert len(model_msgs) >= 1, f"Expected model resolution log, got: {[r.message for r in caplog.records]}"
 
     def test_pypdf_checkbox_fallback_logs_debug(self, tmp_path, caplog):
         """When pypdf update_page_form_field_values fails on checkboxes, it logs."""
         import logging
+
         src = _make_checkbox_form_pdf(tmp_path / "log_cb.pdf")
         out = tmp_path / "log_cb_out.pdf"
         with caplog.at_level(logging.DEBUG, logger="pdf_mcp.pdf_tools"):
             pdf_tools.fill_pdf_form(str(src), str(out), {"Agree": "Yes"})
         # The checkbox widget without /AP should trigger the except block
         fallback_msgs = [
-            r.message for r in caplog.records
+            r.message
+            for r in caplog.records
             if r.name == "pdf_mcp.pdf_tools"
-            and ("fallback" in r.message.lower() or "checkbox" in r.message.lower()
-                 or "button" in r.message.lower())
+            and ("fallback" in r.message.lower() or "checkbox" in r.message.lower() or "button" in r.message.lower())
         ]
-        assert len(fallback_msgs) >= 1, (
-            f"Expected checkbox fallback log, got: {[r.message for r in caplog.records]}"
-        )
+        assert len(fallback_msgs) >= 1, f"Expected checkbox fallback log, got: {[r.message for r in caplog.records]}"
 
 
 # ---------------------------------------------------------------------------
@@ -2554,9 +2752,7 @@ class TestGetFormFieldsEdgeCases:
     def test_get_fields_file_not_found(self, tmp_path):
         """get_pdf_form_fields with non-existent file raises PdfToolError."""
         with pytest.raises(PdfToolError, match="File not found"):
-            pdf_tools.get_pdf_form_fields(
-                str(tmp_path / "nonexistent.pdf")
-            )
+            pdf_tools.get_pdf_form_fields(str(tmp_path / "nonexistent.pdf"))
 
     def test_get_fields_corrupted_pdf(self, tmp_path):
         """get_pdf_form_fields with corrupted PDF raises error."""
@@ -2598,9 +2794,7 @@ class TestEncryptedPdfEdgeCases:
         src = self._make_encrypted_pdf(tmp_path / "enc_fill.pdf")
         out = tmp_path / "enc_fill_out.pdf"
         with pytest.raises(Exception):
-            pdf_tools.fill_pdf_form(
-                str(src), str(out), {"Name": "test"}
-            )
+            pdf_tools.fill_pdf_form(str(src), str(out), {"Name": "test"})
 
 
 # ---------------------------------------------------------------------------
@@ -2711,12 +2905,9 @@ class TestLLMRetryLogic:
             pdf_tools._call_llm("test prompt", max_retries=1)
 
         retry_msgs = [
-            r.message for r in caplog.records
-            if r.name == "pdf_mcp.pdf_tools" and "retry" in r.message.lower()
+            r.message for r in caplog.records if r.name == "pdf_mcp.pdf_tools" and "retry" in r.message.lower()
         ]
-        assert len(retry_msgs) >= 1, (
-            f"Expected retry log, got: {[r.message for r in caplog.records]}"
-        )
+        assert len(retry_msgs) >= 1, f"Expected retry log, got: {[r.message for r in caplog.records]}"
 
     def test_retry_logs_final_failure(self, monkeypatch, caplog):
         """Final failure after all retries is logged."""
@@ -2733,12 +2924,9 @@ class TestLLMRetryLogic:
             pdf_tools._call_llm("test prompt", max_retries=1)
 
         fail_msgs = [
-            r.message for r in caplog.records
-            if r.name == "pdf_mcp.pdf_tools" and "failed" in r.message.lower()
+            r.message for r in caplog.records if r.name == "pdf_mcp.pdf_tools" and "failed" in r.message.lower()
         ]
-        assert len(fail_msgs) >= 1, (
-            f"Expected failure log, got: {[r.message for r in caplog.records]}"
-        )
+        assert len(fail_msgs) >= 1, f"Expected failure log, got: {[r.message for r in caplog.records]}"
 
     def test_no_backend_returns_none_no_retry(self, monkeypatch):
         """_call_llm returns None immediately when no backend available."""
@@ -2762,7 +2950,9 @@ class TestFormFillDiagnostics:
         src = _make_form_pdf(tmp_path / "diag1.pdf")
         out = tmp_path / "diag1_out.pdf"
         result = pdf_tools.fill_pdf_form(
-            str(src), str(out), {"Name": "Alice"},
+            str(src),
+            str(out),
+            {"Name": "Alice"},
         )
         assert "filled_fields_count" in result
         assert result["filled_fields_count"] == 1
@@ -2772,7 +2962,9 @@ class TestFormFillDiagnostics:
         src = _make_form_pdf(tmp_path / "diag2.pdf")
         out = tmp_path / "diag2_out.pdf"
         result = pdf_tools.fill_pdf_form(
-            str(src), str(out), {"Name": "Bob"},
+            str(src),
+            str(out),
+            {"Name": "Bob"},
         )
         assert "total_form_fields" in result
         assert result["total_form_fields"] >= 1
@@ -2782,7 +2974,9 @@ class TestFormFillDiagnostics:
         src = _make_form_pdf(tmp_path / "diag3.pdf")
         out = tmp_path / "diag3_out.pdf"
         result = pdf_tools.fill_pdf_form(
-            str(src), str(out), {"Nmae": "Alice", "Name": "Alice"},
+            str(src),
+            str(out),
+            {"Nmae": "Alice", "Name": "Alice"},
         )
         assert "unmatched_fields" in result
         assert "Nmae" in result["unmatched_fields"]
@@ -2792,7 +2986,9 @@ class TestFormFillDiagnostics:
         src = _make_form_pdf(tmp_path / "diag4.pdf")
         out = tmp_path / "diag4_out.pdf"
         result = pdf_tools.fill_pdf_form(
-            str(src), str(out), {"Name": "Carol"},
+            str(src),
+            str(out),
+            {"Name": "Carol"},
         )
         assert result.get("unmatched_fields") == []
 
@@ -2801,7 +2997,9 @@ class TestFormFillDiagnostics:
         src = _make_form_pdf(tmp_path / "diag5.pdf")
         out = tmp_path / "diag5_out.pdf"
         result = pdf_tools.fill_pdf_form(
-            str(src), str(out), {"Bad1": "X", "Bad2": "Y"},
+            str(src),
+            str(out),
+            {"Bad1": "X", "Bad2": "Y"},
         )
         assert result["filled_fields_count"] == 0
         assert sorted(result["unmatched_fields"]) == ["Bad1", "Bad2"]
@@ -2811,7 +3009,9 @@ class TestFormFillDiagnostics:
         src = _make_form_pdf(tmp_path / "diag6.pdf")
         out = tmp_path / "diag6_out.pdf"
         result = pdf_tools.fill_pdf_form(
-            str(src), str(out), {},
+            str(src),
+            str(out),
+            {},
         )
         assert result["filled_fields_count"] == 0
         assert result["unmatched_fields"] == []
@@ -2886,9 +3086,7 @@ class TestMRZNameSanitization:
             "XILUYING KKsssss sssssssss",
         )
         confidence = 0.75 - penalty
-        assert confidence >= 0.7, (
-            f"Confidence {confidence} < 0.7 would trigger VLM fallback"
-        )
+        assert confidence >= 0.7, f"Confidence {confidence} < 0.7 would trigger VLM fallback"
 
     def test_non_alpha_recovery_confidence_above_threshold(self):
         """Name with non-alpha garbage keeps confidence >= 0.7."""
@@ -3105,6 +3303,7 @@ class TestConsensusRunsParam:
     def test_default_consensus_runs_is_one(self):
         """Default behavior: single VLM call (backward compatible)."""
         import inspect
+
         sig = inspect.signature(pdf_tools.extract_structured_data)
         param = sig.parameters.get("consensus_runs")
         assert param is not None, "consensus_runs parameter must exist"
@@ -3220,28 +3419,21 @@ class TestEntityExtractionPatterns:
 
     def test_names_exclude_newline_fragments(self):
         """Document fragments with newlines are NOT names."""
-        names = pdf_tools._extract_names(
-            "Sensitive\nPersonal Privacy\nDepartment"
-        )
+        names = pdf_tools._extract_names("Sensitive\nPersonal Privacy\nDepartment")
         assert "Sensitive\nPersonal" not in names
         assert "Personal Privacy\nDepartment" not in names
 
     def test_names_exclude_document_words(self):
         """Common document/form words are NOT names."""
-        names = pdf_tools._extract_names(
-            "Page Break\nApplication Type\nHome Affairs"
-        )
+        names = pdf_tools._extract_names("Page Break\nApplication Type\nHome Affairs")
         for name in names:
             assert "Page Break" not in name
             assert "Application Type" not in name
 
     def test_names_find_real_names(self):
         """Real person names should be found."""
-        names = pdf_tools._extract_names(
-            "Applicant: John Smith and Mary Jane"
-        )
-        assert any("John Smith" in n for n in names) or \
-            any("Mary Jane" in n for n in names)
+        names = pdf_tools._extract_names("Applicant: John Smith and Mary Jane")
+        assert any("John Smith" in n for n in names) or any("Mary Jane" in n for n in names)
 
 
 # ---------------------------------------------------------------------------
@@ -3311,14 +3503,21 @@ class TestConsensusRunsMCPExposure:
     """Verify consensus_runs is exposed in the MCP server layer."""
 
     def test_server_function_has_consensus_runs(self):
-        """The server.py wrapper must accept consensus_runs."""
+        """The MCP-exposed extract_structured_data must accept consensus_runs.
+
+        Pre-v1.3.0 each tool was a module-level function on
+        ``pdf_mcp.server`` and we could ``getattr`` directly. After the
+        registry refactor (TICKET-05 commit 2) tools live behind
+        FastMCP's :class:`ToolManager`; we resolve via the registry,
+        which also drives the MCP schema FastMCP publishes.
+        """
         import inspect
 
-        from pdf_mcp import server
+        import pdf_mcp.registry as registry
 
-        # Find the extract_structured_data function in server module
-        func = getattr(server, "extract_structured_data", None)
-        assert func is not None, "extract_structured_data must exist in server"
+        tool = registry.get("extract_structured_data")
+        func = tool.callable.resolve()
+        assert func is not None, "extract_structured_data must be in the registry"
         sig = inspect.signature(func)
         param = sig.parameters.get("consensus_runs")
         assert param is not None, "consensus_runs must be in MCP schema"
@@ -3419,9 +3618,8 @@ class TestServerVersionExposure:
         expected = m.group(1)
 
         from pdf_mcp import __version__
-        assert __version__ == expected, (
-            f"__version__ {__version__!r} != pyproject {expected!r}"
-        )
+
+        assert __version__ == expected, f"__version__ {__version__!r} != pyproject {expected!r}"
 
 
 # ---------------------------------------------------------------------------
@@ -3442,8 +3640,7 @@ class TestPassportSurnameSingleLetterCleanup:
         """Surname 'LIAN K JIZHI' with empty given_names -> split at 'K'."""
         fields, conf = pdf_tools._extract_passport_fields(
             # Simulate MRZ text that produces 'LIAN K JIZHI' as surname
-            "P<CHNLIAN<K<JIZHI<<<<<<<<<<<<<<<<<<<<<<<<<<<\n"
-            "EK25447701CHN5003139M3304050<<<<<<<<<<<<<<<06\n"
+            "P<CHNLIAN<K<JIZHI<<<<<<<<<<<<<<<<<<<<<<<<<<<\nEK25447701CHN5003139M3304050<<<<<<<<<<<<<<<06\n"
         )
         assert fields.get("surname") == "LIAN", f"got surname={fields.get('surname')!r}"
         assert fields.get("given_names") == "JIZHI", f"got given_names={fields.get('given_names')!r}"
@@ -3451,8 +3648,7 @@ class TestPassportSurnameSingleLetterCleanup:
     def test_no_artifact_normal_name(self):
         """Normal MRZ name -> no modification."""
         fields, conf = pdf_tools._extract_passport_fields(
-            "P<CHNSMITH<<JOHN<MICHAEL<<<<<<<<<<<<<<<<<<<\n"
-            "EK25447701CHN5003139M3304050<<<<<<<<<<<<<<<06\n"
+            "P<CHNSMITH<<JOHN<MICHAEL<<<<<<<<<<<<<<<<<<<\nEK25447701CHN5003139M3304050<<<<<<<<<<<<<<<06\n"
         )
         assert fields.get("surname") == "SMITH"
         assert fields.get("given_names") == "JOHN MICHAEL"
