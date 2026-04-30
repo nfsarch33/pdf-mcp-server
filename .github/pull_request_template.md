@@ -29,5 +29,3 @@ Describe how you verified by invoking the CLI and/or MCP tools and re-reading ou
 ## Notes
 
 Links to issues, sample PDFs, public fixtures, or external docs.
-
-

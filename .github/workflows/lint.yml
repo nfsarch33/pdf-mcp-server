@@ -46,5 +46,3 @@ jobs:
           FILES=$(git diff --name-only --diff-filter=ACMRTUXB "origin/${{ github.base_ref }}...${{ github.sha }}" | grep -E '\.py$' || true)
           if [ -z "$FILES" ]; then echo "ruff-format: no changed python files"; exit 0; fi
           ruff format --check $FILES
-
-

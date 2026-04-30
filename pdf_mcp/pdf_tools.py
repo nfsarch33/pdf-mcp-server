@@ -4606,7 +4606,7 @@ def auto_fill_pdf_form(
             }
 
         # Build LLM prompt for intelligent mapping
-        system_prompt = """You are a form field mapping assistant. Given source data keys and PDF form field names, 
+        system_prompt = """You are a form field mapping assistant. Given source data keys and PDF form field names,
         determine the best mapping between them. Return ONLY a valid JSON object mapping form field names to values.
         Only include fields where you're confident in the mapping. Be conservative - don't map if unsure."""
 
@@ -5641,7 +5641,7 @@ def extract_structured_data(
 
             fields_to_extract = list(target_schema.keys()) if isinstance(target_schema, dict) else list(target_schema)
             prompt = f"""Extract the following fields from this document text:
-            
+
 Fields to extract: {json.dumps(fields_to_extract)}
 
 Document text:

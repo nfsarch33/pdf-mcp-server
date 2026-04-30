@@ -58,21 +58,21 @@ def sample_text_pdf(tmp_path):
     text = """
     INVOICE #12345
     Date: January 15, 2026
-    
+
     Bill To:
     John Smith
     123 Main Street
     New York, NY 10001
-    
+
     Items:
     Widget A - $50.00
     Widget B - $75.00
     Service Fee - $25.00
-    
+
     Subtotal: $150.00
     Tax (8%): $12.00
     Total: $162.00
-    
+
     Payment Due: February 15, 2026
     """
     page.insert_text((72, 72), text, fontsize=11)

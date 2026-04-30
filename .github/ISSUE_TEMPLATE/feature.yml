@@ -96,5 +96,3 @@ body:
         - Sample PDFs or fixtures:
     validations:
       required: false
-
-
