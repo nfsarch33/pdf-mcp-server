@@ -7,6 +7,27 @@ This project follows Keep a Changelog and Semantic Versioning.
 ## Unreleased
 
 ### Added
+- **CLI verb groups mounted from registry (TICKET-05 c3)**: All 57
+  registered tools are now reachable as `pdf-mcp <verb> <tool-name>`,
+  with the verb taxonomy (form / pages / text / extract / sign /
+  metadata / ocr / ai / batch / security) coming directly from
+  `pdf_mcp.registry.verb_groups()`. The mount happens via a single
+  `_register_verb_groups(app)` call in `pdf_mcp/cli.py`, so adding a
+  new tool is a one-line `register_tool(...)` edit and the CLI surface
+  picks it up automatically — no per-tool argparse plumbing. Each
+  command accepts a `--json '{...}'` (or `--json-file PATH`) kwargs
+  payload, `--pretty` for indented output, and `--output PATH` to write
+  the JSON result to a file instead of stdout. Tool exceptions exit
+  non-zero with a `error: <tool> failed: <msg>` line on stderr.
+  Lazy-import invariant is preserved: `pdf-mcp --help` and
+  `pdf-mcp <verb> --help` do NOT import `pdf_mcp.pdf_tools`; the heavy
+  dependency tree only loads when a tool is actually invoked. Verified
+  by `tests/test_cli_verb_groups.py::TestLazyImportPreserved`. 31 new
+  parametrised tests pin the help surface for every verb / tool, JSON
+  kwargs forwarding, exception handling, `--json-file`, `--pretty`,
+  `--output`, and the verb-count regression guard. Golden snapshots
+  (`tests/golden/help.txt`, `tests/golden/serve_help.txt`) regenerated
+  to lock the new help layout.
 - **First-class `pdf-mcp` CLI (v1.3.0 groundwork)**: New `pdf_mcp/cli.py`
   Typer entrypoint, `[project.scripts] pdf-mcp = "pdf_mcp.cli:main"` in
   `pyproject.toml`, and `typer>=0.12` added to runtime dependencies. The
