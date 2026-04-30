@@ -10,6 +10,8 @@ Wiring:
   * ``main()`` is the entry point Setuptools generates; it just delegates to
     the Typer ``app`` so tests can drive ``app`` with ``CliRunner`` directly
     (see ``tests/test_cli.py``).
+  * ``configure_logging()`` is called during the root callback so every
+    subcommand inherits the same logging context (see TICKET-02).
 
 Future subcommands (form / pages / text / extract / annotate / sign / ai)
 will be added in subsequent sprint tickets. This module intentionally
@@ -36,6 +38,20 @@ def _version_callback(value: bool) -> None:
         raise typer.Exit()
 
 
+def _resolve_cli_level(verbose: bool, quiet: bool) -> str | None:
+    """Map CLI flags to a logging level string.
+
+    ``--verbose`` wins over ``--quiet`` if both are set (best effort: warn,
+    don't crash). Returning ``None`` defers to ``PDF_MCP_LOG_LEVEL`` /
+    INFO inside ``configure_logging``.
+    """
+    if verbose:
+        return "DEBUG"
+    if quiet:
+        return "WARNING"
+    return None
+
+
 @app.callback()
 def _root(
     version: bool = typer.Option(
@@ -45,6 +61,25 @@ def _root(
         is_eager=True,
         help="Print pdf-mcp version and exit.",
     ),
+    verbose: bool = typer.Option(
+        False,
+        "--verbose",
+        "-v",
+        help="Enable DEBUG logging (overrides --quiet).",
+    ),
+    quiet: bool = typer.Option(
+        False,
+        "--quiet",
+        "-q",
+        help="Restrict logging to WARNING and above.",
+    ),
+    log_format: str = typer.Option(
+        "text",
+        "--log-format",
+        help="Log output format. One of: text, json.",
+        case_sensitive=False,
+        metavar="text|json",
+    ),
 ) -> None:
     """pdf-mcp entry point.
 
@@ -52,6 +87,15 @@ def _root(
     initial release ships ``serve`` for MCP stdio mode; further verbs are
     added under TICKET-04 onwards in the v1.3.0 sprint backlog.
     """
+    # Lazy import keeps ``pdf-mcp --version`` fast (importing pdf_mcp.logging
+    # is cheap, but staying consistent with the lazy-import pattern used by
+    # ``serve``).
+    from pdf_mcp import logging as pdf_logging
+
+    pdf_logging.configure_logging(
+        level=_resolve_cli_level(verbose, quiet),
+        fmt=(log_format or "text").lower(),
+    )
 
 
 @app.command()
