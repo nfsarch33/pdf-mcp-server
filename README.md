@@ -243,7 +243,7 @@ Optional language packs: `chi_tra`, `jpn`, `kor` improve OCR for low-quality sca
 
 **Unified Text Extraction:**
 ```python
-extract_text(pdf_path, engine="auto", pages=None, include_confidence=False, 
+extract_text(pdf_path, engine="auto", pages=None, include_confidence=False,
              native_threshold=100, dpi=300, language="eng", min_confidence=0)
 ```
 - Engines: "native" (fast), "auto" (native→OCR), "smart" (per-page), "ocr"/"tesseract", "force_ocr"
@@ -466,4 +466,3 @@ GNU AGPL-3.0, see `LICENSE`.
 
 ## Changelog
 See `CHANGELOG.md`.
-

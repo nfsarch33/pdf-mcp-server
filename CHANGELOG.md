@@ -901,5 +901,3 @@ The following tools are deprecated and will be removed in v0.7.0:
 - Managed text insert, edit, remove via FreeText annotations.
 - Metadata get and set tools.
 - GitHub Actions workflows: CI, CodeQL, dependency review, optional AI review.
-
-
