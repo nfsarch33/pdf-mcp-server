@@ -1,7 +1,7 @@
 [project]
 name = "pdf-mcp"
 version = "1.2.18"
-description = "Local MCP server for PDF form filling, editing, and OCR text extraction"
+description = "Local CLI and MCP server for PDF form filling, editing, OCR, and AI-assisted extraction"
 authors = [{ name = "Local User" }]
 requires-python = ">=3.10"
 dependencies = [
@@ -11,12 +11,22 @@ dependencies = [
     "pymupdf>=1.26.7",
     "pyhanko>=0.32.0",
     "cryptography>=42.0.0",
+    # Typer powers the v1.3.0+ first-class CLI (pdf-mcp serve, etc.).
+    # Pinned with a permissive lower bound to align with installed wheels
+    # while keeping the door open for future security/feature uplifts.
+    "typer>=0.12.0",
 ]
 
 [project.optional-dependencies]
 dev = ["pytest", "pre-commit", "ruff"]
 ocr = ["pytesseract>=0.3.10", "pillow>=10.0.0"]
 llm = ["openai>=1.0.0"]
+
+[project.scripts]
+# v1.3.0+: ship pdf-mcp as a first-class console script. The legacy
+# ``python -m pdf_mcp.server`` entry point still works; ``pdf-mcp serve``
+# is its drop-in replacement (see pdf_mcp/cli.py).
+pdf-mcp = "pdf_mcp.cli:main"
 
 [build-system]
 requires = ["setuptools>=61"]
