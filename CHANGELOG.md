@@ -6,6 +6,40 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+### Added
+- **First-class `pdf-mcp` CLI (v1.3.0 groundwork)**: New `pdf_mcp/cli.py`
+  Typer entrypoint, `[project.scripts] pdf-mcp = "pdf_mcp.cli:main"` in
+  `pyproject.toml`, and `typer>=0.12` added to runtime dependencies. The
+  initial release ships `pdf-mcp --version`, `pdf-mcp --help`, and
+  `pdf-mcp serve` (a backwards-compatible alias for
+  `python -m pdf_mcp.server`). Further verb groups (form / pages / text /
+  extract / annotate / sign / ai) will land in subsequent v1.3.x tickets.
+- **CLI surface tests** (`tests/test_cli.py`, 6 tests): pin module
+  importability, Typer app type, `--version` output, `--help` listing of
+  the `serve` subcommand, and `serve` delegation to
+  `pdf_mcp.server.mcp.run(transport="stdio")` via a patched FastMCP.
+- **Release-gate regression tests** (`tests/test_check_release_ready.py`,
+  4 tests): cover `_read_pyproject_version` for double-quoted, single-
+  quoted, and missing version lines, plus a positive test that pins the
+  preference for `tomllib` over the regex fallback.
+
+### Fixed
+- **Broken regex fallback in `scripts/check_release_ready.py:42`**: the
+  raw-string pattern used double-escaped backslashes (`\\s`), which inside
+  a raw string is a literal backslash followed by `s` rather than a
+  whitespace match. The fallback never matched real `pyproject.toml`
+  whitespace if `tomllib` parsing ever failed (e.g. on a future Python
+  variant without `tomllib`). The pattern is now a properly-escaped raw
+  string, and the new test file pins both quoting styles plus the missing-
+  version error path.
+
+### Notes
+- Test count moves from **437 → 444** (10 new tests, 0 regressions; 6 of
+  the new tests are the CLI surface, 4 are the release-gate regex
+  regression suite).
+- Backwards compatibility: `python -m pdf_mcp.server` continues to work
+  unchanged. The new `pdf-mcp serve` subcommand is a drop-in replacement.
+
 ## 1.2.18 - 2026-02-13
 
 ### Fixed
