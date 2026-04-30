@@ -34,7 +34,7 @@ jobs:
         run: |
           . .venv/bin/activate
           git fetch origin "${{ github.base_ref }}":"refs/remotes/origin/${{ github.base_ref }}" || true
-          FILES=$(git diff --name-only "origin/${{ github.base_ref }}...${{ github.sha }}" | grep -E '\.py$' || true)
+          FILES=$(git diff --name-only --diff-filter=ACMRTUXB "origin/${{ github.base_ref }}...${{ github.sha }}" | grep -E '\.py$' || true)
           if [ -z "$FILES" ]; then echo "ruff: no changed python files"; exit 0; fi
           ruff check $FILES
 
@@ -43,7 +43,7 @@ jobs:
           . .venv/bin/activate
           git fetch origin "${{ github.base_ref }}":"refs/remotes/origin/${{ github.base_ref }}" || true
           # Only check python files changed in the PR.
-          FILES=$(git diff --name-only "origin/${{ github.base_ref }}...${{ github.sha }}" | grep -E '\.py$' || true)
+          FILES=$(git diff --name-only --diff-filter=ACMRTUXB "origin/${{ github.base_ref }}...${{ github.sha }}" | grep -E '\.py$' || true)
           if [ -z "$FILES" ]; then echo "ruff-format: no changed python files"; exit 0; fi
           ruff format --check $FILES
 

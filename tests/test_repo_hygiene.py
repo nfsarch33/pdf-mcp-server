@@ -15,5 +15,6 @@ def test_lint_workflow_python_diff_filter_matches_dot_py_suffix():
     """The GitHub Actions diff filter must match changed Python files."""
     workflow = (ROOT / ".github" / "workflows" / "lint.yml").read_text()
 
+    assert workflow.count("--diff-filter=ACMRTUXB") == 2
     assert "grep -E '\\.py$'" in workflow
     assert "grep -E '\\\\.py$'" not in workflow
