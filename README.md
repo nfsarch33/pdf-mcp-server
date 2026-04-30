@@ -28,6 +28,32 @@ make test
 python -m pdf_mcp.server
 ```
 
+## CLI Usage (v1.3.0+)
+
+`pdf-mcp` now ships as a first-class CLI alongside the MCP server. Once installed
+(`uv tool install pdf-mcp`, `pip install pdf-mcp`, or `pip install -e .` from a
+checkout), the `pdf-mcp` binary is on your `$PATH`:
+
+```bash
+# Print version
+pdf-mcp --version
+
+# List available subcommands
+pdf-mcp --help
+
+# Run as an MCP server over stdio
+# (drop-in replacement for `python -m pdf_mcp.server`)
+pdf-mcp serve
+```
+
+The original `python -m pdf_mcp.server` invocation continues to work
+unchanged, so existing Cursor / Claude Desktop / CLI integrations do not
+need to be reconfigured. New verb groups (`form`, `pages`, `text`,
+`extract`, `annotate`, `sign`, `ai`) will land in subsequent v1.3.x
+releases — see the v1.3.0 sprint backlog in
+`session-handoffs/evidence/v257-w1-d0-foundation/pdf-mcp-server-2sprint-backlog.md`
+for the full roadmap.
+
 ## CI notes
 - Dependency Review requires GitHub Dependency Graph to be enabled in the repository settings.
 - AI Review is optional and only runs if you add the `OPENAI_API_KEY` repository secret.
@@ -217,7 +243,7 @@ Optional language packs: `chi_tra`, `jpn`, `kor` improve OCR for low-quality sca
 
 **Unified Text Extraction:**
 ```python
-extract_text(pdf_path, engine="auto", pages=None, include_confidence=False, 
+extract_text(pdf_path, engine="auto", pages=None, include_confidence=False,
              native_threshold=100, dpi=300, language="eng", min_confidence=0)
 ```
 - Engines: "native" (fast), "auto" (native→OCR), "smart" (per-page), "ocr"/"tesseract", "force_ocr"
@@ -378,9 +404,9 @@ make install-llm-models
 This handles Python venv, system packages, Ollama, GPU detection, and VLM runner generation for both macOS and WSL/Linux.
 
 ### Test Coverage
-- **273 tests** total (includes Tier 1/2 coverage + agentic features + multi-backend + e2e tests)
+- **444 tests** total (includes Tier 1/2 coverage + agentic features + multi-backend + e2e tests + v1.3.0 CLI surface)
 - All tests pass with Tesseract installed
-- 18 tests skip depending on which optional dependencies/backends are available
+- A small number of tests skip depending on which optional dependencies/backends are available
 
 ## Agent Extensions (v1.0.1+)
 
@@ -440,4 +466,3 @@ GNU AGPL-3.0, see `LICENSE`.
 
 ## Changelog
 See `CHANGELOG.md`.
-

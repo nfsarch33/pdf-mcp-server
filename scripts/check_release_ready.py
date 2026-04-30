@@ -39,7 +39,7 @@ def _read_pyproject_version(pyproject_path: Path) -> str:
         pass
 
     # Fallback: accept both double and single quoted versions.
-    m = re.search(r"(?m)^version\\s*=\\s*['\\\"]([^'\\\"]+)['\\\"]\\s*$", text)
+    m = re.search(r'(?m)^version\s*=\s*[\'"]([^\'"]+)[\'"]\s*$', text)
     if not m:
         raise RuntimeError("Could not find version in pyproject.toml")
     return m.group(1).strip()
@@ -60,9 +60,7 @@ def main() -> int:
     version = tag[1:]
     py_version = _read_pyproject_version(Path("pyproject.toml"))
     if py_version != version:
-        raise SystemExit(
-            f"Release gate failed: tag {tag} does not match pyproject.toml version {py_version}"
-        )
+        raise SystemExit(f"Release gate failed: tag {tag} does not match pyproject.toml version {py_version}")
 
     changelog = Path("CHANGELOG.md").read_text(encoding="utf-8")
     if not _changelog_has_version(changelog, version):
@@ -74,5 +72,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
-
