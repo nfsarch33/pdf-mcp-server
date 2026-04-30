@@ -48,6 +48,19 @@ This project follows Keep a Changelog and Semantic Versioning.
   4 tests): cover `_read_pyproject_version` for double-quoted, single-
   quoted, and missing version lines, plus a positive test that pins the
   preference for `tomllib` over the regex fallback.
+- **Single-source tool registry (`pdf_mcp/registry.py`, `tests/test_registry.py`)**:
+  New `register_tool(...)` API plus `PdfTool` / `VerbGroup` frozen
+  dataclasses and a `LazyCallable` resolver that defers import of
+  `pdf_mcp.pdf_tools` until first call. The registry now mirrors all 57
+  current MCP tool names in their original `pdf_mcp/server.py` order
+  and groups them across 10 verbs (form, pages, text, extract, sign,
+  metadata, ocr, ai, batch, security). 9 new tests pin uniqueness,
+  insertion order, lazy-import contract (`pdf_mcp.pdf_tools` must NOT
+  load on `import pdf_mcp.registry`), `LazyCallable` resolution +
+  caching, frozen-dataclass invariants, and that the registry order is
+  identical to `server.py`'s `@mcp.tool()` AST order. **Commit 1 of 4
+  for TICKET-05**: registry is intentionally NOT yet wired into
+  `pdf_mcp/server.py` or `pdf_mcp/cli.py`; that lands in PR #47-#49.
 
 ### Fixed
 - **Broken regex fallback in `scripts/check_release_ready.py:42`**: the
