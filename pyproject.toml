@@ -2,7 +2,7 @@
 name = "pdf-mcp"
 version = "1.2.18"
 description = "Local CLI and MCP server for PDF form filling, editing, OCR, and AI-assisted extraction"
-authors = [{ name = "Local User" }]
+authors = [{ name = "pdf-mcp maintainers" }]
 requires-python = ">=3.10"
 dependencies = [
     "mcp>=0.1.1",
@@ -35,10 +35,10 @@ requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-# Avoid setuptools flat-layout auto-discovery picking up repo-doc folders (e.g. PROJECT_MEMO).
+# Avoid setuptools flat-layout auto-discovery picking up repo-doc folders.
 where = ["."]
 include = ["pdf_mcp*"]
-exclude = ["PROJECT_MEMO*", "memories-and-kb*", "docs*", "scripts*", "tests*"]
+exclude = ["docs*", "scripts*", "tests*"]
 
 [tool.ruff]
 target-version = "py310"

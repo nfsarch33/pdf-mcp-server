@@ -16,6 +16,7 @@ This module provides PDF manipulation, OCR, and extraction capabilities:
 Version: see pdf_mcp.__version__ (single source: pyproject.toml)
 License: AGPL-3.0
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -95,10 +96,15 @@ except ImportError:
     _HAS_OLLAMA = False
 
 # LLM Backend Configuration
-# Priority: local > ollama > openai (local is free, no API costs)
+# Priority: local > ollama. Remote backends are explicit opt-in so PDF
+# content is not sent to a hosted model just because a key exists.
 LLM_BACKEND_LOCAL = "local"
 LLM_BACKEND_OLLAMA = "ollama"
 LLM_BACKEND_OPENAI = "openai"
+PDF_MCP_ENABLE_REMOTE_LLM_ENV = "PDF_MCP_ENABLE_REMOTE_LLM"
+PDF_MCP_ALLOW_REMOTE_LLM_FOR_SENSITIVE_ENV = "PDF_MCP_ALLOW_REMOTE_LLM_FOR_SENSITIVE"
+_REMOTE_LLM_BACKENDS = {LLM_BACKEND_OPENAI}
+_SENSITIVE_LLM_DATA_TYPES = {"passport"}
 
 # Import LLM configuration from llm_setup (DRY - single source of truth)
 from pdf_mcp import llm_setup
@@ -721,9 +727,7 @@ def fill_pdf_form(
 
     reader = PdfReader(str(src))
     if _has_xfa_form(reader):
-        raise PdfToolError(
-            "XFA forms are not supported. Convert to AcroForm or flatten first."
-        )
+        raise PdfToolError("XFA forms are not supported. Convert to AcroForm or flatten first.")
     raw_fields = reader.get_fields() or {}
     has_fields = bool(raw_fields)
     fill_stats = _compute_fill_stats(data, raw_fields)
@@ -752,9 +756,7 @@ def fill_pdf_form(
                     if actual != str(v):
                         mismatched.append(k)
                 if mismatched:
-                    raise PdfToolError(
-                        "fillpdf did not persist field values for: " + ", ".join(mismatched)
-                    )
+                    raise PdfToolError("fillpdf did not persist field values for: " + ", ".join(mismatched))
             except PdfToolError as exc:
                 # Fall back to pypdf path below.
                 logger.debug("fillpdf verification failed, falling back to pypdf: %s", exc)
@@ -805,9 +807,7 @@ def fill_pdf_form_any(
     dst = _prepare_output(output_path)
     reader = PdfReader(str(src))
     if _has_xfa_form(reader):
-        raise PdfToolError(
-            "XFA forms are not supported. Convert to AcroForm or flatten first."
-        )
+        raise PdfToolError("XFA forms are not supported. Convert to AcroForm or flatten first.")
     has_fields = bool(reader.get_fields())
 
     if has_fields:
@@ -1144,9 +1144,7 @@ def _validate_reorder_pages(pages: List[int], total: int) -> List[int]:
         converted.append(idx)
 
     if len(converted) != total:
-        raise PdfToolError(
-            "Reorder requires a complete page list matching the document length"
-        )
+        raise PdfToolError("Reorder requires a complete page list matching the document length")
 
     return converted
 
@@ -1210,6 +1208,7 @@ def _add_freetext_annotation(
         annots = ArrayObject(list(existing_obj))
     annots.append(annot_ref)
     page_obj[NameObject("/Annots")] = annots
+
 
 def redact_text_regex(
     input_path: str,
@@ -1349,9 +1348,7 @@ def update_text_annotation(
 
     reader = PdfReader(str(src))
     total = len(reader.pages)
-    page_indices = (
-        _to_zero_based_pages(pages, total) if pages else list(range(total))
-    )
+    page_indices = _to_zero_based_pages(pages, total) if pages else list(range(total))
 
     writer = PdfWriter()
     writer.clone_document_from_reader(reader)
@@ -1389,9 +1386,7 @@ def remove_text_annotation(
 
     reader = PdfReader(str(src))
     total = len(reader.pages)
-    page_indices = (
-        _to_zero_based_pages(pages, total) if pages else list(range(total))
-    )
+    page_indices = _to_zero_based_pages(pages, total) if pages else list(range(total))
 
     writer = PdfWriter()
     writer.clone_document_from_reader(reader)
@@ -1615,7 +1610,14 @@ def set_pdf_metadata(
     with dst.open("wb") as output_file:
         writer.write(output_file)
 
-    return {"output_path": str(dst), "updated": {k: v for k, v in {"title": title, "author": author, "subject": subject, "keywords": keywords}.items() if v is not None}}
+    return {
+        "output_path": str(dst),
+        "updated": {
+            k: v
+            for k, v in {"title": title, "author": author, "subject": subject, "keywords": keywords}.items()
+            if v is not None
+        },
+    }
 
 
 def sanitize_pdf_metadata(
@@ -2383,20 +2385,24 @@ def get_pdf_text_blocks(
                         for span in line.get("spans", []):
                             line_text += span.get("text", "")
                         if line_text.strip():
-                            block_info["lines"].append({
-                                "text": line_text,
-                                "bbox": line.get("bbox"),
-                            })
+                            block_info["lines"].append(
+                                {
+                                    "text": line_text,
+                                    "bbox": line.get("bbox"),
+                                }
+                            )
                     if block_info["lines"]:
                         page_data["blocks"].append(block_info)
 
                 elif block_type == 1:  # Image block
-                    page_data["blocks"].append({
-                        "type": "image",
-                        "bbox": block.get("bbox"),
-                        "width": block.get("width"),
-                        "height": block.get("height"),
-                    })
+                    page_data["blocks"].append(
+                        {
+                            "type": "image",
+                            "bbox": block.get("bbox"),
+                            "width": block.get("width"),
+                            "height": block.get("height"),
+                        }
+                    )
 
             page_blocks.append(page_data)
 
@@ -2507,9 +2513,7 @@ def extract_tables(
     if output_format not in ("list", "dict"):
         raise PdfToolError("output_format must be 'list' or 'dict'")
     if strategy not in _VALID_TABLE_STRATEGIES:
-        raise PdfToolError(
-            f"strategy must be one of {sorted(_VALID_TABLE_STRATEGIES)}"
-        )
+        raise PdfToolError(f"strategy must be one of {sorted(_VALID_TABLE_STRATEGIES)}")
 
     path = _ensure_file(pdf_path)
     doc = pymupdf.open(str(path))
@@ -2541,18 +2545,11 @@ def extract_tables(
                         continue
 
                     # Auto-retry with "text" strategy if collapsed (BUG-007)
-                    if (
-                        strategy != "text"
-                        and _is_collapsed_table(raw_data)
-                    ):
-                        text_tabs = _get_tables_list(
-                            page.find_tables(strategy="text")
-                        )
+                    if strategy != "text" and _is_collapsed_table(raw_data):
+                        text_tabs = _get_tables_list(page.find_tables(strategy="text"))
                         if text_tabs and len(text_tabs) > table_idx:
                             retry_data = text_tabs[table_idx].extract()
-                            if retry_data and not _is_collapsed_table(
-                                retry_data
-                            ):
+                            if retry_data and not _is_collapsed_table(retry_data):
                                 raw_data = retry_data
 
                     table_info: Dict[str, Any] = {
@@ -2563,15 +2560,9 @@ def extract_tables(
                     }
 
                     if output_format == "dict" and len(raw_data) > 1:
-                        headers = [
-                            str(h) if h else f"col_{i}"
-                            for i, h in enumerate(raw_data[0])
-                        ]
+                        headers = [str(h) if h else f"col_{i}" for i, h in enumerate(raw_data[0])]
                         table_info["headers"] = headers
-                        table_info["data"] = [
-                            {headers[i]: cell for i, cell in enumerate(row)}
-                            for row in raw_data[1:]
-                        ]
+                        table_info["data"] = [{headers[i]: cell for i, cell in enumerate(row)} for row in raw_data[1:]]
                     else:
                         table_info["data"] = raw_data
 
@@ -2689,23 +2680,27 @@ def extract_images(
                         with output_path.open("wb") as f:
                             f.write(img_bytes)
 
-                    extracted_images.append({
-                        "page": idx + 1,
-                        "image_index": img_idx,
-                        "xref": xref,
-                        "width": width,
-                        "height": height,
-                        "original_format": img_ext,
-                        "output_path": str(output_path),
-                    })
+                    extracted_images.append(
+                        {
+                            "page": idx + 1,
+                            "image_index": img_idx,
+                            "xref": xref,
+                            "width": width,
+                            "height": height,
+                            "original_format": img_ext,
+                            "output_path": str(output_path),
+                        }
+                    )
 
                 except Exception as e:
-                    extracted_images.append({
-                        "page": idx + 1,
-                        "image_index": img_idx,
-                        "xref": xref,
-                        "error": str(e),
-                    })
+                    extracted_images.append(
+                        {
+                            "page": idx + 1,
+                            "image_index": img_idx,
+                            "xref": xref,
+                            "error": str(e),
+                        }
+                    )
 
         return {
             "pdf_path": str(path),
@@ -2769,22 +2764,26 @@ def get_image_info(pdf_path: str, pages: Optional[List[int]] = None) -> Dict[str
                     img_rects = page.get_image_rects(xref)
                     positions = [list(r) for r in img_rects] if img_rects else []
 
-                    page_info["images"].append({
-                        "index": img_idx,
-                        "xref": xref,
-                        "width": width,
-                        "height": height,
-                        "format": img_ext,
-                        "colorspace": colorspace,
-                        "bits_per_component": bpc,
-                        "positions": positions,
-                    })
+                    page_info["images"].append(
+                        {
+                            "index": img_idx,
+                            "xref": xref,
+                            "width": width,
+                            "height": height,
+                            "format": img_ext,
+                            "colorspace": colorspace,
+                            "bits_per_component": bpc,
+                            "positions": positions,
+                        }
+                    )
                 except Exception as e:
-                    page_info["images"].append({
-                        "index": img_idx,
-                        "xref": xref,
-                        "error": str(e),
-                    })
+                    page_info["images"].append(
+                        {
+                            "index": img_idx,
+                            "xref": xref,
+                            "error": str(e),
+                        }
+                    )
 
             total_images += len(images)
             page_images.append(page_info)
@@ -2833,6 +2832,7 @@ def detect_form_fields(
 
     # Common form field label patterns
     import re
+
     label_patterns = [
         re.compile(r"^(name|full name|first name|last name)\s*:?\s*$", re.I),
         re.compile(r"^(date|dob|date of birth)\s*:?\s*$", re.I),
@@ -2936,10 +2936,12 @@ def detect_form_fields(
                             if abs(rect[3] - rect[1]) < 5:  # Nearly horizontal
                                 width = abs(rect[2] - rect[0])
                                 if width > 50:  # Minimum width
-                                    page_result["detected_underlines"].append({
-                                        "bbox": list(rect),
-                                        "width": width,
-                                    })
+                                    page_result["detected_underlines"].append(
+                                        {
+                                            "bbox": list(rect),
+                                            "width": width,
+                                        }
+                                    )
             except Exception:
                 pass  # get_drawings might not be available in all PyMuPDF versions
 
@@ -2954,12 +2956,14 @@ def detect_form_fields(
                         height = abs(rect[3] - rect[1])
                         # Multi-line: wider than 100pt and taller than 2x line height
                         if width > 100 and height > line_height * 2:
-                            page_result["detected_multiline_areas"].append({
-                                "bbox": list(rect),
-                                "width": width,
-                                "height": height,
-                                "estimated_lines": max(1, int(height / line_height)),
-                            })
+                            page_result["detected_multiline_areas"].append(
+                                {
+                                    "bbox": list(rect),
+                                    "width": width,
+                                    "height": height,
+                                    "estimated_lines": max(1, int(height / line_height)),
+                                }
+                            )
             except Exception:
                 pass
 
@@ -3159,9 +3163,11 @@ def detect_pii_patterns(
     finally:
         doc.close()
 
+
 # Optional pyzbar for barcode detection
 try:
     from pyzbar import pyzbar
+
     _HAS_PYZBAR = True
 except ImportError:
     _HAS_PYZBAR = False
@@ -3195,7 +3201,7 @@ def extract_links(
             page_indices = _to_zero_based_pages(pages, total_pages)
         else:
             page_indices = list(range(total_pages))
-        
+
         all_links = []
         link_type_counts: Dict[str, int] = {}
 
@@ -3231,7 +3237,7 @@ def extract_links(
                     link_info["type"] = "unknown"
 
                 all_links.append(link_info)
-                
+
                 # Count by type
                 link_type = link_info["type"]
                 link_type_counts[link_type] = link_type_counts.get(link_type, 0) + 1
@@ -3275,9 +3281,9 @@ def optimize_pdf(
 
     # Quality settings map to PyMuPDF garbage collection levels
     quality_map = {
-        "low": 4,      # Maximum compression
-        "medium": 3,   # Balanced
-        "high": 2,     # Minimal compression
+        "low": 4,  # Maximum compression
+        "medium": 3,  # Balanced
+        "high": 2,  # Minimal compression
     }
     garbage_level = quality_map.get(quality, 3)
 
@@ -3343,23 +3349,23 @@ def detect_barcodes(
             page_indices = _to_zero_based_pages(pages, total_pages)
         else:
             page_indices = list(range(total_pages))
-        
+
         all_barcodes = []
 
         if _HAS_PYZBAR:
             for page_idx in page_indices:
                 page = doc[page_idx]
-                
+
                 # Render page to image
                 mat = pymupdf.Matrix(dpi / 72, dpi / 72)
                 pix = page.get_pixmap(matrix=mat)
-                
+
                 # Convert to PIL Image for pyzbar
                 img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-                
+
                 # Detect barcodes
                 decoded_objects = pyzbar.decode(img)
-                
+
                 for obj in decoded_objects:
                     barcode_info = {
                         "page": page_idx + 1,
@@ -3416,15 +3422,17 @@ def compare_pdfs(
 
     try:
         differences = []
-        
+
         # Compare page count
         if len(doc1) != len(doc2):
-            differences.append({
-                "type": "page_count",
-                "pdf1_pages": len(doc1),
-                "pdf2_pages": len(doc2),
-                "description": f"Page count differs: {len(doc1)} vs {len(doc2)}",
-            })
+            differences.append(
+                {
+                    "type": "page_count",
+                    "pdf1_pages": len(doc1),
+                    "pdf2_pages": len(doc2),
+                    "description": f"Page count differs: {len(doc1)} vs {len(doc2)}",
+                }
+            )
 
         # Compare text content per page
         if compare_text:
@@ -3432,15 +3440,17 @@ def compare_pdfs(
             for page_idx in range(min_pages):
                 text1 = doc1[page_idx].get_text().strip()
                 text2 = doc2[page_idx].get_text().strip()
-                
+
                 if text1 != text2:
-                    differences.append({
-                        "type": "text",
-                        "page": page_idx + 1,
-                        "description": f"Text differs on page {page_idx + 1}",
-                        "pdf1_text_length": len(text1),
-                        "pdf2_text_length": len(text2),
-                    })
+                    differences.append(
+                        {
+                            "type": "text",
+                            "page": page_idx + 1,
+                            "description": f"Text differs on page {page_idx + 1}",
+                            "pdf1_text_length": len(text1),
+                            "pdf2_text_length": len(text2),
+                        }
+                    )
 
         # Compare images if requested
         if compare_images:
@@ -3448,15 +3458,17 @@ def compare_pdfs(
             for page_idx in range(min_pages):
                 images1 = doc1[page_idx].get_images()
                 images2 = doc2[page_idx].get_images()
-                
+
                 if len(images1) != len(images2):
-                    differences.append({
-                        "type": "images",
-                        "page": page_idx + 1,
-                        "description": f"Image count differs on page {page_idx + 1}",
-                        "pdf1_images": len(images1),
-                        "pdf2_images": len(images2),
-                    })
+                    differences.append(
+                        {
+                            "type": "images",
+                            "page": page_idx + 1,
+                            "description": f"Image count differs on page {page_idx + 1}",
+                            "pdf1_images": len(images1),
+                            "pdf2_images": len(images2),
+                        }
+                    )
 
         # Generate summary
         are_identical = len(differences) == 0
@@ -3546,19 +3558,23 @@ def batch_process(
                 output_file = out_dir / f"optimized_{Path(pdf_path).name}"
                 result = optimize_pdf(pdf_path, str(output_file), **kwargs)
 
-            results.append({
-                "pdf_path": pdf_path,
-                "success": True,
-                "result": result,
-            })
+            results.append(
+                {
+                    "pdf_path": pdf_path,
+                    "success": True,
+                    "result": result,
+                }
+            )
             successful += 1
 
         except Exception as e:
-            results.append({
-                "pdf_path": pdf_path,
-                "success": False,
-                "error": str(e),
-            })
+            results.append(
+                {
+                    "pdf_path": pdf_path,
+                    "success": False,
+                    "error": str(e),
+                }
+            )
             failed += 1
 
     return {
@@ -3596,16 +3612,16 @@ def _extract_text_native_impl(pdf_path: str, pages: Optional[List[int]] = None) 
             text = page.get_text("text")
             char_count = len(text.strip())
 
-            extracted_pages.append({
-                "page": idx + 1,
-                "text": text,
-                "char_count": char_count,
-            })
+            extracted_pages.append(
+                {
+                    "page": idx + 1,
+                    "text": text,
+                    "char_count": char_count,
+                }
+            )
             total_chars += char_count
 
-        full_text = "\n\n--- Page Break ---\n\n".join(
-            p["text"] for p in extracted_pages
-        )
+        full_text = "\n\n--- Page Break ---\n\n".join(p["text"] for p in extracted_pages)
 
         return {
             "pdf_path": str(path),
@@ -3698,9 +3714,7 @@ def _extract_text_ocr_impl(
             extracted_pages.append(page_result)
             total_chars += len(final_text)
 
-        full_text = "\n\n--- Page Break ---\n\n".join(
-            p["text"] for p in extracted_pages if p["text"]
-        )
+        full_text = "\n\n--- Page Break ---\n\n".join(p["text"] for p in extracted_pages if p["text"])
 
         if ocr_used and native_used:
             method = "hybrid"
@@ -3792,9 +3806,7 @@ def _extract_text_smart_impl(
             extracted_pages.append(page_result)
             total_chars += len(final_text)
 
-        full_text = "\n\n--- Page Break ---\n\n".join(
-            p["text"] for p in extracted_pages if p["text"]
-        )
+        full_text = "\n\n--- Page Break ---\n\n".join(p["text"] for p in extracted_pages if p["text"])
 
         return {
             "pdf_path": str(path),
@@ -3821,9 +3833,7 @@ def _extract_text_with_confidence_impl(
 ) -> Dict[str, Any]:
     """Internal: Extract text with OCR confidence scores."""
     if not _HAS_TESSERACT:
-        raise PdfToolError(
-            "Tesseract OCR not available. Install pytesseract and tesseract-ocr."
-        )
+        raise PdfToolError("Tesseract OCR not available. Install pytesseract and tesseract-ocr.")
 
     path = _ensure_file(pdf_path)
     doc = pymupdf.open(str(path))
@@ -3871,13 +3881,15 @@ def _extract_text_with_confidence_impl(
             page_text = " ".join(page_text_parts)
             avg_conf = sum(w["confidence"] for w in page_words) / len(page_words) if page_words else 0
 
-            page_details.append({
-                "page": idx + 1,
-                "text": page_text,
-                "word_count": len(page_words),
-                "average_confidence": round(avg_conf, 2),
-                "words": page_words,
-            })
+            page_details.append(
+                {
+                    "page": idx + 1,
+                    "text": page_text,
+                    "word_count": len(page_words),
+                    "average_confidence": round(avg_conf, 2),
+                    "words": page_words,
+                }
+            )
             all_text_parts.append(page_text)
 
         overall_avg = confidence_sum / total_words if total_words > 0 else 0
@@ -3933,12 +3945,14 @@ def _split_pdf_by_bookmarks_impl(pdf_path: str, output_dir: str) -> Dict[str, An
             try:
                 new_doc.insert_pdf(doc, from_page=start_page - 1, to_page=end_page - 1)
                 new_doc.save(str(output_file))
-                files_created.append({
-                    "path": str(output_file),
-                    "title": title,
-                    "page_range": f"{start_page}-{end_page}",
-                    "page_count": end_page - start_page + 1,
-                })
+                files_created.append(
+                    {
+                        "path": str(output_file),
+                        "title": title,
+                        "page_range": f"{start_page}-{end_page}",
+                        "page_count": end_page - start_page + 1,
+                    }
+                )
             finally:
                 new_doc.close()
 
@@ -3976,12 +3990,14 @@ def _split_pdf_by_pages_impl(
             try:
                 new_doc.insert_pdf(doc, from_page=start, to_page=end)
                 new_doc.save(str(output_file))
-                files_created.append({
-                    "path": str(output_file),
-                    "title": f"Pages {start + 1}-{end + 1}",
-                    "page_range": f"{start + 1}-{end + 1}",
-                    "page_count": end - start + 1,
-                })
+                files_created.append(
+                    {
+                        "path": str(output_file),
+                        "title": f"Pages {start + 1}-{end + 1}",
+                        "page_range": f"{start + 1}-{end + 1}",
+                        "page_count": end - start + 1,
+                    }
+                )
             finally:
                 new_doc.close()
 
@@ -4108,7 +4124,7 @@ def export_pdf(
 
     src = _ensure_file(pdf_path)
     dst = _prepare_output(output_path)
-    
+
     # Extract text using unified extract_text
     text_result = extract_text(str(src), pages=pages, engine=engine, dpi=dpi, language=language)
 
@@ -4156,11 +4172,48 @@ def _check_local_model_server() -> bool:
         return False
 
 
+def _env_flag(name: str) -> bool:
+    """Return True when an environment flag is set to a common truthy value."""
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _is_remote_llm_backend(backend: Optional[str]) -> bool:
+    return bool(backend) and backend in _REMOTE_LLM_BACKENDS
+
+
+def _remote_llm_sensitive_block_reason(
+    backend: Optional[str],
+    *,
+    data_type: Optional[str] = None,
+    operation: Optional[str] = None,
+) -> Optional[str]:
+    """Return a user-facing reason when remote LLM use is blocked.
+
+    PDFs often contain regulated personal data.  Local/Ollama backends stay
+    available, but hosted model providers require explicit opt-in for
+    sensitive flows so users don't accidentally trigger provider policy blocks
+    or send identity documents off machine.
+    """
+    if not _is_remote_llm_backend(backend):
+        return None
+
+    sensitive = (data_type or "").lower() in _SENSITIVE_LLM_DATA_TYPES or operation == "form_field_mapping"
+    if not sensitive or _env_flag(PDF_MCP_ALLOW_REMOTE_LLM_FOR_SENSITIVE_ENV):
+        return None
+
+    scope = f"data_type='{data_type}'" if data_type else operation or "this operation"
+    return (
+        f"remote LLM backend '{backend}' blocked for sensitive {scope}. "
+        f"Use local/Ollama, or set {PDF_MCP_ALLOW_REMOTE_LLM_FOR_SENSITIVE_ENV}=1 to opt in."
+    )
+
+
 def _get_llm_backend() -> str:
     """
     Determine which LLM backend to use.
-    
-    Priority: local > ollama > openai (local is free, no API costs)
+
+    Priority: local > ollama. OpenAI is available only through an explicit
+    override or PDF_MCP_ENABLE_REMOTE_LLM=1.
     Can be overridden with PDF_MCP_LLM_BACKEND environment variable.
     """
     # Check for explicit override
@@ -4168,20 +4221,26 @@ def _get_llm_backend() -> str:
     if override in (LLM_BACKEND_LOCAL, LLM_BACKEND_OLLAMA, LLM_BACKEND_OPENAI):
         logger.debug("LLM backend override via env: %s", override)
         return override
-    
+
     # Auto-detect: prefer local (free) over paid APIs
     if _check_local_model_server():
         logger.debug("LLM backend selected: local (auto-detected)")
         return LLM_BACKEND_LOCAL
-    
+
     if _HAS_OLLAMA:
         logger.debug("LLM backend selected: ollama (local unavailable)")
         return LLM_BACKEND_OLLAMA
-    
-    if _HAS_OPENAI and os.environ.get("OPENAI_API_KEY"):
+
+    if _HAS_OPENAI and os.environ.get("OPENAI_API_KEY") and _env_flag(PDF_MCP_ENABLE_REMOTE_LLM_ENV):
         logger.debug("LLM backend selected: openai (local/ollama unavailable)")
         return LLM_BACKEND_OPENAI
-    
+
+    if _HAS_OPENAI and os.environ.get("OPENAI_API_KEY"):
+        logger.debug(
+            "OpenAI backend available but remote auto-selection is disabled; set %s=1 to opt in",
+            PDF_MCP_ENABLE_REMOTE_LLM_ENV,
+        )
+
     logger.debug("No LLM backend available")
     return ""  # No backend available
 
@@ -4193,29 +4252,29 @@ def _call_local_llm(
 ) -> Optional[str]:
     """
     Call local model server at localhost:8100 via OpenAI-compatible chat API.
-    
+
     Supports vLLM, MLX, and any OpenAI-compatible server.
-    
+
     Args:
         prompt: The user prompt to send
         system_prompt: Optional system prompt
         model: Model to use (default: auto-detect from server, fallback to LOCAL_VLM_MODEL)
-    
+
     Returns:
         LLM response content or None if unavailable
     """
     if not _HAS_REQUESTS:
         return None
-    
+
     # Build messages array (OpenAI chat format)
     messages = []
     if system_prompt:
         messages.append({"role": "system", "content": system_prompt})
     messages.append({"role": "user", "content": prompt})
-    
+
     # Resolve model name: explicit > auto-detect from server > env default
     model_name = model or _resolve_local_model_name()
-    
+
     try:
         response = _requests.post(
             f"{LOCAL_MODEL_SERVER_URL}/v1/chat/completions",
@@ -4240,7 +4299,7 @@ def _call_local_llm(
 
 def _resolve_local_model_name() -> str:
     """Resolve the model name for the local server.
-    
+
     Auto-detects from the /v1/models endpoint if available,
     otherwise falls back to LOCAL_VLM_MODEL env/default.
     """
@@ -4265,33 +4324,33 @@ def _call_ollama_llm(
 ) -> Optional[str]:
     """
     Call Ollama LLM with the given prompt.
-    
+
     Uses Qwen3-VL by default for vision-language capabilities
     (OCR accuracy improvement on PDF page images).
-    
+
     Qwen3 models use a "thinking" mode by default that generates
     internal reasoning tokens before the answer.  We set a generous
     num_predict budget (4096) and keep_alive (10m) so the model has
     room for thinking tokens plus the actual response, and does not
     get unloaded between requests in the same session.
-    
+
     Args:
         prompt: The user prompt to send
         system_prompt: Optional system prompt for context
         model: Ollama model to use (default: qwen3-vl:8b)
-    
+
     Returns:
         LLM response content or None if unavailable
     """
     if not _HAS_OLLAMA:
         return None
-    
+
     try:
         messages = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": prompt})
-        
+
         response = _ollama.chat(
             model=model,
             messages=messages,
@@ -4378,7 +4437,9 @@ def _call_llm(
     for attempt in range(max_retries + 1):
         if selected_backend == LLM_BACKEND_LOCAL:
             result = _call_local_llm(
-                prompt, system_prompt, model if model != "auto" else None,
+                prompt,
+                system_prompt,
+                model if model != "auto" else None,
             )
         elif selected_backend == LLM_BACKEND_OLLAMA:
             ollama_model = model if model != "auto" else llm_setup.get_ollama_model_name()
@@ -4386,7 +4447,10 @@ def _call_llm(
         elif selected_backend == LLM_BACKEND_OPENAI:
             openai_model = model if model != "auto" else "gpt-4o-mini"
             result = _call_openai_llm(
-                prompt, system_prompt, openai_model, temperature,
+                prompt,
+                system_prompt,
+                openai_model,
+                temperature,
             )
         else:
             return None
@@ -4395,16 +4459,19 @@ def _call_llm(
             return result
 
         if attempt < max_retries:
-            delay = 1.0 * (2 ** attempt)  # Exponential backoff: 1s, 2s, 4s...
+            delay = 1.0 * (2**attempt)  # Exponential backoff: 1s, 2s, 4s...
             logger.debug(
                 "LLM call returned None (attempt %d/%d), retrying in %.1fs",
-                attempt + 1, max_retries + 1, delay,
+                attempt + 1,
+                max_retries + 1,
+                delay,
             )
             time.sleep(delay)
 
     logger.debug(
         "LLM call failed after %d attempts on '%s' backend",
-        max_retries + 1, selected_backend,
+        max_retries + 1,
+        selected_backend,
     )
     return None
 
@@ -4412,7 +4479,7 @@ def _call_llm(
 def get_llm_backend_info() -> Dict[str, Any]:
     """
     Get information about available LLM backends.
-    
+
     Returns:
         Dict with backend availability, current selection, and server version
     """
@@ -4435,9 +4502,13 @@ def get_llm_backend_info() -> Dict[str, Any]:
             "openai": {
                 "available": _HAS_OPENAI and bool(os.environ.get("OPENAI_API_KEY")),
                 "cost": "paid (per token)",
+                "auto_select_enabled": _env_flag(PDF_MCP_ENABLE_REMOTE_LLM_ENV),
+                "sensitive_flows_enabled": _env_flag(PDF_MCP_ALLOW_REMOTE_LLM_FOR_SENSITIVE_ENV),
             },
         },
         "override_env": "PDF_MCP_LLM_BACKEND",
+        "remote_auto_select_env": PDF_MCP_ENABLE_REMOTE_LLM_ENV,
+        "remote_sensitive_opt_in_env": PDF_MCP_ALLOW_REMOTE_LLM_FOR_SENSITIVE_ENV,
     }
 
 
@@ -4454,7 +4525,7 @@ def auto_fill_pdf_form(
     This function analyzes form field names and source data keys to create
     intelligent mappings, even when names don't exactly match. For example,
     it can map "full_name" in the source to "Name" in the form.
-    
+
     Uses local VLM by default (free, no API costs). Falls back to Ollama or OpenAI.
 
     Args:
@@ -4505,8 +4576,11 @@ def auto_fill_pdf_form(
 
     # If LLM available and there are unmapped fields, use LLM for intelligent mapping
     llm_mappings = {}
-    unmapped_source_keys = [k for k in source_data.keys() if _normalize_field_key(k) not in 
-                           [_normalize_field_key(f) for f in direct_mappings.keys()]]
+    unmapped_source_keys = [
+        k
+        for k in source_data.keys()
+        if _normalize_field_key(k) not in [_normalize_field_key(f) for f in direct_mappings.keys()]
+    ]
     unmapped_fields = [f for f in field_names if f not in direct_mappings]
 
     used_backend = None
@@ -4517,7 +4591,18 @@ def auto_fill_pdf_form(
             return {
                 "error": "No LLM backend available. Options: start local model server, install ollama, or set OPENAI_API_KEY",
                 "hint": "Start local server: cd pdf-mcp-server && ./scripts/run_local_vlm.sh",
-                "partial_mappings": direct_mappings
+                "partial_mappings": direct_mappings,
+            }
+
+        block_reason = _remote_llm_sensitive_block_reason(
+            selected_backend,
+            operation="form_field_mapping",
+        )
+        if block_reason:
+            return {
+                "error": block_reason,
+                "hint": "Use backend='local' or backend='ollama' for form data, or explicitly opt in to remote sensitive processing.",
+                "partial_mappings": direct_mappings,
             }
 
         # Build LLM prompt for intelligent mapping
@@ -4557,7 +4642,7 @@ Only include mappings you're confident about."""
         return {
             "error": "Could not map any source data to form fields",
             "form_fields": field_names,
-            "source_keys": list(source_data.keys())
+            "source_keys": list(source_data.keys()),
         }
 
     # Fill the form
@@ -4747,6 +4832,7 @@ def _vlm_field_consensus(
 
         # Find majority via counter
         from collections import Counter
+
         counts = Counter(values)
         best_norm, best_count = counts.most_common(1)[0]
 
@@ -4889,8 +4975,7 @@ def _extract_mrz_lines(text: str) -> Optional[tuple]:
 
     # Try TD1 (ID card, 3x30) -- exact match
     for i in range(len(candidates) - 2):
-        if (len(candidates[i]) == 30 and len(candidates[i + 1]) == 30
-                and len(candidates[i + 2]) == 30):
+        if len(candidates[i]) == 30 and len(candidates[i + 1]) == 30 and len(candidates[i + 2]) == 30:
             return (candidates[i], candidates[i + 1], candidates[i + 2])
 
     # Try TD1 with tolerance (28-32, normalize to 30)
@@ -4955,9 +5040,7 @@ def _correct_chinese_passport_authority(
         "外交部",
     ]
     if any(ind in authority.lower() for ind in mfa_indicators):
-        extracted_data["issuing_authority"] = (
-            "National Immigration Administration, PRC"
-        )
+        extracted_data["issuing_authority"] = "National Immigration Administration, PRC"
         confidence["issuing_authority"] = 0.5  # Lower confidence for corrected
 
 
@@ -4979,9 +5062,7 @@ def _derive_issue_from_expiry(expiry_date: "date") -> "date":
         return expiry_plus_one.replace(year=expiry_plus_one.year - 10)
     except ValueError:
         # Handle Feb 29 -> Feb 28 for non-leap target year
-        return expiry_plus_one.replace(
-            year=expiry_plus_one.year - 10, month=2, day=28
-        )
+        return expiry_plus_one.replace(year=expiry_plus_one.year - 10, month=2, day=28)
 
 
 def _cross_validate_passport_dates(
@@ -5053,9 +5134,7 @@ def _cross_validate_passport_dates(
             issue_plus_10 = issue_date.replace(year=issue_date.year + 10)
         except ValueError:
             # Feb 29 -> try Feb 28
-            issue_plus_10 = issue_date.replace(
-                year=issue_date.year + 10, month=2, day=28
-            )
+            issue_plus_10 = issue_date.replace(year=issue_date.year + 10, month=2, day=28)
 
         if issue_plus_10 == expiry_date:
             # VLM likely derived issue = expiry - 10 years; correct by +1 day
@@ -5159,28 +5238,32 @@ def _extract_passport_fields(full_text: str) -> tuple[Dict[str, Any], Dict[str, 
             birth_date = _parse_mrz_date(birth_raw)
             expiry_date = _parse_mrz_date(expiry_raw, is_expiry=True)
 
-            extracted.update({
-                "passport_number": passport_number or None,
-                "issuing_country": issuing_country or None,
-                "nationality": nationality or None,
-                "surname": surname or None,
-                "given_names": given_names or None,
-                "birth_date": birth_date or birth_raw,
-                "sex": sex or None,
-                "expiry_date": expiry_date or expiry_raw,
-                "personal_number": personal_number or None,
-            })
-            confidence.update({
-                "passport_number": 0.95 if pn_valid else 0.7,
-                "issuing_country": 0.8,
-                "nationality": 0.8,
-                "surname": max(0.3, 0.75 - surname_penalty),
-                "given_names": max(0.3, 0.75 - given_penalty),
-                "birth_date": 0.95 if bd_valid else 0.7,
-                "sex": 0.9,
-                "expiry_date": 0.95 if ed_valid else 0.7,
-                "personal_number": 0.6,
-            })
+            extracted.update(
+                {
+                    "passport_number": passport_number or None,
+                    "issuing_country": issuing_country or None,
+                    "nationality": nationality or None,
+                    "surname": surname or None,
+                    "given_names": given_names or None,
+                    "birth_date": birth_date or birth_raw,
+                    "sex": sex or None,
+                    "expiry_date": expiry_date or expiry_raw,
+                    "personal_number": personal_number or None,
+                }
+            )
+            confidence.update(
+                {
+                    "passport_number": 0.95 if pn_valid else 0.7,
+                    "issuing_country": 0.8,
+                    "nationality": 0.8,
+                    "surname": max(0.3, 0.75 - surname_penalty),
+                    "given_names": max(0.3, 0.75 - given_penalty),
+                    "birth_date": 0.95 if bd_valid else 0.7,
+                    "sex": 0.9,
+                    "expiry_date": 0.95 if ed_valid else 0.7,
+                    "personal_number": 0.6,
+                }
+            )
     elif mrz and len(mrz) == 3 and len(mrz[0]) == 30:
         # TD1 ID card format (3x30)
         line1, line2, line3 = mrz
@@ -5203,27 +5286,31 @@ def _extract_passport_fields(full_text: str) -> tuple[Dict[str, Any], Dict[str, 
         birth_date = _parse_mrz_date(birth_raw)
         expiry_date = _parse_mrz_date(expiry_raw, is_expiry=True)
 
-        extracted.update({
-            "document_type": doc_code or "ID",
-            "passport_number": doc_number or None,
-            "issuing_country": issuing_country or None,
-            "nationality": nationality or None,
-            "surname": surname or None,
-            "given_names": given_names or None,
-            "birth_date": birth_date or birth_raw,
-            "sex": sex or None,
-            "expiry_date": expiry_date or expiry_raw,
-        })
-        confidence.update({
-            "passport_number": 0.8,
-            "issuing_country": 0.8,
-            "nationality": 0.8,
-            "surname": max(0.3, 0.75 - surname_penalty),
-            "given_names": max(0.3, 0.75 - given_penalty),
-            "birth_date": 0.8,
-            "sex": 0.9,
-            "expiry_date": 0.8,
-        })
+        extracted.update(
+            {
+                "document_type": doc_code or "ID",
+                "passport_number": doc_number or None,
+                "issuing_country": issuing_country or None,
+                "nationality": nationality or None,
+                "surname": surname or None,
+                "given_names": given_names or None,
+                "birth_date": birth_date or birth_raw,
+                "sex": sex or None,
+                "expiry_date": expiry_date or expiry_raw,
+            }
+        )
+        confidence.update(
+            {
+                "passport_number": 0.8,
+                "issuing_country": 0.8,
+                "nationality": 0.8,
+                "surname": max(0.3, 0.75 - surname_penalty),
+                "given_names": max(0.3, 0.75 - given_penalty),
+                "birth_date": 0.8,
+                "sex": 0.9,
+                "expiry_date": 0.8,
+            }
+        )
 
     def _label_value(patterns: list[str]) -> Optional[str]:
         for pattern in patterns:
@@ -5233,41 +5320,51 @@ def _extract_passport_fields(full_text: str) -> tuple[Dict[str, Any], Dict[str, 
         return None
 
     if not extracted.get("surname"):
-        surname_value = _label_value([
-            r"(?:surname|last name)\s*[:\-]?\s*([^\n\r]+)",
-        ])
+        surname_value = _label_value(
+            [
+                r"(?:surname|last name)\s*[:\-]?\s*([^\n\r]+)",
+            ]
+        )
         if surname_value:
             extracted["surname"] = surname_value
             confidence["surname"] = 0.55
 
     if not extracted.get("given_names"):
-        given_value = _label_value([
-            r"(?:given names?|first name|forename)\s*[:\-]?\s*([^\n\r]+)",
-        ])
+        given_value = _label_value(
+            [
+                r"(?:given names?|first name|forename)\s*[:\-]?\s*([^\n\r]+)",
+            ]
+        )
         if given_value:
             extracted["given_names"] = given_value
             confidence["given_names"] = 0.55
 
     if not extracted.get("nationality"):
-        nationality_value = _label_value([
-            r"(?:nationality)\s*[:\-]?\s*([^\n\r]+)",
-        ])
+        nationality_value = _label_value(
+            [
+                r"(?:nationality)\s*[:\-]?\s*([^\n\r]+)",
+            ]
+        )
         if nationality_value:
             extracted["nationality"] = nationality_value
             confidence["nationality"] = 0.55
 
     if not extracted.get("issuing_country"):
-        issuing_country_value = _label_value([
-            r"(?:issuing country|country of issue)\s*[:\-]?\s*([^\n\r]+)",
-        ])
+        issuing_country_value = _label_value(
+            [
+                r"(?:issuing country|country of issue)\s*[:\-]?\s*([^\n\r]+)",
+            ]
+        )
         if issuing_country_value:
             extracted["issuing_country"] = issuing_country_value
             confidence["issuing_country"] = 0.55
 
     if not extracted.get("passport_number"):
-        passport_number_value = _label_value([
-            r"(?:passport number|passport no\.?|document number)\s*[:\-]?\s*([^\n\r]+)",
-        ])
+        passport_number_value = _label_value(
+            [
+                r"(?:passport number|passport no\.?|document number)\s*[:\-]?\s*([^\n\r]+)",
+            ]
+        )
         if passport_number_value:
             # Post-process: strip common prefixes (PASSPORT, P, country codes, pipes)
             cleaned_pn = passport_number_value.replace("<", "").strip()
@@ -5329,7 +5426,7 @@ def extract_structured_data(
 
     Supports common document types (invoice, receipt, contract) with
     pre-defined extraction patterns, or custom schemas for specific needs.
-    
+
     Uses local VLM by default (free, no API costs). Falls back to Ollama or OpenAI.
 
     Args:
@@ -5380,7 +5477,12 @@ def extract_structured_data(
         # Also request passport_number if MRZ parsing failed to extract it.
         used_backend = None
         selected_backend = backend or _get_llm_backend()
+        llm_skipped = None
         if selected_backend:
+            llm_skipped = _remote_llm_sensitive_block_reason(
+                selected_backend,
+                data_type="passport",
+            )
             # Fields that always benefit from VLM
             viz_fields = ["issue_date", "issuing_authority", "place_of_birth"]
             # Also request passport_number if MRZ failed to extract it
@@ -5391,11 +5493,8 @@ def extract_structured_data(
                 viz_fields.append("surname")
             if confidence.get("given_names", 0) < 0.7:
                 viz_fields.append("given_names")
-            fields_needed = [
-                f for f in viz_fields
-                if f not in extracted_data or confidence.get(f, 0) < 0.7
-            ]
-            if fields_needed:
+            fields_needed = [f for f in viz_fields if f not in extracted_data or confidence.get(f, 0) < 0.7]
+            if fields_needed and not llm_skipped:
                 # Build context from MRZ-derived data for cross-validation
                 mrz_context = ""
                 if extracted_data.get("expiry_date"):
@@ -5427,9 +5526,7 @@ def extract_structured_data(
                 n_runs = max(1, consensus_runs)
                 parsed_responses: List[Dict] = []
                 for _run_idx in range(n_runs):
-                    llm_response = _call_llm(
-                        prompt, system_prompt, model=model, backend=selected_backend
-                    )
+                    llm_response = _call_llm(prompt, system_prompt, model=model, backend=selected_backend)
                     if llm_response:
                         try:
                             json_str = llm_response
@@ -5451,10 +5548,7 @@ def extract_structured_data(
                         # Skip VLM null-strings ("NULL", "None", etc.)
                         if _is_vlm_null_string(value):
                             continue
-                        if value is not None and (
-                            key not in extracted_data
-                            or confidence.get(key, 0) < 0.7
-                        ):
+                        if value is not None and (key not in extracted_data or confidence.get(key, 0) < 0.7):
                             extracted_data[key] = value
                             confidence[key] = llm_conf.get(key, 0.85)
                     method = "passport+llm"
@@ -5477,6 +5571,7 @@ def extract_structured_data(
             "data_type": data_type,
             "backend": used_backend,
             "backend_available": selected_backend if selected_backend else None,
+            **({"llm_skipped": llm_skipped} if llm_skipped else {}),
         }
 
     # Define patterns for common data types
@@ -5529,7 +5624,7 @@ def extract_structured_data(
                     pattern += r"(\d{1,2}[\s/-]\w+[\s/-]\d{2,4}|\w+\s+\d{1,2},?\s+\d{4})"
                 else:
                     pattern += r"([^\n]+)"
-                
+
                 match = re.search(pattern, full_text, re.IGNORECASE)
                 if match:
                     extracted_data[field] = match.group(1).strip()
@@ -5564,7 +5659,7 @@ Return a JSON object with the extracted values."""
                     elif "```" in json_str:
                         json_str = json_str.split("```")[1].split("```")[0]
                     llm_data = json.loads(json_str.strip())
-                    
+
                     # Merge LLM data with pattern data (patterns take precedence)
                     for key, value in llm_data.items():
                         if key not in extracted_data and value is not None:
@@ -5587,25 +5682,53 @@ Return a JSON object with the extracted values."""
 
 # Phone pattern requires at least one separator to avoid matching bare
 # reference numbers like "1950687535" (BUG-008).
-_PHONE_PATTERN = re.compile(
-    r"\b(?:\+?1[-.\s])?\(?[0-9]{3}\)?[-.\s][0-9]{3}[-.\s]?[0-9]{4}\b"
-)
+_PHONE_PATTERN = re.compile(r"\b(?:\+?1[-.\s])?\(?[0-9]{3}\)?[-.\s][0-9]{3}[-.\s]?[0-9]{4}\b")
 
 # Individual words that are never person names (used in name filtering).
 _NON_NAME_WORDS = frozenset(
     w.lower()
     for w in [
         # Locations / orgs
-        "Department", "Affairs", "Ministry", "Government", "Authority",
+        "Department",
+        "Affairs",
+        "Ministry",
+        "Government",
+        "Authority",
         # Document structure
-        "Page", "Break", "Section", "Appendix", "Attachment", "Record",
-        "Summary", "Total", "Reference", "Number", "Description",
+        "Page",
+        "Break",
+        "Section",
+        "Appendix",
+        "Attachment",
+        "Record",
+        "Summary",
+        "Total",
+        "Reference",
+        "Number",
+        "Description",
         # Form / application terminology
-        "Application", "Type", "Evidence", "Document", "Filename",
-        "Responses", "Privacy", "Sensitive", "Personal",
+        "Application",
+        "Type",
+        "Evidence",
+        "Document",
+        "Filename",
+        "Responses",
+        "Privacy",
+        "Sensitive",
+        "Personal",
         # Months
-        "January", "February", "March", "April", "May", "June",
-        "July", "August", "September", "October", "November", "December",
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
     ]
 )
 
@@ -5646,7 +5769,7 @@ def analyze_pdf_content(
 
     Provides comprehensive document analysis including classification,
     entity extraction, and optional completeness checking.
-    
+
     Uses local VLM by default (free, no API costs). Falls back to Ollama or OpenAI.
 
     Args:
@@ -5719,7 +5842,7 @@ def analyze_pdf_content(
     # Entity detection using patterns
     if detect_entities:
         entities = {}
-        
+
         # Dates
         date_pattern = r"\b(\d{1,2}[\s/-]\w+[\s/-]\d{2,4}|\w+\s+\d{1,2},?\s+\d{4}|\d{4}-\d{2}-\d{2})\b"
         dates = re.findall(date_pattern, full_text)
@@ -5776,7 +5899,7 @@ Provide a JSON response with summary, document_type, and key_findings."""
                 elif "```" in json_str:
                     json_str = json_str.split("```")[1].split("```")[0]
                 analysis = json.loads(json_str.strip())
-                
+
                 if include_summary and "summary" in analysis:
                     result["summary"] = analysis["summary"]
                 if "document_type" in analysis:
@@ -5790,31 +5913,31 @@ Provide a JSON response with summary, document_type, and key_findings."""
                     result["summary"] = llm_response[:500]
     elif include_summary:
         # Simple extractive summary without LLM
-        sentences = re.split(r'[.!?]+', full_text)
+        sentences = re.split(r"[.!?]+", full_text)
         sentences = [s.strip() for s in sentences if len(s.strip()) > 20]
         result["summary"] = ". ".join(sentences[:3]) + "." if sentences else "Unable to generate summary."
 
     # Completeness check
     if check_completeness:
         completeness = {"score": 1.0, "missing_fields": []}
-        
+
         # Check for common required elements based on document type
         required_elements = {
             "invoice": ["date", "total", "invoice number"],
             "contract": ["date", "signature", "parties"],
             "form": ["date", "signature"],
         }
-        
+
         if document_type in required_elements:
             for element in required_elements[document_type]:
                 if element not in text_lower:
                     completeness["missing_fields"].append(element)
                     completeness["score"] -= 0.2
             completeness["score"] = max(0, completeness["score"])
-        
+
         result["completeness"] = completeness
 
     result["analysis_method"] = "llm+pattern" if used_backend else "pattern"
     result["backend"] = used_backend
-    
+
     return result

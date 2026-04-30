@@ -48,9 +48,8 @@ def main() -> int:
 
     labels = [
         Label("feature", "1D76DB", "Feature request / capability"),
-        Label("feature-approved", "0E8A16", "Approved to proceed; auto-creates GitHub Project"),
+        Label("feature-approved", "0E8A16", "Approved to proceed"),
         Label("bug", "D73A4A", "Bug report"),
-        Label("meeting-notes", "C5DEF5", "Meeting distillation issue"),
         Label("docs", "0075CA", "Documentation-only changes"),
         Label("breaking", "B60205", "Breaking change; requires explicit approval"),
         Label("skip-changelog", "FBCA04", "CI override: changelog not required for this PR"),
@@ -82,5 +81,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
-

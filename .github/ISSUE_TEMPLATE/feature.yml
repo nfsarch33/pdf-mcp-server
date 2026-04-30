@@ -1,12 +1,12 @@
-name: Feature request (pdf-handler)
-description: Propose a new pdf-handler capability with acceptance criteria and test plan.
+name: Feature request (pdf-mcp)
+description: Propose a new pdf-mcp capability with acceptance criteria and a test plan.
 title: "feat: <short description>"
 labels: ["feature"]
 body:
   - type: markdown
     attributes:
       value: |
-        Use this when proposing a new pdf-handler feature/tool or a significant enhancement.
+        Use this when proposing a new pdf-mcp feature, CLI command, MCP tool, or significant enhancement.
 
   - type: textarea
     id: problem
@@ -58,12 +58,12 @@ body:
     id: test_plan
     attributes:
       label: Test plan
-      description: Unit + E2E (Cursor-style) expectations.
+      description: Unit, CLI, MCP, and optional manual expectations.
       placeholder: |
         - Unit tests: tests/test_pdf_tools.py
         - MCP layer test: test_mcp_layer_can_call_all_tools
-        - Smoke: scripts/cursor_smoke.py (extend if needed)
-        - Manual: docs/CURSOR_SMOKE_TEST.md (add checklist item)
+        - Smoke: scripts/cursor_smoke.py or a new focused script
+        - Manual: pdf-mcp <verb> <tool> --json ...
     validations:
       required: true
 
@@ -82,7 +82,7 @@ body:
       placeholder: |
         - README.md
         - CHANGELOG.md (Unreleased)
-        - PROJECT_MEMO/ (if workflow/runbook changes)
+        - USAGE.md (generated, if registry/tool surface changes)
     validations:
       required: true
 
@@ -90,11 +90,10 @@ body:
     id: links
     attributes:
       label: Links / references
-      description: Meeting notes, examples, related issues/PRs, PDFs.
+      description: Examples, related issues/PRs, public sample PDFs, or external docs.
       placeholder: |
-        - Meeting summary location (Pepper/global-kb):
         - Related issues:
-        - Sample PDFs (private repo path, if any):
+        - Sample PDFs or fixtures:
     validations:
       required: false
 

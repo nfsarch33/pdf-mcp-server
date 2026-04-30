@@ -7,6 +7,12 @@ This project follows Keep a Changelog and Semantic Versioning.
 ## Unreleased
 
 ### Added
+- **Open-source release hardening**: added `SECURITY.md` with private
+  vulnerability reporting guidance and supported-version policy for
+  `1.3.x` / `1.2.x`.
+- **Repository hygiene regression tests** (`tests/test_repo_hygiene.py`):
+  pin the Makefile and GitHub Actions Python diff filters so ruff cannot
+  silently skip changed `.py` files again.
 - **CLI verb groups mounted from registry (TICKET-05 c3)**: All 57
   registered tools are now reachable as `pdf-mcp <verb> <tool-name>`,
   with the verb taxonomy (form / pages / text / extract / sign /
@@ -102,6 +108,21 @@ This project follows Keep a Changelog and Semantic Versioning.
   `coverage.xml`, `htmlcov/`.
 
 ### Changed
+- **Remote LLMs now fail closed by default**: `OPENAI_API_KEY` alone no
+  longer puts OpenAI into the auto-selection chain. Users must set
+  `PDF_MCP_ENABLE_REMOTE_LLM=1` before hosted LLMs are auto-selected.
+  Sensitive flows such as passport extraction and form-field mapping are
+  still blocked from remote LLMs unless
+  `PDF_MCP_ALLOW_REMOTE_LLM_FOR_SENSITIVE=1` is set. This prevents
+  accidental provider acceptable-use-policy blocks and avoids sending
+  identity-document text off machine without an explicit opt-in.
+- **Open-source cleanup**: staged removal of private project-memory
+  artifacts, legacy memory rule files, and IDE-specific skills/hooks/agents;
+  removed private-memory wording from public templates and release workflow
+  comments.
+- **Fixed Python diff filters**: corrected `grep -E` escaping in the
+  Makefile and `.github/workflows/lint.yml` so diff-only ruff checks
+  actually match changed `.py` files.
 - **`pdf_mcp/server.py` is now registry-driven (1175 → 94 LOC, ~92%
   reduction)**. The 57 hand-written `@mcp.tool() / @_handle_errors`
   decorator pairs are gone; tool registration is a single
@@ -241,8 +262,8 @@ This project follows Keep a Changelog and Semantic Versioning.
   - Fallback: when no delimiter found, treats entire field as surname (single-name passports).
   - Replaces inline splitting logic in both TD3 and TD1 code paths (DRY refactor).
   - 8 new tests in `TestMRZNameParsing`: standard split, single name, no delimiter, spaced chevron, empty given, multi-word surname, empty input, all fillers.
-- **Cursor Skills audit and updates** (following Anthropic official guide):
-  - Fixed `memo-kb-sync` skill: corrected global-kb path from `~/Code/zendesk/global-kb` to `~/Code/global-kb`.
+- **Agent Skills audit and updates** (following Anthropic official guide):
+  - Fixed `memo-kb-sync` skill: corrected the maintainer-side knowledge-base path it referenced.
   - Updated `llm-e2e-qa` skill: corrected VLM model reference to Qwen2.5-VL-7B-Instruct.
   - Updated `cross-platform-setup` skill: corrected VLM model reference.
   - Updated all skill descriptions to third-person per official guide.
@@ -465,7 +486,7 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ### Changed
 - Updated test count in PROJECT_STATUS_PROMPT.md (261 passed, 13 skipped).
-- Updated Pepper SOPs: `pdf-mcp-server-release-sop.md` v3.0 now reflects centralized versioning (was still referencing old 6-location strategy).
+- Updated maintainer release SOPs: `pdf-mcp-server-release-sop.md` v3.0 now reflects centralized versioning (was still referencing old 6-location strategy).
 - Updated `release-sop-tag-based.md` with tag rollback procedure and reference to comprehensive SOP.
 
 ### Added
@@ -488,7 +509,7 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ### Added
 - `pdf_mcp/__init__.py` with `__version__` derived from `importlib.metadata.version("pdf-mcp")` at runtime.
-- Tag-based release SOP documented in Pepper KB (`tag-based-release-sop.md`).
+- Tag-based release SOP documented in the maintainer-side runbook (`tag-based-release-sop.md`).
 
 ### Version Locations (reduced from 6 to 2)
 - **Bump**: `pyproject.toml` only (single source)
@@ -564,7 +585,7 @@ This project follows Keep a Changelog and Semantic Versioning.
 ## 1.0.2 - 2026-01-30
 
 ### Added
-- README documentation for Agent Extensions (Skills, Subagents, Hooks)
+- README documentation for optional agent extensions (skills, subagents, hooks)
 - Usage examples for skills, subagents, and hooks in README
 
 ### Changed
@@ -904,8 +925,8 @@ The following tools are deprecated and will be removed in v0.7.0:
 ## 0.4.1 - 2026-01-27
 
 ### Added
-- `PROJECT_MEMO/PROJECT_STATUS_PROMPT.md`: status prompt for v0.3.0 planning.
-- `PROJECT_MEMO/README.md`: reference to the new status prompt.
+- Legacy project-status prompt for v0.3.0 planning.
+- Legacy private-doc index reference to the new status prompt.
 
 ## 0.4.0 - 2026-01-27
 
@@ -1027,7 +1048,7 @@ The following tools are deprecated and will be removed in v0.7.0:
 ### Added
 - `clear_pdf_form_fields`: clear (delete) values for selected form fields while keeping fields fillable.
 - `encrypt_pdf`: password-protect PDFs (intended after `add_signature_image` to protect a signed PDF).
-- Cursor post-push smoke test: `scripts/cursor_smoke.py` and `docs/CURSOR_SMOKE_TEST.md`.
+- MCP-host smoke test: `scripts/cursor_smoke.py` and `docs/SMOKE_TEST.md`.
 
 ### Changed
 - Form filling is more robust on non-standard AcroForms; values are persisted in `/V` and `encrypt_pdf` normalizes trailer IDs for compatibility.
