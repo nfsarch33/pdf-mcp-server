@@ -1,0 +1,12 @@
+
+ Usage: pdf-mcp serve [OPTIONS]
+
+ Run pdf-mcp as an MCP server over stdio.
+
+ Backwards-compatible alias for ``python -m pdf_mcp.server``. Hosts
+ such as Cursor and Claude Desktop launch this subcommand and then
+ speak MCP over the spawned process's stdin/stdout.
+
+╭─ Options ────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                                                          │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯

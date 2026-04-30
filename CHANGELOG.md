@@ -14,10 +14,36 @@ This project follows Keep a Changelog and Semantic Versioning.
   `pdf-mcp serve` (a backwards-compatible alias for
   `python -m pdf_mcp.server`). Further verb groups (form / pages / text /
   extract / annotate / sign / ai) will land in subsequent v1.3.x tickets.
+- **Structured logging (`pdf_mcp/logging.py`)**: New
+  `configure_logging(level, fmt, *, stream, extra_loggers)` entrypoint
+  on the `pdf_mcp` package logger. Supports text and JSON formatters
+  (one object per record with `timestamp`, `level`, `logger`, `message`,
+  plus user-supplied `extra=` fields), idempotent handler installation
+  tagged with `_pdf_mcp_managed` so calling twice never double-emits,
+  and `PDF_MCP_LOG_LEVEL` env override. CLI gained matching global
+  flags: `--verbose / -v` (DEBUG), `--quiet / -q` (WARNING),
+  `--log-format text|json`. `propagate` stays `True` so pytest `caplog`
+  and host-application root handlers continue to receive records
+  unchanged. (TICKET-02)
+- **Golden CLI snapshot harness (`tests/golden_helpers.py`,
+  `tests/test_cli_golden.py`)**: Regression-grade tests that capture the
+  exact stdout (after CRLF/right-strip/EOF normalisation) of stable CLI
+  invocations and compare against committed baselines under
+  `tests/golden/`. Ships baselines for `pdf-mcp --version`, `pdf-mcp
+  --help`, and `pdf-mcp serve --help`. New snapshots and intentional
+  drift are regenerated with `PDF_MCP_UPDATE_SNAPSHOTS=1 pytest
+  tests/test_cli_golden.py`; failure messages embed the regen command
+  and a 3-line unified diff for fast review. (TICKET-03)
 - **CLI surface tests** (`tests/test_cli.py`, 6 tests): pin module
   importability, Typer app type, `--version` output, `--help` listing of
   the `serve` subcommand, and `serve` delegation to
   `pdf_mcp.server.mcp.run(transport="stdio")` via a patched FastMCP.
+- **Structured logging tests** (`tests/test_logging.py`, 12 tests): pin
+  signature, default level, env-var override (and silent fallback on
+  invalid env values), JSON formatter contract, text formatter,
+  handler idempotency, and CLI integration of `--verbose`, `--quiet`,
+  and `--log-format` via mocked `mcp.run` plus a spy on
+  `configure_logging`.
 - **Release-gate regression tests** (`tests/test_check_release_ready.py`,
   4 tests): cover `_read_pyproject_version` for double-quoted, single-
   quoted, and missing version lines, plus a positive test that pins the
@@ -32,13 +58,23 @@ This project follows Keep a Changelog and Semantic Versioning.
   variant without `tomllib`). The pattern is now a properly-escaped raw
   string, and the new test file pins both quoting styles plus the missing-
   version error path.
+- **CI: `tests/test_check_release_ready.py` import path**: switched to
+  `importlib.util.spec_from_file_location` so the test does not require
+  `scripts/` to be a Python package (it is intentionally excluded from
+  setuptools' `packages.find`). Local pytest happened to work because
+  the repo root was on `sys.path`; the CI venv did not, which surfaced
+  as `ModuleNotFoundError: No module named 'scripts'` on PR #44.
 
 ### Notes
-- Test count moves from **437 → 444** (10 new tests, 0 regressions; 6 of
-  the new tests are the CLI surface, 4 are the release-gate regex
-  regression suite).
+- Test count moves from **437 → 459** (22 new tests, 0 regressions):
+  - 6 CLI surface (`tests/test_cli.py`)
+  - 4 release-gate regex (`tests/test_check_release_ready.py`)
+  - 12 structured logging (`tests/test_logging.py`)
+  - 3 golden CLI snapshots (`tests/test_cli_golden.py`)
 - Backwards compatibility: `python -m pdf_mcp.server` continues to work
   unchanged. The new `pdf-mcp serve` subcommand is a drop-in replacement.
+  Default invocations (no `--verbose`, no `--log-format`, no
+  `PDF_MCP_LOG_LEVEL`) keep the prior logging-at-INFO behaviour.
 
 ## 1.2.18 - 2026-02-13
 

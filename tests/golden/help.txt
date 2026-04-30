@@ -1,0 +1,15 @@
+
+ Usage: pdf-mcp [OPTIONS] COMMAND [ARGS]...
+
+ pdf-mcp - PDF tooling CLI and MCP server.
+
+╭─ Options ────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ --version                        Print pdf-mcp version and exit.                                                     │
+│ --verbose     -v                 Enable DEBUG logging (overrides --quiet).                                           │
+│ --quiet       -q                 Restrict logging to WARNING and above.                                              │
+│ --log-format          text|json  Log output format. One of: text, json. [default: text]                              │
+│ --help                           Show this message and exit.                                                         │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ serve  Run pdf-mcp as an MCP server over stdio.                                                                      │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
