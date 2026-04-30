@@ -11,6 +11,12 @@ env/
 .mypy_cache/
 .pytest_cache/
 
+# Coverage artefacts (TICKET-08 c2 coverage gate)
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
 # Build / dist
 build/
 dist/
@@ -36,4 +42,3 @@ cursor-memory-complete-setup-guide.md
 
 # direnv (contains GH_TOKEN, never commit)
 .envrc
-

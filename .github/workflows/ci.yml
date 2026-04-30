@@ -30,8 +30,17 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Run tests
+      - name: Run tests (with coverage gate)
         run: make test
+
+      - name: Upload coverage artefact
+        if: matrix.python-version == '3.12'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: coverage.xml
+          if-no-files-found: warn
+          retention-days: 14
 
   smoke:
     name: Smoke (hard requirements)

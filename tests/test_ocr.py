@@ -28,11 +28,9 @@ TESTS_DIR = Path(__file__).parent
 PDF_FIXTURES = {
     # Form PDFs - searchable with native text layer
     "1006.pdf": {"expected_type": "searchable", "has_forms": True},
-    
     # PDFs with native text layer (may have OCR layer embedded)
     "TestOCR.pdf": {"expected_type": "searchable", "has_forms": False},  # Has OCR text layer
     "scanned_example_1.pdf": {"expected_type": "searchable", "has_forms": False},  # Has OCR text layer
-    
     # Image-based PDFs (no native text layer, need OCR)
     "pdf_sample2.pdf": {"expected_type": "image_based", "has_forms": False},
     "scansmpl.pdf": {"expected_type": "image_based", "has_forms": False},
@@ -66,11 +64,11 @@ class TestDetectPdfType:
         fixtures = get_available_fixtures()
         if not fixtures:
             pytest.skip("No test fixtures available")
-        
+
         # Use first available fixture
         path = list(fixtures.values())[0]["path"]
         result = pdf_tools.detect_pdf_type(path)
-        
+
         # Check required fields
         assert "pdf_path" in result
         assert "classification" in result
@@ -88,48 +86,46 @@ class TestDetectPdfType:
         """Test detect_pdf_type on all available fixtures."""
         fixtures = get_available_fixtures()
         results = {}
-        
+
         for name, info in fixtures.items():
             result = pdf_tools.detect_pdf_type(info["path"])
             results[name] = result
-            
+
             # Basic sanity checks
             assert result["total_pages"] >= 1
             assert result["classification"] in ("searchable", "image_based", "hybrid")
             assert isinstance(result["page_details"], list)
             assert len(result["page_details"]) == result["total_pages"]
-        
+
         # Print summary for debugging
         print("\n--- PDF Type Detection Summary ---")
         for name, result in results.items():
-            print(f"{name}: {result['classification']}, "
-                  f"pages={result['total_pages']}, "
-                  f"text_ratio={result['text_coverage_ratio']}, "
-                  f"needs_ocr={result['needs_ocr']}")
+            print(
+                f"{name}: {result['classification']}, "
+                f"pages={result['total_pages']}, "
+                f"text_ratio={result['text_coverage_ratio']}, "
+                f"needs_ocr={result['needs_ocr']}"
+            )
 
-    @pytest.mark.parametrize("fixture_name,expected_info", [
-        (name, info) for name, info in PDF_FIXTURES.items()
-    ])
+    @pytest.mark.parametrize("fixture_name,expected_info", [(name, info) for name, info in PDF_FIXTURES.items()])
     def test_detect_type_classification(self, fixture_name: str, expected_info: Dict):
         """Test that PDFs are classified as expected."""
         path = TESTS_DIR / fixture_name
         if not path.exists():
             pytest.skip(f"Fixture {fixture_name} not available")
-        
+
         result = pdf_tools.detect_pdf_type(str(path))
-        
+
         # For image-based PDFs, either image_based or hybrid is acceptable
         # since some might have minimal text layers
         expected = expected_info["expected_type"]
         actual = result["classification"]
-        
+
         if expected == "image_based":
-            assert actual in ("image_based", "hybrid"), \
-                f"{fixture_name}: expected {expected}, got {actual}"
+            assert actual in ("image_based", "hybrid"), f"{fixture_name}: expected {expected}, got {actual}"
         else:
             # For searchable PDFs, we're more lenient
-            assert actual in ("searchable", "hybrid"), \
-                f"{fixture_name}: expected searchable/hybrid, got {actual}"
+            assert actual in ("searchable", "hybrid"), f"{fixture_name}: expected searchable/hybrid, got {actual}"
 
     def test_detect_type_file_not_found(self, tmp_path: Path):
         """Test error handling for missing file."""
@@ -142,7 +138,7 @@ class TestDetectPdfType:
         path = TESTS_DIR / "1006.pdf"
         if not path.exists():
             pytest.skip("1006.pdf fixture not available")
-        
+
         result = pdf_tools.detect_pdf_type(str(path))
         assert result["classification"] == "searchable"
         assert result["total_native_chars"] > 100
@@ -162,9 +158,9 @@ class TestExtractTextNative:
         path = TESTS_DIR / "1006.pdf"
         if not path.exists():
             pytest.skip("1006.pdf fixture not available")
-        
+
         result = pdf_tools.extract_text(str(path), engine="native")
-        
+
         assert result["method"] == "native"
         assert result["total_chars"] > 0
         assert "text" in result
@@ -176,10 +172,10 @@ class TestExtractTextNative:
         path = TESTS_DIR / "1006.pdf"
         if not path.exists():
             pytest.skip("1006.pdf fixture not available")
-        
+
         # Extract only page 1
         result = pdf_tools.extract_text(str(path), pages=[1])
-        
+
         assert result["pages_extracted"] == 1
         assert len(result["page_details"]) == 1
         assert result["page_details"][0]["page"] == 1
@@ -187,15 +183,14 @@ class TestExtractTextNative:
     def test_extract_native_image_based_pdf(self):
         """Test native extraction on image-based PDF (should return minimal text)."""
         fixtures = get_available_fixtures()
-        image_pdfs = [name for name, info in fixtures.items() 
-                      if info["expected_type"] == "image_based"]
-        
+        image_pdfs = [name for name, info in fixtures.items() if info["expected_type"] == "image_based"]
+
         if not image_pdfs:
             pytest.skip("No image-based PDF fixtures available")
-        
+
         path = fixtures[image_pdfs[0]]["path"]
         result = pdf_tools.extract_text(path, engine="native")
-        
+
         # Image-based PDFs should have minimal native text
         # (but might have some due to PDF metadata or embedded fonts)
         assert result["method"] == "native"
@@ -205,12 +200,12 @@ class TestExtractTextNative:
     def test_extract_native_all_fixtures(self):
         """Test native extraction on all available fixtures."""
         fixtures = get_available_fixtures()
-        
+
         print("\n--- Native Text Extraction Summary ---")
         for name, info in fixtures.items():
             result = pdf_tools.extract_text(info["path"], engine="native")
             print(f"{name}: {result['total_chars']} chars from {result['pages_extracted']} pages")
-            
+
             assert "text" in result
             assert result["pages_extracted"] >= 1
 
@@ -228,9 +223,9 @@ class TestExtractTextOcr:
         path = TESTS_DIR / "1006.pdf"
         if not path.exists():
             pytest.skip("1006.pdf fixture not available")
-        
+
         result = pdf_tools.extract_text(str(path), engine="auto")
-        
+
         assert result["engine_requested"] == "auto"
         assert result["method_used"] in ("native", "ocr", "hybrid")
         assert "text" in result
@@ -240,9 +235,9 @@ class TestExtractTextOcr:
         path = TESTS_DIR / "1006.pdf"
         if not path.exists():
             pytest.skip("1006.pdf fixture not available")
-        
+
         result = pdf_tools.extract_text(str(path), engine="native")
-        
+
         # Native mode returns "method" instead of "engine_requested"
         assert result["method"] == "native"
         assert "text" in result
@@ -252,7 +247,7 @@ class TestExtractTextOcr:
         path = TESTS_DIR / "1006.pdf"
         if not path.exists():
             pytest.skip("1006.pdf fixture not available")
-        
+
         with pytest.raises(PdfToolError) as exc:
             pdf_tools.extract_text(str(path), engine="invalid_engine")
         assert "Invalid engine" in str(exc.value)
@@ -262,9 +257,9 @@ class TestExtractTextOcr:
         path = TESTS_DIR / "1006.pdf"
         if not path.exists():
             pytest.skip("1006.pdf fixture not available")
-        
+
         result = pdf_tools.extract_text(str(path), pages=[1], engine="native")
-        
+
         assert result["pages_extracted"] == 1
         assert len(result["page_details"]) == 1
 
@@ -273,11 +268,11 @@ class TestExtractTextOcr:
         # This test only runs if Tesseract is NOT installed
         if pdf_tools._HAS_TESSERACT:
             pytest.skip("Tesseract is available, skipping unavailable test")
-        
+
         path = TESTS_DIR / "1006.pdf"
         if not path.exists():
             pytest.skip("1006.pdf fixture not available")
-        
+
         with pytest.raises(PdfToolError) as exc:
             pdf_tools.extract_text(str(path), engine="tesseract")
         assert "Tesseract" in str(exc.value) or "not available" in str(exc.value).lower()
@@ -286,15 +281,14 @@ class TestExtractTextOcr:
     def test_extract_ocr_tesseract_engine(self):
         """Test Tesseract OCR engine (requires tesseract-ocr installed)."""
         fixtures = get_available_fixtures()
-        image_pdfs = [name for name, info in fixtures.items() 
-                      if info["expected_type"] == "image_based"]
-        
+        image_pdfs = [name for name, info in fixtures.items() if info["expected_type"] == "image_based"]
+
         if not image_pdfs:
             pytest.skip("No image-based PDF fixtures available")
-        
+
         path = fixtures[image_pdfs[0]]["path"]
         result = pdf_tools.extract_text(path, engine="tesseract", dpi=150)
-        
+
         assert result["engine_requested"] == "tesseract"
         assert result["method_used"] in ("ocr", "hybrid")
         assert result["dpi"] == 150
@@ -305,22 +299,24 @@ class TestExtractTextOcr:
         path = TESTS_DIR / "1006.pdf"
         if not path.exists():
             pytest.skip("1006.pdf fixture not available")
-        
+
         result = pdf_tools.extract_text(str(path), engine="force_ocr", pages=[1])
-        
+
         assert result["engine_requested"] == "force_ocr"
         assert "ocr" in result["method_used"]
 
     def test_extract_ocr_all_fixtures_auto(self):
         """Test auto OCR extraction on all available fixtures."""
         fixtures = get_available_fixtures()
-        
+
         print("\n--- OCR Text Extraction Summary (auto mode) ---")
         for name, info in fixtures.items():
             result = pdf_tools.extract_text(info["path"], engine="auto")
-            print(f"{name}: method={result['method_used']}, "
-                  f"{result['total_chars']} chars from {result['pages_extracted']} pages")
-            
+            print(
+                f"{name}: method={result['method_used']}, "
+                f"{result['total_chars']} chars from {result['pages_extracted']} pages"
+            )
+
             assert "text" in result
             assert result["pages_extracted"] >= 1
 
@@ -338,9 +334,9 @@ class TestGetPdfTextBlocks:
         path = TESTS_DIR / "1006.pdf"
         if not path.exists():
             pytest.skip("1006.pdf fixture not available")
-        
+
         result = pdf_tools.get_pdf_text_blocks(str(path))
-        
+
         assert "pdf_path" in result
         assert "total_pages" in result
         assert "pages_analyzed" in result
@@ -352,17 +348,17 @@ class TestGetPdfTextBlocks:
         path = TESTS_DIR / "1006.pdf"
         if not path.exists():
             pytest.skip("1006.pdf fixture not available")
-        
+
         result = pdf_tools.get_pdf_text_blocks(str(path), pages=[1])
-        
+
         assert len(result["page_blocks"]) == 1
         page_data = result["page_blocks"][0]
-        
+
         assert "page" in page_data
         assert "width" in page_data
         assert "height" in page_data
         assert "blocks" in page_data
-        
+
         # Check that blocks have proper structure
         for block in page_data["blocks"]:
             assert "type" in block
@@ -374,9 +370,9 @@ class TestGetPdfTextBlocks:
         path = TESTS_DIR / "1006.pdf"
         if not path.exists():
             pytest.skip("1006.pdf fixture not available")
-        
+
         result = pdf_tools.get_pdf_text_blocks(str(path), pages=[1])
-        
+
         assert result["pages_analyzed"] == 1
         assert len(result["page_blocks"]) == 1
         assert result["page_blocks"][0]["page"] == 1
@@ -384,25 +380,19 @@ class TestGetPdfTextBlocks:
     def test_get_text_blocks_all_fixtures(self):
         """Test text block extraction on all available fixtures."""
         fixtures = get_available_fixtures()
-        
+
         print("\n--- Text Block Extraction Summary ---")
         for name, info in fixtures.items():
             result = pdf_tools.get_pdf_text_blocks(info["path"])
-            
-            total_blocks = sum(
-                len(p["blocks"]) for p in result["page_blocks"]
+
+            total_blocks = sum(len(p["blocks"]) for p in result["page_blocks"])
+            text_blocks = sum(len([b for b in p["blocks"] if b["type"] == "text"]) for p in result["page_blocks"])
+            image_blocks = sum(len([b for b in p["blocks"] if b["type"] == "image"]) for p in result["page_blocks"])
+
+            print(
+                f"{name}: {result['pages_analyzed']} pages, "
+                f"{total_blocks} blocks ({text_blocks} text, {image_blocks} image)"
             )
-            text_blocks = sum(
-                len([b for b in p["blocks"] if b["type"] == "text"])
-                for p in result["page_blocks"]
-            )
-            image_blocks = sum(
-                len([b for b in p["blocks"] if b["type"] == "image"])
-                for p in result["page_blocks"]
-            )
-            
-            print(f"{name}: {result['pages_analyzed']} pages, "
-                  f"{total_blocks} blocks ({text_blocks} text, {image_blocks} image)")
 
 
 # =============================================================================
@@ -424,9 +414,7 @@ class TestMcpLayerOcr:
             pytest.skip("1006.pdf fixture not available")
 
         async def call():
-            _content, meta = await server.mcp.call_tool(
-                "detect_pdf_type", {"pdf_path": str(path)}
-            )
+            _content, meta = await server.mcp.call_tool("detect_pdf_type", {"pdf_path": str(path)})
             assert isinstance(meta, dict)
             assert "result" in meta
             result = meta["result"]
@@ -447,9 +435,7 @@ class TestMcpLayerOcr:
             pytest.skip("1006.pdf fixture not available")
 
         async def call():
-            _content, meta = await server.mcp.call_tool(
-                "extract_text", {"pdf_path": str(path), "engine": "native"}
-            )
+            _content, meta = await server.mcp.call_tool("extract_text", {"pdf_path": str(path), "engine": "native"})
             result = meta["result"]
             assert "error" not in result, result.get("error")
             return result
@@ -492,9 +478,7 @@ class TestMcpLayerOcr:
             pytest.skip("1006.pdf fixture not available")
 
         async def call():
-            _content, meta = await server.mcp.call_tool(
-                "get_pdf_text_blocks", {"pdf_path": str(path), "pages": [1]}
-            )
+            _content, meta = await server.mcp.call_tool("get_pdf_text_blocks", {"pdf_path": str(path), "pages": [1]})
             result = meta["result"]
             assert "error" not in result, result.get("error")
             return result
@@ -517,20 +501,20 @@ class TestSpecificPdfRegression:
         path = TESTS_DIR / "1006.pdf"
         if not path.exists():
             pytest.skip("1006.pdf fixture not available")
-        
+
         # Detect type
         detect_result = pdf_tools.detect_pdf_type(str(path))
         assert detect_result["classification"] == "searchable"
         assert detect_result["needs_ocr"] is False
-        
+
         # Native extraction
         native_result = pdf_tools.extract_text(str(path), engine="native")
         assert native_result["total_chars"] > 100
-        
+
         # OCR extraction (should use native)
         ocr_result = pdf_tools.extract_text(str(path), engine="auto")
         assert ocr_result["method_used"] in ("native", "hybrid")
-        
+
         # Text blocks
         blocks_result = pdf_tools.get_pdf_text_blocks(str(path))
         assert len(blocks_result["page_blocks"]) >= 1
@@ -539,27 +523,26 @@ class TestSpecificPdfRegression:
     def test_image_pdf_ocr_extraction(self):
         """Test OCR extraction on image-based PDFs."""
         fixtures = get_available_fixtures()
-        image_pdfs = [name for name, info in fixtures.items() 
-                      if info["expected_type"] == "image_based"]
-        
+        image_pdfs = [name for name, info in fixtures.items() if info["expected_type"] == "image_based"]
+
         if not image_pdfs:
             pytest.skip("No image-based PDF fixtures available")
-        
+
         # Test first available image PDF
         path = fixtures[image_pdfs[0]]["path"]
-        
+
         # Detect type
         detect_result = pdf_tools.detect_pdf_type(path)
         assert detect_result["classification"] in ("image_based", "hybrid")
-        
+
         # OCR extraction should produce text
         ocr_result = pdf_tools.extract_text(path, engine="tesseract", dpi=200)
         assert ocr_result["method_used"] in ("ocr", "hybrid")
-        
+
         print(f"\n--- OCR Result for {image_pdfs[0]} ---")
         print(f"Characters extracted: {ocr_result['total_chars']}")
-        if ocr_result['total_chars'] > 0:
-            preview = ocr_result['text'][:200].replace('\n', ' ')
+        if ocr_result["total_chars"] > 0:
+            preview = ocr_result["text"][:200].replace("\n", " ")
             print(f"Preview: {preview}...")
 
     def test_scansmpl_pdf(self):
@@ -567,34 +550,40 @@ class TestSpecificPdfRegression:
         path = TESTS_DIR / "scansmpl.pdf"
         if not path.exists():
             pytest.skip("scansmpl.pdf fixture not available")
-        
+
         detect_result = pdf_tools.detect_pdf_type(str(path))
-        print(f"\nscansmpl.pdf: {detect_result['classification']}, "
-              f"native_chars={detect_result['total_native_chars']}, "
-              f"images={detect_result['total_images']}")
+        print(
+            f"\nscansmpl.pdf: {detect_result['classification']}, "
+            f"native_chars={detect_result['total_native_chars']}, "
+            f"images={detect_result['total_images']}"
+        )
 
     def test_testocr_pdf(self):
         """Test TestOCR.pdf (OCR test document)."""
         path = TESTS_DIR / "TestOCR.pdf"
         if not path.exists():
             pytest.skip("TestOCR.pdf fixture not available")
-        
+
         detect_result = pdf_tools.detect_pdf_type(str(path))
-        print(f"\nTestOCR.pdf: {detect_result['classification']}, "
-              f"native_chars={detect_result['total_native_chars']}, "
-              f"images={detect_result['total_images']}")
+        print(
+            f"\nTestOCR.pdf: {detect_result['classification']}, "
+            f"native_chars={detect_result['total_native_chars']}, "
+            f"images={detect_result['total_images']}"
+        )
 
     def test_public_water_mass_mailing(self):
         """Test PublicWaterMassMailing.pdf (large multi-page document)."""
         path = TESTS_DIR / "PublicWaterMassMailing.pdf"
         if not path.exists():
             pytest.skip("PublicWaterMassMailing.pdf fixture not available")
-        
+
         detect_result = pdf_tools.detect_pdf_type(str(path))
-        print(f"\nPublicWaterMassMailing.pdf: {detect_result['classification']}, "
-              f"pages={detect_result['total_pages']}, "
-              f"native_chars={detect_result['total_native_chars']}")
-        
+        print(
+            f"\nPublicWaterMassMailing.pdf: {detect_result['classification']}, "
+            f"pages={detect_result['total_pages']}, "
+            f"native_chars={detect_result['total_native_chars']}"
+        )
+
         # Test extraction of first few pages only (for speed)
         native_result = pdf_tools.extract_text(str(path), pages=[1, 2])
         assert native_result["pages_extracted"] == 2
@@ -611,30 +600,37 @@ class TestOcrPerformance:
     def test_detect_type_performance(self):
         """Ensure detect_pdf_type completes in reasonable time."""
         import time
-        
+
         path = TESTS_DIR / "1006.pdf"
         if not path.exists():
             pytest.skip("1006.pdf fixture not available")
-        
+
         start = time.time()
         pdf_tools.detect_pdf_type(str(path))
         elapsed = time.time() - start
-        
+
         # Should complete in under 2 seconds for a typical PDF
         assert elapsed < 2.0, f"detect_pdf_type took {elapsed:.2f}s"
 
     def test_native_extraction_performance(self):
-        """Ensure native extraction completes quickly."""
+        """Ensure native extraction completes quickly.
+
+        The threshold is 5.0s rather than 1.0s because v1.3.0 introduced
+        a CI coverage gate (TICKET-08 c2) that runs ``coverage.py`` line +
+        branch tracing on every test. Tracing adds 5-10x overhead to
+        ``pdf_tools.extract_text``, occasionally tipping a sub-second
+        operation over a 1.0s budget when CI hosts are under load. The
+        intent of the test is "this should be fast relative to OCR (30s+)
+        or VLM (60s+)", which 5.0s still asserts cleanly.
+        """
         import time
-        
+
         path = TESTS_DIR / "1006.pdf"
         if not path.exists():
             pytest.skip("1006.pdf fixture not available")
-        
+
         start = time.time()
         pdf_tools.extract_text(str(path), engine="native")
         elapsed = time.time() - start
-        
-        # Native extraction should be very fast
-        assert elapsed < 1.0, f"extract_text(engine='native') took {elapsed:.2f}s"
 
+        assert elapsed < 5.0, f"extract_text(engine='native') took {elapsed:.2f}s"

@@ -18,7 +18,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "pre-commit", "ruff"]
+# pytest-cov powers the v1.3.0 CI coverage gate
+# (see [tool.pytest.ini_options] / [tool.coverage.*]).
+dev = ["pytest", "pytest-cov>=5.0.0", "pre-commit", "ruff"]
 ocr = ["pytesseract>=0.3.10", "pillow>=10.0.0"]
 llm = ["openai>=1.0.0"]
 
@@ -56,3 +58,36 @@ quote-style = "double"
 markers = [
     "slow: marks tests as slow (e2e tests requiring running LLM servers)",
 ]
+# v1.3.0 coverage gate (TICKET-08 c2). Baseline at branch-cut was 84%
+# total (pdf_mcp/__init__.py 60%, cli 92%, llm_setup 81%, logging 77%,
+# pdf_tools 83%, registry 97%, server 94%). The gate floor is set to 75%
+# -- a deliberate gap below baseline to allow occasional dips for
+# defensive code paths (fast-failing helpers, OS-specific branches)
+# without breaking CI; future tickets ratchet upward in 5pp increments.
+addopts = [
+    "--cov=pdf_mcp",
+    "--cov-report=term-missing",
+    "--cov-report=xml:coverage.xml",
+    "--cov-fail-under=75",
+]
+
+[tool.coverage.run]
+source = ["pdf_mcp"]
+branch = true
+omit = [
+    # The MCP server entry point ``mcp.run(transport="stdio")`` blocks on
+    # stdin and is never reached in unit/integration tests; the rest of
+    # ``server.py`` (``_register_all_tools`` and helpers) is fully covered
+    # by the import-side-effect at module load + the parity tests.
+    "pdf_mcp/server.py:__main__",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+]
+skip_covered = false
+show_missing = true
