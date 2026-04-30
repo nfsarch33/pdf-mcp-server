@@ -43,17 +43,17 @@ check-tesseract:
 	@$(PY) -c "import pytesseract; print(f'pytesseract: OK, languages: {pytesseract.get_languages()}')" 2>/dev/null || echo "pytesseract not installed. Run: make install-ocr"
 
 lint: install
-	@FILES=$$(git diff --name-only --diff-filter=ACMRTUXB origin/main...HEAD 2>/dev/null | grep -E '\\.py$$' || true); \
+	@FILES=$$(git diff --name-only --diff-filter=ACMRTUXB origin/main...HEAD 2>/dev/null | grep -E '\.py$$' || true); \
 	if [ -z "$$FILES" ]; then echo "ruff: no changed python files"; exit 0; fi; \
 	. $(VENV)/bin/activate && ruff check $$FILES
 
 format-check: install
-	@FILES=$$(git diff --name-only --diff-filter=ACMRTUXB origin/main...HEAD 2>/dev/null | grep -E '\\.py$$' || true); \
+	@FILES=$$(git diff --name-only --diff-filter=ACMRTUXB origin/main...HEAD 2>/dev/null | grep -E '\.py$$' || true); \
 	if [ -z "$$FILES" ]; then echo "ruff-format: no changed python files"; exit 0; fi; \
 	. $(VENV)/bin/activate && ruff format --check $$FILES
 
 smoke: install
-	. $(VENV)/bin/activate && $(PY) scripts/cursor_smoke.py --out-dir /tmp/pdf-handler-prepush-smoke
+	. $(VENV)/bin/activate && $(PY) scripts/cursor_smoke.py --out-dir /tmp/pdf-mcp-prepush-smoke
 
 prepush: lint format-check test smoke
 

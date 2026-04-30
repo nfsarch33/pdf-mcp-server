@@ -21,7 +21,7 @@ pdf_mcp/
 scripts/
   generate_usage_doc.py  derives USAGE.md from registry.verb_groups()
   cursor_smoke.py        end-to-end smoke that exercises the MCP server
-tests/                   pytest suite (477 tests, 75% coverage gate)
+tests/                   pytest suite (526 collected tests, 75% coverage gate)
 USAGE.md                 generated; reference of every CLI command
 ```
 
@@ -156,6 +156,22 @@ following the style of existing entries.
 
 Coverage gate: `pytest` is configured with
 `--cov=pdf_mcp --cov-fail-under=75`. Below 75% line coverage CI fails.
+
+## Remote LLM safety
+
+`pdf-mcp` is local-first. Do not add code that sends PDF content to a
+hosted LLM just because a provider API key exists.
+
+Rules:
+
+* Local model server and Ollama are safe defaults.
+* OpenAI / hosted backends require `PDF_MCP_ENABLE_REMOTE_LLM=1` before
+  they enter auto-selection.
+* Sensitive flows (passport extraction, form-field mapping, or future
+  identity / financial-document helpers) must also require
+  `PDF_MCP_ALLOW_REMOTE_LLM_FOR_SENSITIVE=1`.
+* Add a regression test before any change that touches `_get_llm_backend`,
+  `_call_llm`, or the LLM-backed PDF tools.
 
 ## Pre-commit hooks
 

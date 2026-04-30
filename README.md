@@ -175,7 +175,7 @@ Edit `~/.cursor/mcp.json`:
 ```json
 {
   "mcpServers": {
-    "pdf-handler": {
+    "pdf-mcp": {
       "command": "/path/to/pdf-mcp-server/.venv/bin/python",
       "args": ["-m", "pdf_mcp.server"],
       "description": "Local PDF form filling and editing (stdio)"
@@ -456,7 +456,10 @@ make install-llm-models
 **E2E Test Requirements:**
 - **Local VLM**: Run `./scripts/run_local_vlm.sh` (auto-detects best GPU)
 - **Ollama**: Install with `curl -fsSL https://ollama.ai/install.sh | sh`, then `make install-llm-models`
-- **OpenAI**: Set `OPENAI_API_KEY` environment variable (costs money!)
+- **OpenAI**: Optional remote fallback. Set `OPENAI_API_KEY` plus
+  `PDF_MCP_ENABLE_REMOTE_LLM=1` to opt in. Sensitive flows such as
+  passport extraction still require
+  `PDF_MCP_ALLOW_REMOTE_LLM_FOR_SENSITIVE=1`.
 
 **Full environment setup (one-time):**
 ```bash
@@ -465,65 +468,45 @@ make install-llm-models
 This handles Python venv, system packages, Ollama, GPU detection, and VLM runner generation for both macOS and WSL/Linux.
 
 ### Test coverage
-- **477 tests** (Tier 1/2 + agentic features + multi-backend + e2e + v1.3.0 CLI surface + verb-group mounts).
+- **526 collected tests** (496 passing, 30 optional-backend skips on the
+  current macOS dev lane) covering Tier 1/2, agentic features,
+  multi-backend behavior, e2e paths, v1.3.0 CLI surface, and verb-group
+  mounts.
 - 75% line coverage gate enforced in CI via `pytest --cov-fail-under=75` (see `pyproject.toml`).
 - `pytest --cov` ships in dev extras (`make install-dev`) and writes
   `coverage.xml` for upload to coverage tools.
 - All tests pass with Tesseract installed; a small number skip
   depending on which optional dependencies / backends are available.
 
-## Agent Extensions (v1.0.1+)
+## Privacy and remote LLMs
 
-This project includes Agent Skills, Subagents, and Hooks for Cursor IDE integration.
+`pdf-mcp` is local-first. PDF text is processed on your machine by
+default, and LLM-backed tools prefer local model servers or Ollama.
 
-### Skills (`.cursor/skills/`)
+OpenAI support is optional and explicit:
 
-Skills are portable packages that teach agents domain-specific tasks. Invoke with `/skill-name` in Agent chat.
-
-| Skill | Description |
-|-------|-------------|
-| `release-sop` | End-to-end release checklist automation |
-| `llm-e2e-qa` | LLM E2E test and manual QA procedures |
-| `memo-kb-sync` | Bi-directional memory sync instructions |
-
-### Subagents (`.cursor/agents/`)
-
-Subagents are specialized AI assistants that handle specific types of work. Invoke with `/agent-name` or mention naturally.
-
-| Subagent | Description |
-|----------|-------------|
-| `verifier` | Validates completed work, runs tests, checks edge cases |
-| `debugger` | Root cause analysis specialist for errors |
-| `test-runner` | Proactive test automation expert |
-
-### Hooks (`.cursor/hooks.json`)
-
-Hooks observe and control agent behavior. This project includes:
-
-| Hook | Event | Purpose |
-|------|-------|---------|
-| `block-destructive.sh` | `beforeShellExecution` | Blocks dangerous commands (git reset --hard, rm -rf) |
-
-**Usage:**
 ```bash
-# Skills are auto-discovered when Cursor starts
-# Invoke explicitly:
-/release-sop
-/llm-e2e-qa
-
-# Subagents can be invoked:
-/verifier confirm the tests pass
-/debugger investigate this error
-
-# Hooks run automatically based on their events
+export OPENAI_API_KEY=...
+export PDF_MCP_ENABLE_REMOTE_LLM=1
 ```
+
+Sensitive workflows, including passport extraction and form-field
+mapping, are blocked from remote LLM backends by default. To use a
+remote model for those flows, set:
+
+```bash
+export PDF_MCP_ALLOW_REMOTE_LLM_FOR_SENSITIVE=1
+```
+
+This fail-closed behaviour avoids accidental provider policy blocks and
+prevents identity-document text from leaving the host unless the user
+deliberately opts in.
 
 ## Development Workflow
 - Use feature branches off `main` and open a PR for review.
 - Keep each PR focused on a single tool or capability with tests.
 - For larger features, split into small PRs (tool surface, core implementation, tests, docs).
 - After merging a PR, delete the feature branch and run `git fetch --prune` locally to keep branch state clean.
-- Portability/migration notes: see `PROJECT_MEMO/`.
 
 ## License
 GNU AGPL-3.0, see `LICENSE`.

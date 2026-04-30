@@ -29,6 +29,7 @@ from pdf_mcp import pdf_tools
 # Test Fixtures
 # ============================================================================
 
+
 @pytest.fixture
 def sample_form_pdf(tmp_path):
     """Create a simple form PDF for testing."""
@@ -40,7 +41,7 @@ def sample_form_pdf(tmp_path):
             {"name": "email", "type": "text", "x": 100, "y": 660, "width": 200, "height": 20},
             {"name": "phone", "type": "text", "x": 100, "y": 620, "width": 200, "height": 20},
             {"name": "address", "type": "text", "x": 100, "y": 580, "width": 300, "height": 20},
-        ]
+        ],
     )
     return str(output)
 
@@ -49,6 +50,7 @@ def sample_form_pdf(tmp_path):
 def sample_text_pdf(tmp_path):
     """Create a PDF with sample text content for analysis."""
     import pymupdf
+
     output = tmp_path / "text.pdf"
     doc = pymupdf.open()
     page = doc.new_page()
@@ -56,21 +58,21 @@ def sample_text_pdf(tmp_path):
     text = """
     INVOICE #12345
     Date: January 15, 2026
-    
+
     Bill To:
     John Smith
     123 Main Street
     New York, NY 10001
-    
+
     Items:
     Widget A - $50.00
     Widget B - $75.00
     Service Fee - $25.00
-    
+
     Subtotal: $150.00
     Tax (8%): $12.00
     Total: $162.00
-    
+
     Payment Due: February 15, 2026
     """
     page.insert_text((72, 72), text, fontsize=11)
@@ -83,6 +85,7 @@ def sample_text_pdf(tmp_path):
 def sample_passport_pdf(tmp_path):
     """Create a PDF with passport-like MRZ and labels for extraction."""
     import pymupdf
+
     output = tmp_path / "passport.pdf"
     doc = pymupdf.open()
     page = doc.new_page()
@@ -107,6 +110,7 @@ def sample_passport_pdf(tmp_path):
 def sample_passport_label_only_pdf(tmp_path):
     """Create a PDF with passport labels but no MRZ."""
     import pymupdf
+
     output = tmp_path / "passport_labels.pdf"
     doc = pymupdf.open()
     page = doc.new_page()
@@ -129,17 +133,20 @@ def sample_passport_label_only_pdf(tmp_path):
 @pytest.fixture
 def mock_openai_response():
     """Create a mock OpenAI response."""
+
     def _create_mock(content):
         mock_response = MagicMock()
         mock_response.choices = [MagicMock()]
         mock_response.choices[0].message.content = content
         return mock_response
+
     return _create_mock
 
 
 # ============================================================================
 # Test: auto_fill_pdf_form
 # ============================================================================
+
 
 class TestAutoFillPdfForm:
     """Tests for LLM-powered form auto-fill."""
@@ -150,17 +157,13 @@ class TestAutoFillPdfForm:
     def test_auto_fill_without_any_llm_returns_error(self, mock_local, sample_form_pdf, tmp_path):
         """Without any LLM backend, should return error with clear message."""
         mock_local.return_value = False  # Local server not available
-        
+
         output = tmp_path / "filled.pdf"
         source_data = {"name": "John Smith", "email_address": "john@example.com"}
-        
+
         try:
-            result = pdf_tools.auto_fill_pdf_form(
-                sample_form_pdf,
-                str(output),
-                source_data=source_data
-            )
-            
+            result = pdf_tools.auto_fill_pdf_form(sample_form_pdf, str(output), source_data=source_data)
+
             # Should return error or succeed with direct mapping only
             if "error" in result:
                 # Check for common error indicators
@@ -180,30 +183,28 @@ class TestAutoFillPdfForm:
         # Skip if openai not available
         if not pdf_tools._HAS_OPENAI:
             pytest.skip("OpenAI library not installed")
-            
+
         output = tmp_path / "filled.pdf"
         source_data = {
             "name": "John Smith",
             "email_address": "john@example.com",
             "phone_number": "555-123-4567",
-            "home_address": "123 Main St, NYC"
+            "home_address": "123 Main St, NYC",
         }
-        
+
         # Mock LLM returns field mapping
-        mock_llm.return_value = json.dumps({
-            "full_name": "John Smith",
-            "email": "john@example.com",
-            "phone": "555-123-4567",
-            "address": "123 Main St, NYC"
-        })
-        
+        mock_llm.return_value = json.dumps(
+            {
+                "full_name": "John Smith",
+                "email": "john@example.com",
+                "phone": "555-123-4567",
+                "address": "123 Main St, NYC",
+            }
+        )
+
         try:
-            result = pdf_tools.auto_fill_pdf_form(
-                sample_form_pdf,
-                str(output),
-                source_data=source_data
-            )
-            
+            result = pdf_tools.auto_fill_pdf_form(sample_form_pdf, str(output), source_data=source_data)
+
             # Should either succeed or fail gracefully
             if "error" not in result:
                 assert result.get("filled_fields", 0) >= 0
@@ -220,21 +221,15 @@ class TestAutoFillPdfForm:
         # Skip if openai not available
         if not pdf_tools._HAS_OPENAI:
             pytest.skip("OpenAI library not installed")
-            
+
         output = tmp_path / "filled.pdf"
         source_data = {"full_name": "John Smith"}  # Use exact field name for direct mapping
-        
-        mock_llm.return_value = json.dumps({
-            "full_name": "John Smith"
-        })
-        
+
+        mock_llm.return_value = json.dumps({"full_name": "John Smith"})
+
         try:
-            result = pdf_tools.auto_fill_pdf_form(
-                sample_form_pdf,
-                str(output),
-                source_data=source_data
-            )
-            
+            result = pdf_tools.auto_fill_pdf_form(sample_form_pdf, str(output), source_data=source_data)
+
             # With direct mapping, should succeed
             assert "mappings" in result or "filled_fields" in result or "error" in result
         except AttributeError as e:
@@ -245,17 +240,14 @@ class TestAutoFillPdfForm:
     def test_auto_fill_with_invalid_pdf_returns_error(self, tmp_path):
         """Invalid PDF path should return error."""
         output = tmp_path / "filled.pdf"
-        result = pdf_tools.auto_fill_pdf_form(
-            "/nonexistent/path.pdf",
-            str(output),
-            source_data={"name": "Test"}
-        )
+        result = pdf_tools.auto_fill_pdf_form("/nonexistent/path.pdf", str(output), source_data={"name": "Test"})
         assert "error" in result
 
 
 # ============================================================================
 # Test: extract_structured_data
 # ============================================================================
+
 
 @patch("pdf_mcp.pdf_tools._check_local_model_server", return_value=False)
 @patch("pdf_mcp.pdf_tools._HAS_OLLAMA", False)
@@ -265,11 +257,8 @@ class TestExtractStructuredData:
 
     def test_extract_invoice_data(self, mock_check, sample_text_pdf):
         """Extract invoice-specific fields."""
-        result = pdf_tools.extract_structured_data(
-            sample_text_pdf,
-            data_type="invoice"
-        )
-        
+        result = pdf_tools.extract_structured_data(sample_text_pdf, data_type="invoice")
+
         # Should return structured data (even without LLM, uses pattern matching)
         assert "error" not in result or "api" in result.get("error", "").lower()
         if "error" not in result:
@@ -277,48 +266,37 @@ class TestExtractStructuredData:
 
     def test_extract_with_custom_schema(self, mock_check, sample_text_pdf):
         """Extract data using custom schema definition."""
-        schema = {
-            "invoice_number": "string",
-            "total_amount": "number",
-            "due_date": "date"
-        }
-        
-        result = pdf_tools.extract_structured_data(
-            sample_text_pdf,
-            schema=schema
-        )
-        
+        schema = {"invoice_number": "string", "total_amount": "number", "due_date": "date"}
+
+        result = pdf_tools.extract_structured_data(sample_text_pdf, schema=schema)
+
         # Should attempt extraction
         assert isinstance(result, dict)
 
     def test_extract_with_invalid_pdf_returns_error(self, mock_check):
         """Invalid PDF should return error."""
-        result = pdf_tools.extract_structured_data(
-            "/nonexistent/path.pdf",
-            data_type="invoice"
-        )
+        result = pdf_tools.extract_structured_data("/nonexistent/path.pdf", data_type="invoice")
         assert "error" in result
 
     @patch("pdf_mcp.pdf_tools._HAS_OPENAI", True)
     @patch("pdf_mcp.pdf_tools._call_llm")
     def test_extract_with_mocked_llm(self, mock_llm, sample_text_pdf):
         """With mocked LLM, should return structured extraction."""
-        mock_llm.return_value = json.dumps({
-            "invoice_number": "12345",
-            "date": "January 15, 2026",
-            "total": 162.00,
-            "items": [
-                {"name": "Widget A", "price": 50.00},
-                {"name": "Widget B", "price": 75.00},
-                {"name": "Service Fee", "price": 25.00}
-            ]
-        })
-        
-        result = pdf_tools.extract_structured_data(
-            sample_text_pdf,
-            data_type="invoice"
+        mock_llm.return_value = json.dumps(
+            {
+                "invoice_number": "12345",
+                "date": "January 15, 2026",
+                "total": 162.00,
+                "items": [
+                    {"name": "Widget A", "price": 50.00},
+                    {"name": "Widget B", "price": 75.00},
+                    {"name": "Service Fee", "price": 25.00},
+                ],
+            }
         )
-        
+
+        result = pdf_tools.extract_structured_data(sample_text_pdf, data_type="invoice")
+
         if "error" not in result:
             assert "data" in result or "extracted" in result
 
@@ -326,6 +304,7 @@ class TestExtractStructuredData:
 # ============================================================================
 # Test: analyze_pdf_content
 # ============================================================================
+
 
 @patch("pdf_mcp.pdf_tools._check_local_model_server", return_value=False)
 @patch("pdf_mcp.pdf_tools._HAS_OLLAMA", False)
@@ -336,7 +315,7 @@ class TestAnalyzePdfContent:
     def test_analyze_returns_document_type(self, mock_check, sample_text_pdf):
         """Should classify document type."""
         result = pdf_tools.analyze_pdf_content(sample_text_pdf)
-        
+
         # Even without LLM, should attempt classification
         assert isinstance(result, dict)
         if "error" not in result:
@@ -344,20 +323,14 @@ class TestAnalyzePdfContent:
 
     def test_analyze_returns_summary(self, mock_check, sample_text_pdf):
         """Should generate summary."""
-        result = pdf_tools.analyze_pdf_content(
-            sample_text_pdf,
-            include_summary=True
-        )
-        
+        result = pdf_tools.analyze_pdf_content(sample_text_pdf, include_summary=True)
+
         assert isinstance(result, dict)
 
     def test_analyze_detects_key_entities(self, mock_check, sample_text_pdf):
         """Should detect key entities like dates, amounts, names."""
-        result = pdf_tools.analyze_pdf_content(
-            sample_text_pdf,
-            detect_entities=True
-        )
-        
+        result = pdf_tools.analyze_pdf_content(sample_text_pdf, detect_entities=True)
+
         assert isinstance(result, dict)
 
     def test_analyze_with_invalid_pdf_returns_error(self, mock_check):
@@ -369,24 +342,18 @@ class TestAnalyzePdfContent:
     @patch("pdf_mcp.pdf_tools._call_llm")
     def test_analyze_with_mocked_llm(self, mock_llm, sample_text_pdf):
         """With mocked LLM, should return full analysis."""
-        mock_llm.return_value = json.dumps({
-            "document_type": "invoice",
-            "summary": "Invoice #12345 for $162.00 from January 15, 2026",
-            "key_entities": {
-                "invoice_number": "12345",
-                "total_amount": "$162.00",
-                "due_date": "February 15, 2026"
-            },
-            "risk_flags": [],
-            "completeness_score": 0.95
-        })
-        
-        result = pdf_tools.analyze_pdf_content(
-            sample_text_pdf,
-            include_summary=True,
-            detect_entities=True
+        mock_llm.return_value = json.dumps(
+            {
+                "document_type": "invoice",
+                "summary": "Invoice #12345 for $162.00 from January 15, 2026",
+                "key_entities": {"invoice_number": "12345", "total_amount": "$162.00", "due_date": "February 15, 2026"},
+                "risk_flags": [],
+                "completeness_score": 0.95,
+            }
         )
-        
+
+        result = pdf_tools.analyze_pdf_content(sample_text_pdf, include_summary=True, detect_entities=True)
+
         if "error" not in result:
             assert "analysis" in result or "document_type" in result
 
@@ -394,6 +361,7 @@ class TestAnalyzePdfContent:
 # ============================================================================
 # Test: LLM Integration Helpers
 # ============================================================================
+
 
 class TestLLMHelpers:
     """Tests for LLM integration helper functions."""
@@ -420,6 +388,7 @@ class TestLLMHelpers:
 # Test: MCP Tool Registration
 # ============================================================================
 
+
 class TestMCPToolRegistration:
     """Verify agentic tools are exposed via MCP."""
 
@@ -443,6 +412,7 @@ class TestMCPToolRegistration:
 # Integration Tests (with real PDFs, no LLM)
 # ============================================================================
 
+
 class TestAgenticIntegration:
     """Integration tests using real PDFs without LLM."""
 
@@ -452,15 +422,13 @@ class TestAgenticIntegration:
     def test_auto_fill_graceful_degradation(self, mock_check, sample_form_pdf, tmp_path):
         """Without LLM, should fall back gracefully."""
         output = tmp_path / "filled.pdf"
-        
+
         # Use exact field name to test direct mapping path
         try:
             result = pdf_tools.auto_fill_pdf_form(
-                sample_form_pdf,
-                str(output),
-                source_data={"full_name": "Direct Match"}
+                sample_form_pdf, str(output), source_data={"full_name": "Direct Match"}
             )
-            
+
             # Should either succeed with direct mapping or return helpful error
             assert isinstance(result, dict)
             # Either we got an error (no LLM) or we successfully filled
@@ -476,11 +444,8 @@ class TestAgenticIntegration:
     @patch("pdf_mcp.pdf_tools._HAS_OPENAI", False)
     def test_extract_structured_data_pattern_matching(self, mock_check, sample_text_pdf):
         """Without LLM, should use pattern matching for common types."""
-        result = pdf_tools.extract_structured_data(
-            sample_text_pdf,
-            data_type="invoice"
-        )
-        
+        result = pdf_tools.extract_structured_data(sample_text_pdf, data_type="invoice")
+
         # Should attempt pattern-based extraction
         assert isinstance(result, dict)
 
@@ -489,10 +454,7 @@ class TestAgenticIntegration:
     @patch("pdf_mcp.pdf_tools._HAS_OPENAI", False)
     def test_extract_structured_data_passport_mrz(self, mock_check, sample_passport_pdf):
         """Should extract key passport fields from MRZ and labels."""
-        result = pdf_tools.extract_structured_data(
-            sample_passport_pdf,
-            data_type="passport"
-        )
+        result = pdf_tools.extract_structured_data(sample_passport_pdf, data_type="passport")
 
         assert isinstance(result, dict)
         data = result.get("data", {})
@@ -512,10 +474,7 @@ class TestAgenticIntegration:
     @patch("pdf_mcp.pdf_tools._HAS_OPENAI", False)
     def test_extract_structured_data_passport_labels_only(self, mock_check, sample_passport_label_only_pdf):
         """Should extract key passport fields from labels when MRZ is missing."""
-        result = pdf_tools.extract_structured_data(
-            sample_passport_label_only_pdf,
-            data_type="passport"
-        )
+        result = pdf_tools.extract_structured_data(sample_passport_label_only_pdf, data_type="passport")
 
         assert isinstance(result, dict)
         data = result.get("data", {})
@@ -533,7 +492,7 @@ class TestAgenticIntegration:
     def test_analyze_pdf_basic_analysis(self, mock_check, sample_text_pdf):
         """Without LLM, should provide basic document analysis."""
         result = pdf_tools.analyze_pdf_content(sample_text_pdf)
-        
+
         # Should return basic metrics at minimum
         assert isinstance(result, dict)
 
@@ -541,6 +500,7 @@ class TestAgenticIntegration:
 # ============================================================================
 # Test: Multi-Backend Support (v0.9.0+)
 # ============================================================================
+
 
 class TestMultiBackendSupport:
     """Tests for local VLM, Ollama, and OpenAI backend support."""
@@ -654,11 +614,9 @@ class TestLocalVLMBackend:
         """With mocked server, should return response (OpenAI chat format)."""
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "choices": [{"message": {"content": "Test response"}}]
-        }
+        mock_response.json.return_value = {"choices": [{"message": {"content": "Test response"}}]}
         mock_requests.post.return_value = mock_response
-        
+
         result = pdf_tools._call_local_llm("test prompt")
         assert result == "Test response"
 
@@ -681,7 +639,7 @@ class TestOllamaBackend:
         """With mocked Ollama, should return response."""
         if not pdf_tools._HAS_OLLAMA:
             pytest.skip("Ollama not installed")
-        
+
         with patch("pdf_mcp.pdf_tools._ollama") as mock_ollama:
             # Ollama returns Pydantic ChatResponse; mock .message.content
             mock_response = MagicMock()
@@ -695,6 +653,7 @@ class TestOllamaBackend:
 # v0.9.0 Comprehensive Integration Tests
 # ============================================================================
 
+
 class TestLocalVLMIntegration:
     """Integration tests for local VLM backend with agentic functions."""
 
@@ -704,16 +663,13 @@ class TestLocalVLMIntegration:
         """auto_fill_pdf_form should use local backend when available."""
         mock_check.return_value = True
         mock_call_llm.return_value = json.dumps({"full_name": "Test User"})
-        
+
         output = tmp_path / "filled.pdf"
         try:
             result = pdf_tools.auto_fill_pdf_form(
-                sample_form_pdf,
-                str(output),
-                source_data={"name": "Test User"},
-                backend="local"
+                sample_form_pdf, str(output), source_data={"name": "Test User"}, backend="local"
             )
-            
+
             # Should either succeed or return meaningful result
             assert isinstance(result, dict)
             if "error" not in result:
@@ -727,17 +683,10 @@ class TestLocalVLMIntegration:
     def test_extract_structured_data_uses_local_backend(self, mock_call_llm, mock_check, sample_text_pdf):
         """extract_structured_data should use local backend when specified."""
         mock_check.return_value = True
-        mock_call_llm.return_value = json.dumps({
-            "invoice_number": "INV-001",
-            "total": "100.00"
-        })
-        
-        result = pdf_tools.extract_structured_data(
-            sample_text_pdf,
-            data_type="invoice",
-            backend="local"
-        )
-        
+        mock_call_llm.return_value = json.dumps({"invoice_number": "INV-001", "total": "100.00"})
+
+        result = pdf_tools.extract_structured_data(sample_text_pdf, data_type="invoice", backend="local")
+
         assert isinstance(result, dict)
         # Verify backend is tracked
         if "backend" in result:
@@ -748,18 +697,16 @@ class TestLocalVLMIntegration:
     def test_analyze_pdf_content_uses_local_backend(self, mock_call_llm, mock_check, sample_text_pdf):
         """analyze_pdf_content should use local backend when specified."""
         mock_check.return_value = True
-        mock_call_llm.return_value = json.dumps({
-            "summary": "This is a test document.",
-            "document_type": "invoice",
-            "key_findings": ["Invoice number found"]
-        })
-        
-        result = pdf_tools.analyze_pdf_content(
-            sample_text_pdf,
-            include_summary=True,
-            backend="local"
+        mock_call_llm.return_value = json.dumps(
+            {
+                "summary": "This is a test document.",
+                "document_type": "invoice",
+                "key_findings": ["Invoice number found"],
+            }
         )
-        
+
+        result = pdf_tools.analyze_pdf_content(sample_text_pdf, include_summary=True, backend="local")
+
         assert isinstance(result, dict)
         assert "document_type" in result
 
@@ -772,17 +719,10 @@ class TestOllamaIntegration:
     def test_extract_structured_data_with_ollama(self, mock_call_llm, mock_get_backend, sample_text_pdf):
         """extract_structured_data should work with Ollama backend."""
         mock_get_backend.return_value = "ollama"
-        mock_call_llm.return_value = json.dumps({
-            "invoice_number": "12345",
-            "date": "January 15, 2026"
-        })
-        
-        result = pdf_tools.extract_structured_data(
-            sample_text_pdf,
-            data_type="invoice",
-            backend="ollama"
-        )
-        
+        mock_call_llm.return_value = json.dumps({"invoice_number": "12345", "date": "January 15, 2026"})
+
+        result = pdf_tools.extract_structured_data(sample_text_pdf, data_type="invoice", backend="ollama")
+
         assert isinstance(result, dict)
 
     @patch("pdf_mcp.pdf_tools._get_llm_backend")
@@ -790,17 +730,12 @@ class TestOllamaIntegration:
     def test_analyze_pdf_content_with_ollama(self, mock_call_llm, mock_get_backend, sample_text_pdf):
         """analyze_pdf_content should work with Ollama backend."""
         mock_get_backend.return_value = "ollama"
-        mock_call_llm.return_value = json.dumps({
-            "summary": "Invoice document for services.",
-            "document_type": "invoice",
-            "key_findings": []
-        })
-        
-        result = pdf_tools.analyze_pdf_content(
-            sample_text_pdf,
-            backend="ollama"
+        mock_call_llm.return_value = json.dumps(
+            {"summary": "Invoice document for services.", "document_type": "invoice", "key_findings": []}
         )
-        
+
+        result = pdf_tools.analyze_pdf_content(sample_text_pdf, backend="ollama")
+
         assert isinstance(result, dict)
         assert "document_type" in result
 
@@ -813,11 +748,8 @@ class TestBackendFieldInResults:
     @patch("pdf_mcp.pdf_tools._HAS_OPENAI", False)
     def test_extract_structured_data_returns_backend_field(self, mock_check, sample_text_pdf):
         """extract_structured_data should return backend field."""
-        result = pdf_tools.extract_structured_data(
-            sample_text_pdf,
-            data_type="invoice"
-        )
-        
+        result = pdf_tools.extract_structured_data(sample_text_pdf, data_type="invoice")
+
         assert isinstance(result, dict)
         # Backend field should be present (may be None if no LLM used)
         assert "backend" in result
@@ -828,7 +760,7 @@ class TestBackendFieldInResults:
     def test_analyze_pdf_content_returns_backend_field(self, mock_check, sample_text_pdf):
         """analyze_pdf_content should return backend field."""
         result = pdf_tools.analyze_pdf_content(sample_text_pdf)
-        
+
         assert isinstance(result, dict)
         assert "backend" in result
 
@@ -837,17 +769,12 @@ class TestBackendFieldInResults:
     def test_backend_field_reflects_local_when_used(self, mock_call_llm, mock_check, sample_text_pdf):
         """When local backend is used, backend field should be 'local'."""
         mock_check.return_value = True
-        mock_call_llm.return_value = json.dumps({
-            "summary": "Test summary",
-            "document_type": "invoice",
-            "key_findings": []
-        })
-        
-        result = pdf_tools.analyze_pdf_content(
-            sample_text_pdf,
-            backend="local"
+        mock_call_llm.return_value = json.dumps(
+            {"summary": "Test summary", "document_type": "invoice", "key_findings": []}
         )
-        
+
+        result = pdf_tools.analyze_pdf_content(sample_text_pdf, backend="local")
+
         if "backend" in result and result["backend"] is not None:
             assert result["backend"] == "local"
 
@@ -861,12 +788,9 @@ class TestBackendFallbackChain:
     def test_no_backend_available_graceful_degradation(self, mock_check, sample_text_pdf):
         """When no backend available, should gracefully degrade to pattern matching."""
         mock_check.return_value = False
-        
-        result = pdf_tools.extract_structured_data(
-            sample_text_pdf,
-            data_type="invoice"
-        )
-        
+
+        result = pdf_tools.extract_structured_data(sample_text_pdf, data_type="invoice")
+
         # Should still return results using pattern matching
         assert isinstance(result, dict)
         if "method" in result:
@@ -878,18 +802,33 @@ class TestBackendFallbackChain:
     def test_fallback_from_local_to_ollama(self, mock_check):
         """When local unavailable, should fall back to Ollama."""
         mock_check.return_value = False
-        
+
         backend = pdf_tools._get_llm_backend()
         assert backend == "ollama"
 
     @patch("pdf_mcp.pdf_tools._check_local_model_server")
     @patch("pdf_mcp.pdf_tools._HAS_OLLAMA", False)
     @patch("pdf_mcp.pdf_tools._HAS_OPENAI", True)
-    @patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"})
-    def test_fallback_from_local_to_openai(self, mock_check):
-        """When local and Ollama unavailable, should fall back to OpenAI."""
+    @patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}, clear=True)
+    def test_openai_not_auto_selected_without_remote_opt_in(self, mock_check):
+        """Remote LLMs should never be selected just because a key exists."""
         mock_check.return_value = False
-        
+
+        backend = pdf_tools._get_llm_backend()
+        assert backend == ""
+
+    @patch("pdf_mcp.pdf_tools._check_local_model_server")
+    @patch("pdf_mcp.pdf_tools._HAS_OLLAMA", False)
+    @patch("pdf_mcp.pdf_tools._HAS_OPENAI", True)
+    @patch.dict(
+        os.environ,
+        {"OPENAI_API_KEY": "test-key", "PDF_MCP_ENABLE_REMOTE_LLM": "1"},
+        clear=True,
+    )
+    def test_openai_auto_selection_requires_remote_opt_in(self, mock_check):
+        """Users must opt in before remote LLMs enter the fallback chain."""
+        mock_check.return_value = False
+
         backend = pdf_tools._get_llm_backend()
         assert backend == "openai"
 
@@ -935,9 +874,9 @@ class TestUnifiedCallLLM:
     def test_call_llm_routes_to_local(self, mock_local):
         """_call_llm should route to local when specified."""
         mock_local.return_value = "local response"
-        
+
         result = pdf_tools._call_llm("test", backend="local")
-        
+
         mock_local.assert_called_once()
         assert result == "local response"
 
@@ -945,9 +884,9 @@ class TestUnifiedCallLLM:
     def test_call_llm_routes_to_ollama(self, mock_ollama):
         """_call_llm should route to ollama when specified."""
         mock_ollama.return_value = "ollama response"
-        
+
         result = pdf_tools._call_llm("test", backend="ollama")
-        
+
         mock_ollama.assert_called_once()
         assert result == "ollama response"
 
@@ -955,9 +894,9 @@ class TestUnifiedCallLLM:
     def test_call_llm_routes_to_openai(self, mock_openai):
         """_call_llm should route to openai when specified."""
         mock_openai.return_value = "openai response"
-        
+
         result = pdf_tools._call_llm("test", backend="openai")
-        
+
         mock_openai.assert_called_once()
         assert result == "openai response"
 
@@ -973,15 +912,15 @@ class TestMCPToolRegistrationV090:
     def test_all_agentic_tools_have_backend_param(self):
         """All agentic tools should accept backend parameter."""
         import inspect
-        
+
         # Check auto_fill_pdf_form
         sig = inspect.signature(pdf_tools.auto_fill_pdf_form)
         assert "backend" in sig.parameters
-        
+
         # Check extract_structured_data
         sig = inspect.signature(pdf_tools.extract_structured_data)
         assert "backend" in sig.parameters
-        
+
         # Check analyze_pdf_content
         sig = inspect.signature(pdf_tools.analyze_pdf_content)
         assert "backend" in sig.parameters
@@ -993,10 +932,12 @@ class TestMCPToolRegistrationV090:
 # Mark with pytest.mark.slow for CI/CD to optionally skip
 # ============================================================================
 
+
 def _is_local_server_running() -> bool:
     """Check if local model server is running at localhost:8100."""
     try:
         import requests
+
         response = requests.get(f"{pdf_tools.LOCAL_MODEL_SERVER_URL}/health", timeout=2)
         return response.status_code == 200
     except Exception:
@@ -1007,10 +948,10 @@ def _is_local_server_running() -> bool:
 class TestE2ELocalVLM:
     """
     End-to-end tests with REAL local model server (not mocked).
-    
+
     These tests require the local model server to be running:
         ./scripts/run_local_vlm.sh
-    
+
     Tests are skipped if server is not available.
     """
 
@@ -1023,17 +964,15 @@ class TestE2ELocalVLM:
     def test_e2e_get_llm_backend_info_detects_local(self):
         """With server running, should detect local backend."""
         result = pdf_tools.get_llm_backend_info()
-        
+
         assert result["backends"]["local"]["available"] is True
         # Local should be selected as current backend (highest priority)
         assert result["current_backend"] == "local"
 
     def test_e2e_call_local_llm_returns_response(self):
         """With server running, should get actual LLM response."""
-        result = pdf_tools._call_local_llm(
-            "What is 2+2? Reply with just the number."
-        )
-        
+        result = pdf_tools._call_local_llm("What is 2+2? Reply with just the number.")
+
         assert result is not None
         assert len(result) > 0
         # Response should contain "4" somewhere
@@ -1041,12 +980,8 @@ class TestE2ELocalVLM:
 
     def test_e2e_extract_structured_data_with_local_llm(self, sample_text_pdf):
         """E2E test: extract_structured_data with real local LLM."""
-        result = pdf_tools.extract_structured_data(
-            sample_text_pdf,
-            data_type="invoice",
-            backend="local"
-        )
-        
+        result = pdf_tools.extract_structured_data(sample_text_pdf, data_type="invoice", backend="local")
+
         assert isinstance(result, dict)
         assert "error" not in result
         assert "data" in result
@@ -1058,12 +993,9 @@ class TestE2ELocalVLM:
     def test_e2e_analyze_pdf_content_with_local_llm(self, sample_text_pdf):
         """E2E test: analyze_pdf_content with real local LLM."""
         result = pdf_tools.analyze_pdf_content(
-            sample_text_pdf,
-            include_summary=True,
-            detect_entities=True,
-            backend="local"
+            sample_text_pdf, include_summary=True, detect_entities=True, backend="local"
         )
-        
+
         assert isinstance(result, dict)
         assert "error" not in result
         assert "document_type" in result
@@ -1076,13 +1008,11 @@ class TestE2ELocalVLM:
     def test_e2e_local_llm_timeout_handling(self):
         """E2E test: local LLM should handle requests without hanging."""
         import time
-        
+
         start = time.time()
-        result = pdf_tools._call_local_llm(
-            "Reply with a single word: hello"
-        )
+        result = pdf_tools._call_local_llm("Reply with a single word: hello")
         elapsed = time.time() - start
-        
+
         # Should complete within reasonable time (2 min max for slow first load)
         assert elapsed < 120
         assert result is not None
@@ -1091,6 +1021,7 @@ class TestE2ELocalVLM:
 def _ollama_model_available(model: str) -> bool:
     """Check if specific Ollama model is available."""
     from pdf_mcp import llm_setup
+
     if not llm_setup.ollama_is_installed():
         return False
     models = llm_setup.ollama_list_models()
@@ -1101,7 +1032,7 @@ def _ollama_model_available(model: str) -> bool:
 class TestE2EOllama:
     """
     End-to-end tests with REAL Ollama (not mocked).
-    
+
     Requires Ollama installed and a model pulled:
         ollama pull qwen2.5:7b
     """
@@ -1111,20 +1042,21 @@ class TestE2EOllama:
         """Skip all tests if Ollama not available."""
         if not pdf_tools._HAS_OLLAMA:
             pytest.skip("Ollama library not installed (pip install ollama)")
-        
+
         from pdf_mcp import llm_setup
-        
+
         # Check if Ollama CLI is installed
         if not llm_setup.ollama_is_installed():
             pytest.skip("Ollama CLI not found (install: curl -fsSL https://ollama.ai/install.sh | sh)")
-        
+
         # Check if Ollama service is running
         try:
             import ollama
+
             ollama.list()
         except Exception as e:
             pytest.skip(f"Ollama service not running: {e}")
-        
+
         # Check if any model is available
         models = llm_setup.ollama_list_models()
         if not models:
@@ -1135,31 +1067,24 @@ class TestE2EOllama:
         # Try smaller models first for speed
         test_models = ["qwen2.5:1.5b", "qwen2.5:7b", "llama3.2:1b"]
         model_to_use = None
-        
+
         for model in test_models:
             if _ollama_model_available(model):
                 model_to_use = model
                 break
-        
+
         if model_to_use is None:
             pytest.skip(f"None of {test_models} found; pull one: ollama pull qwen2.5:1.5b")
-        
-        result = pdf_tools._call_ollama_llm(
-            "What is 2+2? Reply with just the number.",
-            model=model_to_use
-        )
-        
+
+        result = pdf_tools._call_ollama_llm("What is 2+2? Reply with just the number.", model=model_to_use)
+
         assert result is not None
         assert len(result) > 0
 
     def test_e2e_extract_structured_data_with_ollama(self, sample_text_pdf):
         """E2E test: extract_structured_data with real Ollama."""
-        result = pdf_tools.extract_structured_data(
-            sample_text_pdf,
-            data_type="invoice",
-            backend="ollama"
-        )
-        
+        result = pdf_tools.extract_structured_data(sample_text_pdf, data_type="invoice", backend="ollama")
+
         assert isinstance(result, dict)
 
 
@@ -1167,7 +1092,7 @@ class TestE2EOllama:
 class TestE2EOpenAI:
     """
     End-to-end tests with REAL OpenAI API (not mocked).
-    
+
     Requires OPENAI_API_KEY environment variable.
     WARNING: These tests incur actual API costs!
     """
@@ -1182,22 +1107,15 @@ class TestE2EOpenAI:
 
     def test_e2e_openai_llm_returns_response(self):
         """With OpenAI API key, should get actual response."""
-        result = pdf_tools._call_openai_llm(
-            "What is 2+2? Reply with just the number.",
-            model="gpt-4o-mini"
-        )
-        
+        result = pdf_tools._call_openai_llm("What is 2+2? Reply with just the number.", model="gpt-4o-mini")
+
         assert result is not None
         assert "4" in result
 
     def test_e2e_analyze_pdf_content_with_openai(self, sample_text_pdf):
         """E2E test: analyze_pdf_content with real OpenAI."""
-        result = pdf_tools.analyze_pdf_content(
-            sample_text_pdf,
-            include_summary=True,
-            backend="openai"
-        )
-        
+        result = pdf_tools.analyze_pdf_content(sample_text_pdf, include_summary=True, backend="openai")
+
         assert isinstance(result, dict)
         assert "document_type" in result
 
@@ -1206,6 +1124,7 @@ class TestE2EOpenAI:
 # Backend Comparison Tests (v0.9.2+)
 # ============================================================================
 
+
 @pytest.mark.slow
 class TestBackendComparison:
     """Compare outputs across different backends."""
@@ -1213,32 +1132,29 @@ class TestBackendComparison:
     def test_all_backends_return_consistent_structure(self, sample_text_pdf):
         """All backends should return same result structure."""
         backends_to_test = []
-        
+
         # Check which backends are available
         if _is_local_server_running():
             backends_to_test.append("local")
         if pdf_tools._HAS_OLLAMA:
             try:
                 import ollama
+
                 ollama.list()
                 backends_to_test.append("ollama")
             except Exception:
                 pass
         if pdf_tools._HAS_OPENAI and os.environ.get("OPENAI_API_KEY"):
             backends_to_test.append("openai")
-        
+
         if not backends_to_test:
             pytest.skip("No LLM backends available for comparison")
-        
+
         results = {}
         for backend in backends_to_test:
-            result = pdf_tools.extract_structured_data(
-                sample_text_pdf,
-                data_type="invoice",
-                backend=backend
-            )
+            result = pdf_tools.extract_structured_data(sample_text_pdf, data_type="invoice", backend=backend)
             results[backend] = result
-        
+
         # All results should have same structure
         for backend, result in results.items():
             assert "data" in result, f"{backend} missing 'data' field"
@@ -1280,10 +1196,7 @@ class TestMrzChecksumValidation:
 
     def test_extract_passport_fields_with_checksum(self):
         """MRZ extraction should include checksum_valid field."""
-        mrz_text = (
-            "P<UTOERIKSSON<<ANNA<MARIA<<<<<<<<<<<<<<<<<<<\n"
-            "L898902C36UTO7408122F1204159ZE184226B<<<<<10\n"
-        )
+        mrz_text = "P<UTOERIKSSON<<ANNA<MARIA<<<<<<<<<<<<<<<<<<<\nL898902C36UTO7408122F1204159ZE184226B<<<<<10\n"
         extracted, confidence = pdf_tools._extract_passport_fields(mrz_text)
         assert extracted.get("passport_number") == "L898902C3"
         # After checksum implementation, confidence should be higher for validated fields
@@ -1295,22 +1208,14 @@ class TestMrzTd1Format:
 
     def test_extract_mrz_lines_td1(self):
         """Should detect TD1 format (3 lines of 30 chars)."""
-        td1_text = (
-            "I<UTOD231458907<<<<<<<<<<<<<<<\n"
-            "7408122F1204159UTO<<<<<<<<<<<6\n"
-            "ERIKSSON<<ANNA<MARIA<<<<<<<<<<\n"
-        )
+        td1_text = "I<UTOD231458907<<<<<<<<<<<<<<<\n7408122F1204159UTO<<<<<<<<<<<6\nERIKSSON<<ANNA<MARIA<<<<<<<<<<\n"
         result = pdf_tools._extract_mrz_lines(td1_text)
         assert result is not None
         assert len(result) >= 2
 
     def test_extract_passport_fields_td1(self):
         """Should extract fields from TD1 (ID card) format."""
-        td1_text = (
-            "I<UTOD231458907<<<<<<<<<<<<<<<\n"
-            "7408122F1204159UTO<<<<<<<<<<<6\n"
-            "ERIKSSON<<ANNA<MARIA<<<<<<<<<<\n"
-        )
+        td1_text = "I<UTOD231458907<<<<<<<<<<<<<<<\n7408122F1204159UTO<<<<<<<<<<<6\nERIKSSON<<ANNA<MARIA<<<<<<<<<<\n"
         extracted, confidence = pdf_tools._extract_passport_fields(td1_text)
         # Should extract at least some fields from TD1
         assert isinstance(extracted, dict)
@@ -1325,9 +1230,7 @@ class TestMrzOcrErrorCorrection:
     def test_mrz_ocr_correction_common_mistakes(self):
         """Should correct common OCR mistakes in MRZ: O->0, I->1, B->8."""
         # Line2 with OCR errors: O instead of 0, I instead of 1
-        corrected = pdf_tools._correct_mrz_ocr_errors(
-            "L89890ZC36UTO74O8I22FI2O4I59ZEI84226B<<<<<IO"
-        )
+        corrected = pdf_tools._correct_mrz_ocr_errors("L89890ZC36UTO74O8I22FI2O4I59ZEI84226B<<<<<IO")
         assert "0" in corrected  # O should become 0 in digit positions
         assert isinstance(corrected, str)
 
@@ -1385,9 +1288,7 @@ class TestFieldAliasMatching:
 
     def test_first_name_matches_given_name(self):
         """'first_name' and 'given_name' are aliases and should score 3."""
-        score = pdf_tools._score_label_match(
-            "first_name", "givenname", ["given", "name"]
-        )
+        score = pdf_tools._score_label_match("first_name", "givenname", ["given", "name"])
         assert score == 3, f"Expected alias score 3, got {score}"
 
     def test_last_name_matches_surname(self):
@@ -1424,9 +1325,7 @@ class TestFieldAliasMatching:
         """Alias matching should work in both directions."""
         score_a = pdf_tools._score_label_match("surname", "lastname", ["last", "name"])
         score_b = pdf_tools._score_label_match("last_name", "surname", ["surname"])
-        assert score_a == 3 and score_b == 3, (
-            f"Alias should be bidirectional: {score_a}, {score_b}"
-        )
+        assert score_a == 3 and score_b == 3, f"Alias should be bidirectional: {score_a}, {score_b}"
 
 
 class TestFormHeuristicsGeometricCheckbox:
@@ -1461,7 +1360,7 @@ class TestBug002PassportVlmIntegration:
     enhancement code path."""
 
     # Standard TD3 MRZ: 2 lines x 44 chars each
-    MRZ_LINE1 = "P<UTODOE<<JOHN<JAMES<<<<<<<<<<<<<<<<<<<<<<<<" # 44 chars
+    MRZ_LINE1 = "P<UTODOE<<JOHN<JAMES<<<<<<<<<<<<<<<<<<<<<<<<"  # 44 chars
     MRZ_LINE2 = "AB12345674UTO8001011M3012315<<<<<<<<<<<<<<06"  # 44 chars
 
     def test_passport_branch_reports_backend_when_available(self):
@@ -1491,9 +1390,7 @@ class TestBug002PassportVlmIntegration:
             )
 
         # BUG-002: backend must NOT be None when VLM is available
-        assert result["backend"] is not None, (
-            "BUG-002: passport branch still bypasses VLM (backend is None)"
-        )
+        assert result["backend"] is not None, "BUG-002: passport branch still bypasses VLM (backend is None)"
         assert result["backend_available"] is not None
 
     def test_passport_branch_method_includes_llm_when_enhanced(self):
@@ -1517,9 +1414,7 @@ class TestBug002PassportVlmIntegration:
                 backend="local",
             )
 
-        assert "llm" in result.get("method", ""), (
-            "BUG-002: method should contain 'llm' when VLM enhances passport data"
-        )
+        assert "llm" in result.get("method", ""), "BUG-002: method should contain 'llm' when VLM enhances passport data"
 
     def test_passport_branch_still_works_without_vlm(self):
         """Without VLM, passport extraction should still work (pattern only)."""
@@ -1549,11 +1444,13 @@ class TestBug002PassportVlmIntegration:
         low confidence on (issue_date, issuing_authority, place_of_birth)."""
         fake_text = f"{self.MRZ_LINE1}\n{self.MRZ_LINE2}\n"
         fake_text_result = {"text": fake_text, "pages_extracted": 1}
-        fake_llm_response = json.dumps({
-            "issue_date": "2020-06-15",
-            "issuing_authority": "Department of Immigration",
-            "place_of_birth": "Springfield",
-        })
+        fake_llm_response = json.dumps(
+            {
+                "issue_date": "2020-06-15",
+                "issuing_authority": "Department of Immigration",
+                "place_of_birth": "Springfield",
+            }
+        )
 
         with (
             patch.object(pdf_tools, "_ensure_file", return_value=Path("/fake/passport.pdf")),
@@ -1572,6 +1469,28 @@ class TestBug002PassportVlmIntegration:
         assert data.get("issue_date") == "2020-06-15"
         assert data.get("place_of_birth") == "Springfield"
 
+    def test_passport_branch_blocks_remote_llm_by_default(self):
+        """Passport text must not be sent to remote LLMs without explicit opt-in."""
+        fake_text = f"{self.MRZ_LINE1}\n{self.MRZ_LINE2}\n"
+        fake_text_result = {"text": fake_text, "pages_extracted": 1}
+
+        with (
+            patch.object(pdf_tools, "_ensure_file", return_value=Path("/fake/passport.pdf")),
+            patch.object(pdf_tools, "extract_text", return_value=fake_text_result),
+            patch.object(pdf_tools, "_call_llm") as mock_call_llm,
+            patch.dict(os.environ, {}, clear=True),
+        ):
+            result = pdf_tools.extract_structured_data(
+                "/fake/passport.pdf",
+                data_type="passport",
+                backend="openai",
+            )
+
+        mock_call_llm.assert_not_called()
+        assert result["method"] == "passport"
+        assert result["backend"] is None
+        assert "remote LLM backend 'openai' blocked" in result["llm_skipped"]
+
 
 # ============================================================================
 # Test: BUG-002a - Passport regex quality issues (v1.2.1)
@@ -1584,44 +1503,29 @@ class TestBug002aPassportRegexQuality:
 
     def test_passport_number_no_junk_prefix(self):
         """Passport number fallback should strip common prefixes."""
-        ocr_text = (
-            "PASSPORT | P CHN EK2547928\n"
-            "Some other text\n"
-        )
+        ocr_text = "PASSPORT | P CHN EK2547928\nSome other text\n"
         # No MRZ lines, so it falls back to label-value regex
         extracted, confidence = pdf_tools._extract_passport_fields(ocr_text)
         pn = extracted.get("passport_number", "")
         # Must NOT contain "PASSPORT" or "P CHN" prefix
-        assert "PASSPORT" not in pn, (
-            f"BUG-002a: passport_number contains junk prefix: {pn}"
-        )
+        assert "PASSPORT" not in pn, f"BUG-002a: passport_number contains junk prefix: {pn}"
         if pn:
             # Should be clean alphanumeric
             assert pn == "EK2547928" or len(pn) <= 12
 
     def test_authority_does_not_match_bearer_signature(self):
         """Issuing authority regex must not capture 'Bearer's signature'."""
-        ocr_text = (
-            "持 照 大 签名 /Bearer's signature x\n"
-            "Issuing Authority: National Immigration Administration\n"
-        )
+        ocr_text = "持 照 大 签名 /Bearer's signature x\nIssuing Authority: National Immigration Administration\n"
         extracted, confidence = pdf_tools._extract_passport_fields(ocr_text)
         auth = extracted.get("issuing_authority", "")
-        assert "signature" not in auth.lower(), (
-            f"BUG-002a: issuing_authority matched signature field: {auth}"
-        )
+        assert "signature" not in auth.lower(), f"BUG-002a: issuing_authority matched signature field: {auth}"
 
     def test_authority_does_not_match_signature_garbage(self):
         """Authority should not capture OCR noise like '#9 A %'."""
-        ocr_text = (
-            "#9 A % /Bearer's signature S\n"
-            "Authority: Immigration Office\n"
-        )
+        ocr_text = "#9 A % /Bearer's signature S\nAuthority: Immigration Office\n"
         extracted, confidence = pdf_tools._extract_passport_fields(ocr_text)
         auth = extracted.get("issuing_authority", "")
-        assert "signature" not in auth.lower(), (
-            f"BUG-002a: issuing_authority matched garbage: {auth}"
-        )
+        assert "signature" not in auth.lower(), f"BUG-002a: issuing_authority matched garbage: {auth}"
 
 
 # ============================================================================
@@ -1650,9 +1554,7 @@ class TestBug002bPageCount:
                 data_type="invoice",
             )
 
-        assert result["page_count"] == 3, (
-            f"BUG-002b: page_count is {result['page_count']}, expected 3"
-        )
+        assert result["page_count"] == 3, f"BUG-002b: page_count is {result['page_count']}, expected 3"
 
     def test_page_count_passport_uses_pages_extracted(self):
         """Passport branch should also correctly report page_count."""
@@ -1674,9 +1576,7 @@ class TestBug002bPageCount:
                 data_type="passport",
             )
 
-        assert result["page_count"] == 2, (
-            f"BUG-002b: passport page_count is {result['page_count']}, expected 2"
-        )
+        assert result["page_count"] == 2, f"BUG-002b: passport page_count is {result['page_count']}, expected 2"
 
 
 # ============================================================================
@@ -1690,8 +1590,8 @@ class TestMrzGap001FieldsInOutput:
     appear in the final passport output, even when VLM enhances it."""
 
     # Standard TD3 MRZ: 2 lines x 44 chars each
-    MRZ_LINE1 = "P<UTODOE<<JOHN<JAMES<<<<<<<<<<<<<<<<<<<<<<<<" # 44 chars
-    MRZ_LINE2 = "AB12345674UTO8001011M3012315<<<<<<<<<<<<<<06" # 44 chars
+    MRZ_LINE1 = "P<UTODOE<<JOHN<JAMES<<<<<<<<<<<<<<<<<<<<<<<<"  # 44 chars
+    MRZ_LINE2 = "AB12345674UTO8001011M3012315<<<<<<<<<<<<<<06"  # 44 chars
 
     def test_mrz_fields_present_in_passport_output(self):
         """All MRZ-derived fields should be in the output."""
@@ -1704,27 +1604,33 @@ class TestMrzGap001FieldsInOutput:
             patch.object(pdf_tools, "_get_llm_backend", return_value=None),
         ):
             result = pdf_tools.extract_structured_data(
-                "/fake/p.pdf", data_type="passport",
+                "/fake/p.pdf",
+                data_type="passport",
             )
 
         data = result["data"]
         expected_fields = [
-            "passport_number", "surname", "given_names",
-            "nationality", "birth_date", "sex", "expiry_date",
+            "passport_number",
+            "surname",
+            "given_names",
+            "nationality",
+            "birth_date",
+            "sex",
+            "expiry_date",
         ]
         for field in expected_fields:
-            assert field in data, (
-                f"MRZ-GAP-001: '{field}' missing from passport output"
-            )
+            assert field in data, f"MRZ-GAP-001: '{field}' missing from passport output"
 
     def test_mrz_fields_preserved_after_vlm_enhancement(self):
         """MRZ fields must NOT be overwritten by VLM (MRZ is higher confidence)."""
         fake_text = f"{self.MRZ_LINE1}\n{self.MRZ_LINE2}\n"
         fake_text_result = {"text": fake_text, "pages_extracted": 1}
-        fake_llm_response = json.dumps({
-            "issue_date": "2020-01-01",
-            "issuing_authority": "Test Office",
-        })
+        fake_llm_response = json.dumps(
+            {
+                "issue_date": "2020-01-01",
+                "issuing_authority": "Test Office",
+            }
+        )
 
         with (
             patch.object(pdf_tools, "_ensure_file", return_value=Path("/fake/p.pdf")),
@@ -1733,7 +1639,9 @@ class TestMrzGap001FieldsInOutput:
             patch.object(pdf_tools, "_call_llm", return_value=fake_llm_response),
         ):
             result = pdf_tools.extract_structured_data(
-                "/fake/p.pdf", data_type="passport", backend="local",
+                "/fake/p.pdf",
+                data_type="passport",
+                backend="local",
             )
 
         data = result["data"]
@@ -1761,34 +1669,32 @@ class TestMrzGap002NoisyOcrTolerance:
         noisy_line2 = "EK25479281CHN4905088F3304064MENPNAODNDKCA930"  # 45 chars
 
         mrz = pdf_tools._extract_mrz_lines(f"{noisy_line1}\n{noisy_line2}\n")
-        assert mrz is not None, (
-            "MRZ-GAP-002: MRZ detection failed on 45-char lines"
-        )
+        assert mrz is not None, "MRZ-GAP-002: MRZ detection failed on 45-char lines"
         # Returned lines should be trimmed to 44
         assert len(mrz[0]) == 44
         assert len(mrz[1]) == 44
 
     def test_mrz_detection_tolerates_short_line(self):
         """MRZ lines with 1 missing char (43) should still be detected."""
-        short_line1 = "P<UTODOE<<JOHN<JAMES<<<<<<<<<<<<<<<<<<<<<<<" # 43 chars
-        normal_line2 = "AB12345674UTO8001011M3012315<<<<<<<<<<<<<<06" # 44 chars
+        short_line1 = "P<UTODOE<<JOHN<JAMES<<<<<<<<<<<<<<<<<<<<<<<"  # 43 chars
+        normal_line2 = "AB12345674UTO8001011M3012315<<<<<<<<<<<<<<06"  # 44 chars
 
         mrz = pdf_tools._extract_mrz_lines(f"{short_line1}\n{normal_line2}\n")
         # Should still attempt to detect -- pad short lines
-        assert mrz is not None, (
-            "MRZ-GAP-002: MRZ detection failed on 43-char line"
-        )
+        assert mrz is not None, "MRZ-GAP-002: MRZ detection failed on 43-char line"
 
     def test_passport_number_from_vlm_when_mrz_fails(self):
         """When MRZ parsing fails, VLM should extract passport_number too."""
         # No MRZ lines in text
         fake_text = "Some passport text without clear MRZ lines\nPassport No: ABC123\n"
         fake_text_result = {"text": fake_text, "pages_extracted": 1}
-        fake_llm_response = json.dumps({
-            "passport_number": "EK2544770",
-            "issuing_authority": "Immigration Office",
-            "place_of_birth": "Fujian",
-        })
+        fake_llm_response = json.dumps(
+            {
+                "passport_number": "EK2544770",
+                "issuing_authority": "Immigration Office",
+                "place_of_birth": "Fujian",
+            }
+        )
 
         with (
             patch.object(pdf_tools, "_ensure_file", return_value=Path("/fake/p.pdf")),
@@ -1797,7 +1703,9 @@ class TestMrzGap002NoisyOcrTolerance:
             patch.object(pdf_tools, "_call_llm", return_value=fake_llm_response),
         ):
             result = pdf_tools.extract_structured_data(
-                "/fake/p.pdf", data_type="passport", backend="local",
+                "/fake/p.pdf",
+                data_type="passport",
+                backend="local",
             )
 
         assert result["data"].get("passport_number") == "EK2544770", (
@@ -1814,8 +1722,8 @@ class TestVlmQuality001DateCrossValidation:
     """VLM-QUALITY-001: When VLM returns an issue_date that matches the MRZ
     expiry_date, it should be flagged and corrected using domain knowledge."""
 
-    MRZ_LINE1 = "P<UTODOE<<JOHN<JAMES<<<<<<<<<<<<<<<<<<<<<<<<" # 44 chars
-    MRZ_LINE2 = "AB12345674UTO8001011M3012315<<<<<<<<<<<<<<06" # 44 chars
+    MRZ_LINE1 = "P<UTODOE<<JOHN<JAMES<<<<<<<<<<<<<<<<<<<<<<<<"  # 44 chars
+    MRZ_LINE2 = "AB12345674UTO8001011M3012315<<<<<<<<<<<<<<06"  # 44 chars
     # MRZ expiry = 301231 -> 2030-12-31
 
     def test_vlm_issue_date_not_same_as_mrz_expiry(self):
@@ -1823,10 +1731,12 @@ class TestVlmQuality001DateCrossValidation:
         fake_text = f"{self.MRZ_LINE1}\n{self.MRZ_LINE2}\n"
         fake_text_result = {"text": fake_text, "pages_extracted": 1}
         # VLM mistakenly returns the expiry date as issue_date
-        fake_llm_response = json.dumps({
-            "issue_date": "2030-12-31",  # Same as MRZ expiry!
-            "issuing_authority": "Immigration Office",
-        })
+        fake_llm_response = json.dumps(
+            {
+                "issue_date": "2030-12-31",  # Same as MRZ expiry!
+                "issuing_authority": "Immigration Office",
+            }
+        )
 
         with (
             patch.object(pdf_tools, "_ensure_file", return_value=Path("/fake/p.pdf")),
@@ -1835,25 +1745,27 @@ class TestVlmQuality001DateCrossValidation:
             patch.object(pdf_tools, "_call_llm", return_value=fake_llm_response),
         ):
             result = pdf_tools.extract_structured_data(
-                "/fake/p.pdf", data_type="passport", backend="local",
+                "/fake/p.pdf",
+                data_type="passport",
+                backend="local",
             )
 
         data = result["data"]
         # issue_date must NOT be the same as expiry_date
         if data.get("issue_date") and data.get("expiry_date"):
-            assert data["issue_date"] != data["expiry_date"], (
-                "VLM-QUALITY-001: issue_date should not equal expiry_date"
-            )
+            assert data["issue_date"] != data["expiry_date"], "VLM-QUALITY-001: issue_date should not equal expiry_date"
 
     def test_domain_knowledge_passport_validity(self):
         """When VLM date matches MRZ expiry, apply 10-year validity rule."""
         fake_text = f"{self.MRZ_LINE1}\n{self.MRZ_LINE2}\n"
         fake_text_result = {"text": fake_text, "pages_extracted": 1}
         # VLM returns the expiry date (301231 in MRZ = 2030-12-31)
-        fake_llm_response = json.dumps({
-            "issue_date": "301231",  # Raw MRZ format of expiry
-            "issuing_authority": "Immigration Office",
-        })
+        fake_llm_response = json.dumps(
+            {
+                "issue_date": "301231",  # Raw MRZ format of expiry
+                "issuing_authority": "Immigration Office",
+            }
+        )
 
         with (
             patch.object(pdf_tools, "_ensure_file", return_value=Path("/fake/p.pdf")),
@@ -1862,16 +1774,16 @@ class TestVlmQuality001DateCrossValidation:
             patch.object(pdf_tools, "_call_llm", return_value=fake_llm_response),
         ):
             result = pdf_tools.extract_structured_data(
-                "/fake/p.pdf", data_type="passport", backend="local",
+                "/fake/p.pdf",
+                data_type="passport",
+                backend="local",
             )
 
         data = result["data"]
         # If issue_date was corrected via domain knowledge, it should be ~10 years before expiry
         issue = data.get("issue_date", "")
         if issue:
-            assert "2030" not in str(issue), (
-                "VLM-QUALITY-001: issue_date still contains expiry year after correction"
-            )
+            assert "2030" not in str(issue), "VLM-QUALITY-001: issue_date still contains expiry year after correction"
 
 
 # ============================================================================
@@ -1887,59 +1799,46 @@ class TestBug003ExpiryDateCentury:
         """MRZ expiry '330406' should produce 2033-04-06, not 1933."""
         result = pdf_tools._parse_mrz_date("330406", is_expiry=True)
         assert result is not None
-        assert result.startswith("2033"), (
-            f"BUG-003: expiry '330406' returned {result}, expected 2033-04-06"
-        )
+        assert result.startswith("2033"), f"BUG-003: expiry '330406' returned {result}, expected 2033-04-06"
 
     def test_expiry_date_far_future(self):
         """MRZ expiry '450101' should produce 2045-01-01."""
         result = pdf_tools._parse_mrz_date("450101", is_expiry=True)
         assert result is not None
-        assert result.startswith("2045"), (
-            f"BUG-003: expiry '450101' returned {result}, expected 2045-01-01"
-        )
+        assert result.startswith("2045"), f"BUG-003: expiry '450101' returned {result}, expected 2045-01-01"
 
     def test_birth_date_past_year(self):
         """MRZ birth '490508' should produce 1949-05-08 (DOB is in the past)."""
         result = pdf_tools._parse_mrz_date("490508")
         assert result is not None
-        assert result.startswith("1949"), (
-            f"BUG-003: birth '490508' returned {result}, expected 1949-05-08"
-        )
+        assert result.startswith("1949"), f"BUG-003: birth '490508' returned {result}, expected 1949-05-08"
 
     def test_birth_date_recent(self):
         """MRZ birth '050101' should produce 2005-01-01 (young person)."""
         result = pdf_tools._parse_mrz_date("050101")
         assert result is not None
-        assert result.startswith("2005"), (
-            f"BUG-003: birth '050101' returned {result}, expected 2005-01-01"
-        )
+        assert result.startswith("2005"), f"BUG-003: birth '050101' returned {result}, expected 2005-01-01"
 
     def test_expiry_cascades_to_passport_output(self):
         """Full passport extraction must produce correct expiry year."""
         # TD3 MRZ with expiry 330406 (April 6, 2033)
-        line1 = "P<UTODOE<<JOHN<JAMES<<<<<<<<<<<<<<<<<<<<<<<<" # 44 chars
-        line2 = "AB12345674UTO8001011M3304064<<<<<<<<<<<<<<06" # 44 chars
+        line1 = "P<UTODOE<<JOHN<JAMES<<<<<<<<<<<<<<<<<<<<<<<<"  # 44 chars
+        line2 = "AB12345674UTO8001011M3304064<<<<<<<<<<<<<<06"  # 44 chars
         fake_text = f"{line1}\n{line2}\n"
         fake_text_result = {"text": fake_text, "pages_extracted": 1}
 
         with (
-            patch.object(
-                pdf_tools, "_ensure_file", return_value=Path("/fake/p.pdf")
-            ),
-            patch.object(
-                pdf_tools, "extract_text", return_value=fake_text_result
-            ),
+            patch.object(pdf_tools, "_ensure_file", return_value=Path("/fake/p.pdf")),
+            patch.object(pdf_tools, "extract_text", return_value=fake_text_result),
             patch.object(pdf_tools, "_get_llm_backend", return_value=None),
         ):
             result = pdf_tools.extract_structured_data(
-                "/fake/p.pdf", data_type="passport",
+                "/fake/p.pdf",
+                data_type="passport",
             )
 
         expiry = result["data"].get("expiry_date", "")
-        assert "2033" in str(expiry), (
-            f"BUG-003: expiry_date in passport output is {expiry}, expected 2033"
-        )
+        assert "2033" in str(expiry), f"BUG-003: expiry_date in passport output is {expiry}, expected 2033"
 
 
 # ============================================================================
@@ -1954,22 +1853,19 @@ class TestBug004PersonalNumberNoise:
     def test_noise_personal_number_filtered(self):
         """OCR noise like 'MENPNAODNDKCA9' should become None."""
         # MRZ line2 with noise in personal_number positions
-        line1 = "P<UTODOE<<JOHN<JAMES<<<<<<<<<<<<<<<<<<<<<<<<" # 44 chars
-        line2 = "AB12345674UTO8001011M3012315MENPNAODNDKCA906" # 44 chars
+        line1 = "P<UTODOE<<JOHN<JAMES<<<<<<<<<<<<<<<<<<<<<<<<"  # 44 chars
+        line2 = "AB12345674UTO8001011M3012315MENPNAODNDKCA906"  # 44 chars
         fake_text = f"{line1}\n{line2}\n"
         fake_text_result = {"text": fake_text, "pages_extracted": 1}
 
         with (
-            patch.object(
-                pdf_tools, "_ensure_file", return_value=Path("/fake/p.pdf")
-            ),
-            patch.object(
-                pdf_tools, "extract_text", return_value=fake_text_result
-            ),
+            patch.object(pdf_tools, "_ensure_file", return_value=Path("/fake/p.pdf")),
+            patch.object(pdf_tools, "extract_text", return_value=fake_text_result),
             patch.object(pdf_tools, "_get_llm_backend", return_value=None),
         ):
             result = pdf_tools.extract_structured_data(
-                "/fake/p.pdf", data_type="passport",
+                "/fake/p.pdf",
+                data_type="passport",
             )
 
         pn = result["data"].get("personal_number")
@@ -1981,28 +1877,23 @@ class TestBug004PersonalNumberNoise:
 
     def test_valid_personal_number_preserved(self):
         """A legitimate personal_number (digits) should be kept."""
-        line1 = "P<UTODOE<<JOHN<JAMES<<<<<<<<<<<<<<<<<<<<<<<<" # 44 chars
-        line2 = "AB12345674UTO8001011M301231512345678<<<<<<06" # 44 chars
+        line1 = "P<UTODOE<<JOHN<JAMES<<<<<<<<<<<<<<<<<<<<<<<<"  # 44 chars
+        line2 = "AB12345674UTO8001011M301231512345678<<<<<<06"  # 44 chars
         fake_text = f"{line1}\n{line2}\n"
         fake_text_result = {"text": fake_text, "pages_extracted": 1}
 
         with (
-            patch.object(
-                pdf_tools, "_ensure_file", return_value=Path("/fake/p.pdf")
-            ),
-            patch.object(
-                pdf_tools, "extract_text", return_value=fake_text_result
-            ),
+            patch.object(pdf_tools, "_ensure_file", return_value=Path("/fake/p.pdf")),
+            patch.object(pdf_tools, "extract_text", return_value=fake_text_result),
             patch.object(pdf_tools, "_get_llm_backend", return_value=None),
         ):
             result = pdf_tools.extract_structured_data(
-                "/fake/p.pdf", data_type="passport",
+                "/fake/p.pdf",
+                data_type="passport",
             )
 
         pn = result["data"].get("personal_number")
-        assert pn == "12345678", (
-            f"BUG-004: valid personal_number should be '12345678', got '{pn}'"
-        )
+        assert pn == "12345678", f"BUG-004: valid personal_number should be '12345678', got '{pn}'"
 
 
 # ============================================================================
@@ -2018,39 +1909,33 @@ class TestVlmQuality003AuthorityPrompt:
     def test_chinese_passport_authority_post_processing(self):
         """If issuing_country=CHN and authority mentions 'Foreign Affairs',
         it should be corrected to NIA."""
-        line1 = "P<CHNTEST<<PERSON<<<<<<<<<<<<<<<<<<<<<<<<<<<" # 44 chars
-        line2 = "AB12345674CHN8001011M3012315<<<<<<<<<<<<<<06" # 44 chars
+        line1 = "P<CHNTEST<<PERSON<<<<<<<<<<<<<<<<<<<<<<<<<<<"  # 44 chars
+        line2 = "AB12345674CHN8001011M3012315<<<<<<<<<<<<<<06"  # 44 chars
         fake_text = f"{line1}\n{line2}\n"
         fake_text_result = {"text": fake_text, "pages_extracted": 1}
         # VLM returns MFA (from intro page)
-        fake_llm_response = json.dumps({
-            "issue_date": "2020-12-31",
-            "issuing_authority": "Ministry of Foreign Affairs",
-            "place_of_birth": "Beijing",
-        })
+        fake_llm_response = json.dumps(
+            {
+                "issue_date": "2020-12-31",
+                "issuing_authority": "Ministry of Foreign Affairs",
+                "place_of_birth": "Beijing",
+            }
+        )
 
         with (
-            patch.object(
-                pdf_tools, "_ensure_file", return_value=Path("/fake/p.pdf")
-            ),
-            patch.object(
-                pdf_tools, "extract_text", return_value=fake_text_result
-            ),
-            patch.object(
-                pdf_tools, "_get_llm_backend", return_value="local"
-            ),
-            patch.object(
-                pdf_tools, "_call_llm", return_value=fake_llm_response
-            ),
+            patch.object(pdf_tools, "_ensure_file", return_value=Path("/fake/p.pdf")),
+            patch.object(pdf_tools, "extract_text", return_value=fake_text_result),
+            patch.object(pdf_tools, "_get_llm_backend", return_value="local"),
+            patch.object(pdf_tools, "_call_llm", return_value=fake_llm_response),
         ):
             result = pdf_tools.extract_structured_data(
-                "/fake/p.pdf", data_type="passport", backend="local",
+                "/fake/p.pdf",
+                data_type="passport",
+                backend="local",
             )
 
         authority = result["data"].get("issuing_authority", "")
-        assert "Foreign Affairs" not in authority, (
-            f"VLM-QUALITY-003: authority should not be MFA, got '{authority}'"
-        )
+        assert "Foreign Affairs" not in authority, f"VLM-QUALITY-003: authority should not be MFA, got '{authority}'"
 
 
 class TestBug005IssueDateOffByOneDay:
@@ -2067,15 +1952,12 @@ class TestBug005IssueDateOffByOneDay:
     def test_cross_validate_corrects_with_plus_one_day(self):
         """When VLM returns expiry as issue_date, the correction should produce
         expiry + 1 day - 10 years, not expiry - 10 years."""
-        from datetime import date, timedelta
 
         data = {"issue_date": "2033-04-06", "expiry_date": "2033-04-06"}
         conf = {"issue_date": 0.85, "expiry_date": 0.95}
         pdf_tools._cross_validate_passport_dates(data, conf)
         # Corrected issue_date should be 2023-04-07 (expiry + 1 day - 10 years)
-        assert data["issue_date"] == "2023-04-07", (
-            f"BUG-005: expected 2023-04-07, got {data['issue_date']}"
-        )
+        assert data["issue_date"] == "2023-04-07", f"BUG-005: expected 2023-04-07, got {data['issue_date']}"
         # Confidence should be lowered for derived values
         assert conf["issue_date"] <= 0.55, (
             f"BUG-005: derived date confidence should be <= 0.55, got {conf['issue_date']}"
@@ -2086,9 +1968,7 @@ class TestBug005IssueDateOffByOneDay:
         data = {"issue_date": "2033-01-01", "expiry_date": "2033-01-01"}
         conf = {"issue_date": 0.85, "expiry_date": 0.95}
         pdf_tools._cross_validate_passport_dates(data, conf)
-        assert data["issue_date"] == "2023-01-02", (
-            f"BUG-005: expected 2023-01-02, got {data['issue_date']}"
-        )
+        assert data["issue_date"] == "2023-01-02", f"BUG-005: expected 2023-01-02, got {data['issue_date']}"
 
     def test_cross_validate_dec31_year_boundary(self):
         """Expiry 2033-12-31 -> issue should be 2024-01-01.
@@ -2096,9 +1976,7 @@ class TestBug005IssueDateOffByOneDay:
         data = {"issue_date": "2033-12-31", "expiry_date": "2033-12-31"}
         conf = {"issue_date": 0.85, "expiry_date": 0.95}
         pdf_tools._cross_validate_passport_dates(data, conf)
-        assert data["issue_date"] == "2024-01-01", (
-            f"BUG-005: expected 2024-01-01, got {data['issue_date']}"
-        )
+        assert data["issue_date"] == "2024-01-01", f"BUG-005: expected 2024-01-01, got {data['issue_date']}"
 
     def test_detect_vlm_derived_issue_date(self):
         """When VLM returns issue_date that is exactly expiry - 10 years
@@ -2108,12 +1986,8 @@ class TestBug005IssueDateOffByOneDay:
         conf = {"issue_date": 0.85, "expiry_date": 0.95}
         pdf_tools._cross_validate_passport_dates(data, conf)
         # Should detect derivation and correct to +1 day
-        assert data["issue_date"] == "2023-04-07", (
-            f"BUG-005: expected 2023-04-07, got {data['issue_date']}"
-        )
-        assert conf["issue_date"] <= 0.55, (
-            f"BUG-005: derived confidence should be <= 0.55, got {conf['issue_date']}"
-        )
+        assert data["issue_date"] == "2023-04-07", f"BUG-005: expected 2023-04-07, got {data['issue_date']}"
+        assert conf["issue_date"] <= 0.55, f"BUG-005: derived confidence should be <= 0.55, got {conf['issue_date']}"
 
     def test_detect_vlm_derived_second_passport(self):
         """Second passport from bug report: expiry 2033-04-05, VLM issue 2023-04-05.
@@ -2121,9 +1995,7 @@ class TestBug005IssueDateOffByOneDay:
         data = {"issue_date": "2023-04-05", "expiry_date": "2033-04-05"}
         conf = {"issue_date": 0.85, "expiry_date": 0.95}
         pdf_tools._cross_validate_passport_dates(data, conf)
-        assert data["issue_date"] == "2023-04-06", (
-            f"BUG-005: expected 2023-04-06, got {data['issue_date']}"
-        )
+        assert data["issue_date"] == "2023-04-06", f"BUG-005: expected 2023-04-06, got {data['issue_date']}"
 
     def test_no_correction_for_legitimate_dates(self):
         """If issue_date is NOT exactly expiry - 10 years, do NOT modify it.
@@ -2134,9 +2006,7 @@ class TestBug005IssueDateOffByOneDay:
         assert data["issue_date"] == "2023-04-07", (
             f"BUG-005: legitimate date should not be modified, got {data['issue_date']}"
         )
-        assert conf["issue_date"] == 0.85, (
-            f"BUG-005: legitimate confidence should not change, got {conf['issue_date']}"
-        )
+        assert conf["issue_date"] == 0.85, f"BUG-005: legitimate confidence should not change, got {conf['issue_date']}"
 
     def test_full_pipeline_corrects_issue_date(self):
         """End-to-end: extract_structured_data should return the corrected
@@ -2147,39 +2017,34 @@ class TestBug005IssueDateOffByOneDay:
         fake_text = f"{line1}\n{line2}\n"
         fake_text_result = {"text": fake_text, "pages_extracted": 1}
         # VLM derives issue_date = expiry - 10 years (the BUG-005 pattern)
-        fake_llm_response = json.dumps({
-            "issue_date": "2023-04-06",  # Wrong: should be 2023-04-07
-            "issuing_authority": "National Immigration Administration, PRC",
-        })
+        fake_llm_response = json.dumps(
+            {
+                "issue_date": "2023-04-06",  # Wrong: should be 2023-04-07
+                "issuing_authority": "National Immigration Administration, PRC",
+            }
+        )
 
         with (
-            patch.object(
-                pdf_tools, "_ensure_file", return_value=Path("/fake/p.pdf")
-            ),
-            patch.object(
-                pdf_tools, "extract_text", return_value=fake_text_result
-            ),
-            patch.object(
-                pdf_tools, "_get_llm_backend", return_value="local"
-            ),
-            patch.object(
-                pdf_tools, "_call_llm", return_value=fake_llm_response
-            ),
+            patch.object(pdf_tools, "_ensure_file", return_value=Path("/fake/p.pdf")),
+            patch.object(pdf_tools, "extract_text", return_value=fake_text_result),
+            patch.object(pdf_tools, "_get_llm_backend", return_value="local"),
+            patch.object(pdf_tools, "_call_llm", return_value=fake_llm_response),
         ):
             result = pdf_tools.extract_structured_data(
-                "/fake/p.pdf", data_type="passport", backend="local",
+                "/fake/p.pdf",
+                data_type="passport",
+                backend="local",
             )
 
         issue = result["data"].get("issue_date", "")
-        assert issue == "2023-04-07", (
-            f"BUG-005: full pipeline issue_date should be 2023-04-07, got {issue}"
-        )
+        assert issue == "2023-04-07", f"BUG-005: full pipeline issue_date should be 2023-04-07, got {issue}"
 
     def test_vlm_prompt_does_not_instruct_derivation(self):
         """The VLM prompt should NOT tell the VLM to derive issue_date from
         expiry_date. It should instruct to READ it directly."""
         # This is a code inspection test -- verify the prompt guidance
         import inspect
+
         source = inspect.getsource(pdf_tools.extract_structured_data)
         # The prompt should NOT contain "10 years BEFORE the expiry"
         assert "10 years BEFORE the expiry" not in source, (

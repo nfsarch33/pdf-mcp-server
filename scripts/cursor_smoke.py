@@ -131,13 +131,13 @@ def run_smoke(inputs_dir: Path | None, out_dir: Path) -> None:
     filled = out_dir / "filled.pdf"
     pdf_tools.fill_pdf_form(str(form), str(filled), {"Name": "Test"}, flatten=False)
     r = PdfReader(str(filled))
-    f = (r.get_fields() or {})
+    f = r.get_fields() or {}
     assert str(f["Name"].get("/V")) == "Test"
 
     cleared = out_dir / "cleared.pdf"
     pdf_tools.clear_pdf_form_fields(str(filled), str(cleared), fields=["Name"])
     r2 = PdfReader(str(cleared))
-    f2 = (r2.get_fields() or {})
+    f2 = r2.get_fields() or {}
     assert str(f2["Name"].get("/V")) == ""
 
     # Sign then encrypt hard requirement
@@ -165,13 +165,15 @@ def run_smoke(inputs_dir: Path | None, out_dir: Path) -> None:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Cursor smoke test for pdf-handler tools")
-    ap.add_argument("--inputs-dir", type=Path, default=None, help="Optional dir containing blank.pdf, form.pdf, sig.png")
+    ap = argparse.ArgumentParser(description="Smoke test for pdf-mcp tools")
+    ap.add_argument(
+        "--inputs-dir", type=Path, default=None, help="Optional dir containing blank.pdf, form.pdf, sig.png"
+    )
     ap.add_argument("--out-dir", type=Path, default=None, help="Output directory (defaults to a temp dir)")
     args = ap.parse_args()
 
     if args.out_dir is None:
-        with tempfile.TemporaryDirectory(prefix="pdf-handler-smoke-") as td:
+        with tempfile.TemporaryDirectory(prefix="pdf-mcp-smoke-") as td:
             out = Path(td)
             run_smoke(args.inputs_dir, out)
             print(f"OK: smoke test passed. outputs at {out}")
@@ -183,4 +185,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

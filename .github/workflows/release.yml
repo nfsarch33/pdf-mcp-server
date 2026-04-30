@@ -6,7 +6,7 @@ name: Release
 # a GitHub Release with notes extracted from CHANGELOG.md.
 #
 # Pattern: tag push -> test gate -> version gate -> GitHub Release
-# See: Pepper KB "tag-based-release-sop.md" for full SOP.
+# See: docs/release-sop.md for the maintainer-side step-by-step SOP.
 
 on:
   push:

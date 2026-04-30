@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """CI guard for PR hygiene.
 
-If code changes touch pdf-handler implementation, require CHANGELOG.md update unless label override.
+If code changes touch pdf-mcp implementation, require CHANGELOG.md update unless label override.
 
 This is intentionally lightweight (no external deps).
 """
@@ -35,10 +35,7 @@ def main() -> int:
     files = [f for f in changed.splitlines() if f.strip()]
 
     # Only enforce when implementation changed.
-    impl_touched = any(
-        f.startswith("pdf_mcp/") or f.startswith("scripts/") or f.startswith("tests/")
-        for f in files
-    )
+    impl_touched = any(f.startswith("pdf_mcp/") or f.startswith("scripts/") or f.startswith("tests/") for f in files)
     if not impl_touched:
         print("PR hygiene: no implementation/test changes; no changelog required")
         return 0
