@@ -59,8 +59,34 @@ This project follows Keep a Changelog and Semantic Versioning.
   load on `import pdf_mcp.registry`), `LazyCallable` resolution +
   caching, frozen-dataclass invariants, and that the registry order is
   identical to `server.py`'s `@mcp.tool()` AST order. **Commit 1 of 4
-  for TICKET-05**: registry is intentionally NOT yet wired into
-  `pdf_mcp/server.py` or `pdf_mcp/cli.py`; that lands in PR #47-#49.
+  for TICKET-05**.
+
+### Changed
+- **`pdf_mcp/server.py` is now registry-driven (1175 → 94 LOC, ~92%
+  reduction)**. The 57 hand-written `@mcp.tool() / @_handle_errors`
+  decorator pairs are gone; tool registration is a single
+  `_register_all_tools()` loop that pulls every tool from
+  `pdf_mcp.registry.iter_all()` and calls `mcp.tool()(wrapped)`
+  imperatively. The MCP-facing tools/list payload (names, ordering,
+  descriptions, JSON schema) is byte-identical to v1.2.18. To add a
+  tool, the only required edit is one `register_tool(...)` call in
+  `pdf_mcp/registry.py:_seed_default_registry`; no further `server.py`
+  changes are needed. **Commit 2 of 4 for TICKET-05**.
+- **`LazyCallable.resolve()` is now public** (`pdf_mcp/registry.py`).
+  Returns the underlying callable with `__name__`, `__doc__`, and
+  `__annotations__` intact so FastMCP's introspection-based JSON
+  Schema generation continues to work after the registry rewrite. The
+  legacy private `_resolve` name is retained as an alias for
+  backwards compatibility within the package.
+
+### Added (parity / regression net)
+- **Server↔registry parity tests (`tests/test_server_registry_parity.py`,
+  6 new tests)**. Pins the contract that `server.py` mounts every tool
+  from the registry: AST-walk asserts no `@*.tool()` decorator on any
+  top-level `FunctionDef`, source must import the registry, file must
+  stay ≤200 LOC, runtime tool count + names + ordering + descriptions
+  must match `registry.iter_all()` exactly, and a sentinel set of 19
+  hand-picked tools must remain reachable. **TICKET-13**.
 
 ### Fixed
 - **Broken regex fallback in `scripts/check_release_ready.py:42`**: the

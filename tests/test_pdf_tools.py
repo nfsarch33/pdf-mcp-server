@@ -3311,14 +3311,21 @@ class TestConsensusRunsMCPExposure:
     """Verify consensus_runs is exposed in the MCP server layer."""
 
     def test_server_function_has_consensus_runs(self):
-        """The server.py wrapper must accept consensus_runs."""
+        """The MCP-exposed extract_structured_data must accept consensus_runs.
+
+        Pre-v1.3.0 each tool was a module-level function on
+        ``pdf_mcp.server`` and we could ``getattr`` directly. After the
+        registry refactor (TICKET-05 commit 2) tools live behind
+        FastMCP's :class:`ToolManager`; we resolve via the registry,
+        which also drives the MCP schema FastMCP publishes.
+        """
         import inspect
 
-        from pdf_mcp import server
+        import pdf_mcp.registry as registry
 
-        # Find the extract_structured_data function in server module
-        func = getattr(server, "extract_structured_data", None)
-        assert func is not None, "extract_structured_data must exist in server"
+        tool = registry.get("extract_structured_data")
+        func = tool.callable.resolve()
+        assert func is not None, "extract_structured_data must be in the registry"
         sig = inspect.signature(func)
         param = sig.parameters.get("consensus_runs")
         assert param is not None, "consensus_runs must be in MCP schema"
