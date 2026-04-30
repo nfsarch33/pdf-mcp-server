@@ -19,7 +19,7 @@ repos:
     hooks:
       - id: py-compile-repo-scripts
         name: python -m py_compile (repo scripts)
-        entry: bash -lc 'python3 -m py_compile "$@"'
+        entry: bash -lc 'python3 -m py_compile "$@"' --
         language: system
         types: [python]
         files: ^(scripts|pdf_mcp)/.*\.py$
@@ -30,5 +30,3 @@ repos:
         language: system
         stages: [pre-push]
         pass_filenames: false
-
-
