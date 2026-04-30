@@ -1,10 +1,16 @@
-# PDF MCP Server
+# pdf-mcp
 
-MCP server for PDF form filling, editing, OCR text extraction, table extraction, image extraction, link extraction, and batch processing.
+A first-class **command-line tool** and **Model Context Protocol (MCP)
+server** for everything PDF: form filling, page operations, OCR,
+metadata, signatures, redaction, image and table extraction, batch
+processing, and LLM-backed document understanding.
 
 Built with Python, `pypdf`, `fillpdf`, and `pymupdf` (AGPL).
 
-**Goal**: Extract 99% of information from any PDF file, including scanned/image-based documents, and fill any PDF forms.
+**Goal**: Extract 99% of information from any PDF file, including
+scanned / image-based documents, and fill any PDF form. Works equally
+well as a daily CLI for humans, as a CI / automation script, and as an
+MCP server inside Cursor or Claude Desktop.
 
 ## Status
 [![Release](https://img.shields.io/github/v/release/nfsarch33/pdf-mcp-server?style=flat&label=release)](https://github.com/nfsarch33/pdf-mcp-server/releases/latest)
@@ -13,46 +19,97 @@ Built with Python, `pypdf`, `fillpdf`, and `pymupdf` (AGPL).
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL%203.0-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 
-## Quick Start
+## Quick start
 
 ```bash
-# Clone and setup
+# 1. Install (project root)
 git clone https://github.com/nfsarch33/pdf-mcp-server.git
 cd pdf-mcp-server
-uv pip install -r requirements.txt
+make install      # uv-based install of runtime requirements
 
-# Run tests
+# 2. Try the CLI
+pdf-mcp --help                                    # top-level help
+pdf-mcp form --help                               # 9 form-handling tools
+pdf-mcp ai get-llm-backend-info --pretty          # check LLM backends
+
+# 3. Run as an MCP server (Cursor, Claude Desktop, etc.)
+pdf-mcp serve                                     # stdio transport
+
+# 4. Run the tests
 make test
-
-# Start the MCP server
-python -m pdf_mcp.server
 ```
 
-## CLI Usage (v1.3.0+)
-
-`pdf-mcp` now ships as a first-class CLI alongside the MCP server. Once installed
-(`uv tool install pdf-mcp`, `pip install pdf-mcp`, or `pip install -e .` from a
-checkout), the `pdf-mcp` binary is on your `$PATH`:
+Run the CLI on a real PDF:
 
 ```bash
-# Print version
-pdf-mcp --version
+# Read form fields
+pdf-mcp form get-pdf-form-fields \
+  --json '{"pdf_path":"sample.pdf"}' --pretty
 
-# List available subcommands
-pdf-mcp --help
+# Fill a form (writes filled.pdf)
+pdf-mcp form fill-pdf-form --json '{
+  "input_path": "sample.pdf",
+  "output_path": "filled.pdf",
+  "data": {"Name": "Jane Doe", "Email": "jane@example.com"},
+  "flatten": false
+}'
 
-# Run as an MCP server over stdio
-# (drop-in replacement for `python -m pdf_mcp.server`)
-pdf-mcp serve
+# OCR a scanned PDF
+pdf-mcp extract extract-text --json '{
+  "pdf_path": "scanned.pdf",
+  "engine": "ocr",
+  "language": "eng"
+}' --pretty
 ```
 
-The original `python -m pdf_mcp.server` invocation continues to work
-unchanged, so existing Cursor / Claude Desktop / CLI integrations do not
-need to be reconfigured. New verb groups (`form`, `pages`, `text`,
-`extract`, `annotate`, `sign`, `ai`) will land in subsequent v1.3.x
-releases — see the v1.3.0 sprint backlog in
-`session-handoffs/evidence/v257-w1-d0-foundation/pdf-mcp-server-2sprint-backlog.md`
-for the full roadmap.
+## CLI surface (v1.3.0+)
+
+`pdf-mcp` ships **all 57 underlying tools** as CLI subcommands grouped
+by verb. The taxonomy comes directly from `pdf_mcp.registry`, so the
+CLI and MCP surfaces never drift.
+
+| Verb | Tools | Examples |
+|------|-------|----------|
+| `pdf-mcp form` | 9 | `fill-pdf-form`, `get-pdf-form-fields`, `flatten-pdf` |
+| `pdf-mcp pages` | 8 | `merge-pdfs`, `split-pdf`, `extract-pages`, `rotate-pages` |
+| `pdf-mcp text` | 13 | `redact-text-regex`, `add-text-watermark`, `add-bates-numbering` |
+| `pdf-mcp extract` | 7 | `extract-text`, `extract-tables`, `extract-images`, `extract-links` |
+| `pdf-mcp metadata` | 4 | `get-pdf-metadata`, `set-pdf-metadata`, `sanitize-pdf-metadata` |
+| `pdf-mcp sign` | 6 | `sign-pdf`, `verify-digital-signatures`, `add-signature-image` |
+| `pdf-mcp ocr` | 2 | `get-ocr-languages`, `get-image-info` |
+| `pdf-mcp ai` | 4 | `auto-fill-pdf-form`, `extract-structured-data`, `analyze-pdf-content` |
+| `pdf-mcp batch` | 2 | `batch-process`, `compare-pdfs` |
+| `pdf-mcp security` | 2 | `encrypt-pdf`, `detect-pii-patterns` |
+| `pdf-mcp serve` | — | Run as an MCP server over stdio (drop-in for `python -m pdf_mcp.server`). |
+
+Every command accepts:
+
+```
+pdf-mcp <verb> <tool> [--json '{...}'] [--json-file PATH]
+                      [--pretty] [--output PATH]
+```
+
+* `--json` and `--json-file` are mutually exclusive (`--json` wins).
+* `--pretty` indents the JSON output for human reading.
+* `--output PATH` writes the JSON result to a file instead of stdout.
+* Tool exceptions exit non-zero with `error: <tool> failed: <msg>` on
+  stderr, so the CLI is safe to use in pipelines.
+
+The full per-tool reference is in [`USAGE.md`](USAGE.md), generated
+directly from the registry by `scripts/generate_usage_doc.py`.
+
+### Why this layout?
+
+* **Verb-first** matches Unix muscle memory (`git commit`, `kubectl apply`).
+* **Same code as the MCP surface** — there is one source of truth
+  (`pdf_mcp.registry`) so a CLI invocation and an MCP tool call hit
+  identical implementations.
+* **Lazy imports** — `pdf-mcp --help` and `pdf-mcp <verb> --help`
+  do **not** load `pymupdf` or `pypdf`. The heavy dependency tree only
+  loads when a tool is actually run, so help is sub-second cold.
+* **Backwards compatible** — `pdf-mcp serve` is a drop-in replacement
+  for `python -m pdf_mcp.server`. Existing Cursor / Claude Desktop
+  configs need no changes.
 
 ## CI notes
 - Dependency Review requires GitHub Dependency Graph to be enabled in the repository settings.
@@ -128,29 +185,33 @@ Edit `~/.cursor/mcp.json`:
 ```
 Restart Cursor after saving.
 
-## Features Overview (51 tools)
+## Features overview (57 tools across 10 verbs)
 
-| Category | Tools | Description |
-|----------|-------|-------------|
-| **Form Handling** | 8 tools | Fill, clear, flatten, and create PDF forms |
-| **Page Operations** | 5 tools | Merge, extract, rotate, reorder, insert, remove pages |
-| **Annotations** | 11 tools | Text annotations, comments, watermarks, redaction, numbering, highlights |
-| **Signatures & Security** | 7 tools | Digital signing, verification, encryption |
-| **Metadata** | 3 tools | Get, set, and sanitize PDF metadata |
-| **Export & Text** | 5 tools | Unified text extraction, export to Markdown/JSON |
-| **Table Extraction** | 1 tool | Extract tables as structured data |
-| **Image Extraction** | 2 tools | Extract/analyze embedded images |
-| **Form Detection** | 1 tool | Auto-detect form fields in non-AcroForm PDFs |
-| **PII Detection** | 1 tool | Detect common PII patterns (email, phone, SSN, credit cards) |
-| **Link Extraction** | 1 tool | Extract URLs, hyperlinks, internal references |
-| **PDF Optimization** | 1 tool | Compress/reduce PDF file size |
-| **Barcode/QR Detection** | 1 tool | Detect and decode barcodes and QR codes |
-| **Page Splitting** | 1 tool | Split by bookmarks or page count (unified API) |
-| **PDF Comparison** | 1 tool | Compare two PDFs and find differences |
-| **Batch Processing** | 1 tool | Process multiple PDFs at once |
-| **Agentic AI** | 4 tools | LLM-powered form filling, entity extraction, document analysis + local VLM (v0.9.0+) |
+| Verb group | Tools | What it does |
+|------------|-------|--------------|
+| `form` | 9 | Read, fill, clear, flatten, and create PDF forms (AcroForm + label-detection fallback). |
+| `pages` | 8 | Merge, split, extract, rotate, reorder, insert, remove, optimise. |
+| `text` | 13 | Annotations, redaction, watermarks, comments, page numbers, Bates stamps. |
+| `extract` | 7 | Text blocks, tables, images, links, structured data, barcodes/QR, format export. |
+| `metadata` | 4 | Read, write, sanitise metadata + classify PDF type (searchable / image / hybrid). |
+| `sign` | 6 | PKCS#12 / PEM digital signatures + signature image stamps + verification. |
+| `ocr` | 2 | OCR language inventory + image inspection (Tesseract + optional packs). |
+| `ai` | 4 | LLM-backed form auto-fill, structured data extraction, document analysis. |
+| `batch` | 2 | Multi-file processing and PDF-vs-PDF comparison. |
+| `security` | 2 | Password encryption + PII pattern detection. |
 
-## Available Tools
+**See [`USAGE.md`](USAGE.md) for the full per-tool command reference.**
+
+The same 57 tools are exposed as MCP tools with their original
+`snake_case` names (e.g. `fill_pdf_form`, `extract_text`,
+`detect_pii_patterns`).
+
+## Available tools (Python API reference)
+
+The Python API on `pdf_mcp.pdf_tools` matches the CLI / MCP surface
+1:1. `pdf-mcp form fill-pdf-form ...` calls the same
+`pdf_tools.fill_pdf_form(...)` function as an MCP `fill_pdf_form` tool
+call. Pick the surface that matches your workflow.
 
 ### Form Handling
 - `get_pdf_form_fields(pdf_path)`: list fields and count.
@@ -403,10 +464,13 @@ make install-llm-models
 ```
 This handles Python venv, system packages, Ollama, GPU detection, and VLM runner generation for both macOS and WSL/Linux.
 
-### Test Coverage
-- **444 tests** total (includes Tier 1/2 coverage + agentic features + multi-backend + e2e tests + v1.3.0 CLI surface)
-- All tests pass with Tesseract installed
-- A small number of tests skip depending on which optional dependencies/backends are available
+### Test coverage
+- **477 tests** (Tier 1/2 + agentic features + multi-backend + e2e + v1.3.0 CLI surface + verb-group mounts).
+- 75% line coverage gate enforced in CI via `pytest --cov-fail-under=75` (see `pyproject.toml`).
+- `pytest --cov` ships in dev extras (`make install-dev`) and writes
+  `coverage.xml` for upload to coverage tools.
+- All tests pass with Tesseract installed; a small number skip
+  depending on which optional dependencies / backends are available.
 
 ## Agent Extensions (v1.0.1+)
 

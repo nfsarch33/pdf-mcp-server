@@ -109,6 +109,31 @@ This project follows Keep a Changelog and Semantic Versioning.
   must match `registry.iter_all()` exactly, and a sentinel set of 19
   hand-picked tools must remain reachable. **TICKET-13**.
 
+### Added (docs hardening, TICKET-05 commit 4)
+- **`USAGE.md`**: New auto-generated CLI reference. Renders the verb-group
+  table (10 verbs / 57 tools) and per-verb tool listings derived
+  directly from `pdf_mcp.registry.verb_groups()`. The generator
+  script `scripts/generate_usage_doc.py` supports `--check` mode for
+  a CI guard so `USAGE.md` cannot drift from the registry. New CI job
+  `docs-sync` runs `python scripts/generate_usage_doc.py --check` on
+  every PR to enforce this.
+- **README rewritten as CLI-first**: top-level title is now `pdf-mcp`,
+  Quick start leads with `pdf-mcp form get-pdf-form-fields ...` style
+  invocations, and a new "CLI surface (v1.3.0+)" section summarises
+  verb groups + JSON kwargs flags. The MCP server stays a peer use
+  case, not the only one. The Python API tool list is now framed as a
+  reference for direct `pdf_mcp.pdf_tools` callers.
+- **`CONTRIBUTING.md`**: New contributor guide explaining the registry
+  pattern, the lazy-import invariant, the four-step workflow for adding
+  a new tool (implement → register → regenerate USAGE.md → test), and
+  the pre-commit / coverage / conventional-commit gates.
+- **10 new tests** in `tests/test_usage_doc_generator.py`: verify
+  `_render()` lists every verb group and every tool CLI name, includes
+  the invocation section + backwards-compat note, exits 1 in
+  `--check` mode when the file is missing or drifted (without
+  writing), and pins `USAGE.md` on disk byte-for-byte against the
+  rendered output.
+
 ### Fixed
 - **Broken regex fallback in `scripts/check_release_ready.py:42`**: the
   raw-string pattern used double-escaped backslashes (`\\s`), which inside
