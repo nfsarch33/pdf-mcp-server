@@ -42,22 +42,45 @@ call away.
 
 from __future__ import annotations
 
+import contextlib
 import os
 from pathlib import Path
-from typing import Sequence
+from typing import Iterator, Sequence
 
 GOLDEN_DIR: Path = Path(__file__).resolve().parent / "golden"
 UPDATE_ENV: str = "PDF_MCP_UPDATE_SNAPSHOTS"
+SNAPSHOT_COLUMNS: str = "120"
 
 
 def _normalise(text: str) -> str:
     """Right-strip every line and force a single trailing newline."""
     text = text.replace("\r\n", "\n").replace("\r", "\n")
     lines = [line.rstrip() for line in text.split("\n")]
-    # Drop trailing empty lines, then add exactly one ``\n``.
     while lines and lines[-1] == "":
         lines.pop()
     return "\n".join(lines) + "\n"
+
+
+@contextlib.contextmanager
+def _pinned_terminal_env() -> Iterator[None]:
+    """Pin terminal width + non-interactive output so Click / Rich render
+    deterministically across macOS, Linux, and Ubuntu CI runners."""
+    overrides = {
+        "COLUMNS": SNAPSHOT_COLUMNS,
+        "LINES": "40",
+        "TERM": "dumb",
+        "NO_COLOR": "1",
+    }
+    saved = {k: os.environ.get(k) for k in overrides}
+    os.environ.update(overrides)
+    try:
+        yield
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
 
 
 def assert_cli_output_matches(
@@ -92,8 +115,8 @@ def assert_cli_output_matches(
     GOLDEN_DIR.mkdir(parents=True, exist_ok=True)
     snapshot_path = GOLDEN_DIR / f"{snapshot_name}.txt"
 
-    # CliRunner.invoke() returns a Result with .output / .stdout / .stderr.
-    result = cli_runner.invoke(app, list(args))  # type: ignore[attr-defined]
+    with _pinned_terminal_env():
+        result = cli_runner.invoke(app, list(args))  # type: ignore[attr-defined]
     if result.exit_code != 0:
         raise AssertionError(
             f"snapshot {snapshot_name!r}: CLI exited with code {result.exit_code} — stdout: {result.output!r}"
