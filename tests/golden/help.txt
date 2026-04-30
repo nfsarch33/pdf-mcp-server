@@ -11,5 +11,15 @@
 │ --help                           Show this message and exit.                                                         │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─ Commands ───────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ serve  Run pdf-mcp as an MCP server over stdio.                                                                      │
+│ serve     Run pdf-mcp as an MCP server over stdio.                                                                   │
+│ form      PDF form discovery, filling, templates, and flattening.                                                    │
+│ security  Encryption and PII detection.                                                                              │
+│ pages     Page-level mutation: merge, split, extract, rotate, reorder, insert, remove.                               │
+│ text      Text annotations, redaction, watermarks, comments, page numbers, Bates stamps.                             │
+│ metadata  Metadata read/write/sanitisation and PDF type/feature detection.                                           │
+│ sign      Digital and visual signatures.                                                                             │
+│ extract   Read-only extraction: text blocks, tables, images, links, structured data.                                 │
+│ ocr       OCR helpers and image inspection.                                                                          │
+│ batch     Multi-file processing and comparisons.                                                                     │
+│ ai        LLM-backed extraction, auto-fill, and analysis.                                                            │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
