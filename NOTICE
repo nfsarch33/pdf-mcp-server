@@ -1,0 +1,68 @@
+pdf-mcp
+Copyright 2026 pdf-mcp maintainers
+
+This product includes software developed by the pdf-mcp maintainers
+(https://github.com/nfsarch33/pdf-mcp-server).
+
+Licensed under the Apache License, Version 2.0. See LICENSE for full text.
+
+================================================================================
+RELICENSE NOTICE (v1.2.18 -> Apache-2.0)
+================================================================================
+
+Releases up to and including v1.2.18 were distributed under the GNU Affero
+General Public License version 3.0 (AGPL-3.0). Starting with v1.3.0, this
+project is distributed under the Apache License, Version 2.0.
+
+The relicense applies to all source code, configuration, and documentation
+authored by the pdf-mcp maintainers. Contributors who submitted code under
+the prior AGPL-3.0 grant before this relicense have implicitly approved the
+Apache-2.0 distribution by retaining their work in the project (sole
+maintainer at relicense time; see ADR-020 in the upstream architecture
+record).
+
+If you previously distributed pdf-mcp under AGPL-3.0, those copies remain
+governed by AGPL-3.0; new releases are governed by Apache-2.0.
+
+See ADR-020 (general-purpose OSS MCP strategy) in the maintainer's
+architecture record for the relicense rationale.
+
+================================================================================
+THIRD-PARTY DEPENDENCY NOTICE
+================================================================================
+
+pdf-mcp depends on the following runtime libraries with their own license
+terms. The Apache-2.0 license on this project covers ONLY the code authored
+by the pdf-mcp maintainers; downstream distributors must independently
+satisfy each dependency's license terms.
+
+Notable copyleft dependency:
+
+  pymupdf (https://github.com/pymupdf/PyMuPDF)
+    License: AGPL-3.0 (with optional commercial license available from
+             Artifex Software for closed-source/proprietary distribution).
+    Effect:  When pdf-mcp is distributed combined with pymupdf, the
+             combined distribution is subject to AGPL-3.0 terms because
+             pymupdf is the copyleft component. The Apache-2.0 license on
+             pdf-mcp's own code remains valid for use, modification, and
+             redistribution of pdf-mcp's code in isolation or with
+             permissive-licensed dependencies. Closed-source/commercial
+             distributors should contact Artifex for a commercial pymupdf
+             license.
+
+Permissive dependencies (non-copyleft):
+
+  mcp                 (Apache-2.0)
+  pypdf               (BSD-3-Clause)
+  fillpdf             (MIT)
+  pyhanko             (MIT)
+  cryptography        (Apache-2.0 / BSD-3-Clause dual)
+  typer               (MIT)
+  pytesseract         (Apache-2.0)  [optional, ocr extra]
+  pillow              (MIT-CMU)     [optional, ocr extra]
+  openai              (Apache-2.0)  [optional, llm extra]
+
+A future release may explore replacing pymupdf with pypdf + pdfminer.six +
+pdfplumber + tesseract direct integration to remove the AGPL dependency
+entirely. See https://github.com/nfsarch33/pdf-mcp-server/issues for the
+tracking issue.

@@ -6,6 +6,29 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+### Changed (BREAKING for relicense-aware downstreams)
+- **License: AGPL-3.0 -> Apache-2.0** (effective v1.3.0).
+  - The maintainer's own code is now distributed under Apache-2.0. Releases
+    up to and including v1.2.18 remain governed by AGPL-3.0 for those who
+    consumed them under that grant.
+  - `LICENSE` replaced with the Apache-2.0 text + `Copyright 2026 pdf-mcp
+    maintainers` header.
+  - New `NOTICE` file documents the relicense, attribution, and the AGPL-3.0
+    `pymupdf` runtime dependency (downstream distributors must independently
+    satisfy `pymupdf` license terms when shipping pdf-mcp + pymupdf together).
+  - `pyproject.toml` updated with `license = "Apache-2.0"` (PEP 639 SPDX
+    expression) and `license-files = ["LICENSE", "NOTICE"]`. Deprecated
+    `License ::` trove classifier intentionally omitted (superseded by the
+    SPDX expression per PEP 639; modern setuptools rejects co-existence).
+  - README license badge + License section rewritten with explicit pymupdf
+    AGPL caveat for closed-source/proprietary downstream consumers.
+  - Rationale: ADR-020 in the maintainer's architecture record. AGPL-3.0
+    deters corporate adoption; Apache-2.0 aligns with Anthropic / OpenAI /
+    Google reference MCP servers and adds an explicit patent grant relevant
+    for PDF/OCR features.
+- **Version bump 1.2.18 -> 1.3.0** to mark the relicense; this is a
+  packaging/license boundary, not a runtime API break.
+
 ### Added
 - **Open-source release hardening**: added `SECURITY.md` with private
   vulnerability reporting guidance and supported-version policy for
