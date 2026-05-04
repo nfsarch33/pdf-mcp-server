@@ -1,0 +1,94 @@
+---
+description: Run sensitive personal-stack commands through runx, never raw shell.
+alwaysApply: true
+---
+
+# No Shell Leak
+
+Sensitive personal-stack identifiers must never appear in raw shell `argv`,
+in interactive zsh history, in `~/Library/Logs`, or in any session
+transcript visible to a model. Sensitive identifiers include:
+
+- internal IPs (Tailscale `100.x.x.x`, OCI public IPs, LAN `10.x.x.x`)
+- SSH key file paths (`~/.ssh/fleet_lan`, etc.) and key bytes
+- Bearer tokens, JFrog tokens, GitHub PATs, or any credential string
+- Private repo absolute paths (`/Users/jason.lian/ai-agent-business-stack`,
+  `/Users/jason.lian/ironclaw`, ...)
+- Container names tied to private GPU hosts
+- Git author email, signing identity selection, and hostname pairs
+- OCI instance IDs (`ocid1.*`), tenancy IDs, and compartment IDs
+
+The canonical wrapper for everything in that list is the `runx` Go CLI
+(`github.com/nfsarch33/runx`, installed at `/Users/jason.lian/runs/runx`).
+`runx` resolves aliases at run time, loads key bytes from macOS Keychain,
+and writes structured NDJSON to `~/logs/runx/`.
+
+## Required Surfaces
+
+Use these `runx` surfaces instead of raw shell. Argv carries only alias
+names defined in `~/.config/runx/config.yaml`:
+
+- SSH / port forwards: `runx ssh exec`, `runx ssh copy`, `runx tunnel
+  daemon|start|status` instead of `ssh`, `autossh`, `scp`, or hand-written
+  `ssh -L` invocations.
+- Git on personal repos: `runx git status|fetch|pull|push|commit|add|clone
+  --repo <alias>` instead of bare `git -C <path>` against a private repo.
+- PR management: `runx pr list|view|create|merge|close|rebase-loop
+  --repo <alias>` instead of raw `gh pr` from a private repo path.
+- GitHub API: `runx gh api|repo-view|repo-edit --repo <alias>` instead of
+  raw `gh api` or `gh repo` with org/repo slugs.
+- Docker (local or remote): `runx docker ps|compose|exec|logs [--target
+  <host-alias>]` instead of raw `docker` or `docker compose` commands.
+- Go toolchain: `runx go test|build|vet|mod-tidy --repo <alias>
+  [--subdir go]` instead of `cd ~/private-repo && go test`.
+- Make targets: `runx make build|test|lint --repo <alias> [--subdir go]`
+  instead of `cd ~/private-repo/go && make build`.
+- Flutter app commands: `runx flutter test|build --app <alias>`.
+- Sentrux quality gate: `runx sentrux gate|save|check|scan|rescan
+  --repo <alias>`.
+- EvoLoop probes: `runx evoloop smoke|doctor|recent`.
+- Launch agent management: `runx launchctl status|reload <alias>` instead
+  of raw `launchctl load|unload` with plist paths.
+- Network checks: `runx nc <forward-alias>` instead of `nc -zv`.
+- Long-running presets: `runx run <preset>` (chrome-debug, json-pr-count,
+  etc.).
+- History cleanup: `runx history scrub|audit`.
+- Logs: `runx logs show|tail|rotate <log-name>`.
+- Doctor: `runx doctor` for stack health.
+
+## Repo aliases (24 registered)
+
+business, global-kb, ironclaw, openclaw, runx, ironclaw-mcp, ironclaw-ops,
+mission-control, pdf-mcp, linkedin-mcp, upwork-mcp, hermes, gstack, router,
+autoresearch, openclaw-rl, agentic-research, skills, academic-skills,
+secure-auth, windows-mcp, chromedp, auto-research-sleep, memo.
+
+## Rules for Agents
+
+1. Never put an internal IP, SSH key path, key bytes, bearer token, OCI ID,
+   or private repo absolute path on the command line, in `cat <<EOF`
+   heredocs, or in transcript output.
+2. Never spawn `autossh` or `ssh -L` from a launch agent. All long-lived
+   forwards run as `runx tunnel daemon <name>`.
+3. Never log to `~/Library/Logs/<service>.ndjson`. All `runx`-driven logs
+   land in `~/logs/runx/<tool>.ndjson`.
+4. Temporary Go binaries live in `~/runs/`. Never run from `/tmp/`.
+5. If a workflow needs a new sensitive command, extend `runx` (add a
+   subcommand and an alias entry) instead of inlining shell.
+6. Subprocesses spawned by `runx` already get `HISTFILE=/dev/null`,
+   `HISTSIZE=0`, `RUNX_SESSION=1`, and `GH_PAGER=cat`.
+7. **Agent self-compliance**: when running sentrux, git, gh, make, go, or
+   docker against a private repo from within the Cursor Shell tool, use
+   `runx <subcmd> --repo <alias>` instead of raw commands. The alias-only
+   argv keeps transcripts clean even when Cursor logs the shell call.
+8. Never create or execute scripts in `/tmp/`. Use `runx run <preset>` or
+   add a new preset to config for recurring patterns.
+9. For remote Docker operations, use `runx docker --target <host-alias>`
+   instead of SSH-ing to a host and running docker commands manually.
+
+## References
+
+- Repo: `github.com/nfsarch33/runx` (Go, Cobra, MIT).
+- Config: `~/.config/runx/config.yaml` (mode `0600`).
+- SOP: `~/Code/global-kb/sop/no-shell-leak.md`.
+- Logs: `~/logs/runx/` (NDJSON, rotated).
