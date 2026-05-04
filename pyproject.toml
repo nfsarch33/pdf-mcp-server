@@ -1,8 +1,22 @@
 [project]
 name = "pdf-mcp"
-version = "1.2.18"
+version = "1.3.0"
 description = "Local CLI and MCP server for PDF form filling, editing, OCR, and AI-assisted extraction"
 authors = [{ name = "pdf-mcp maintainers" }]
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Office/Business",
+    "Topic :: Text Processing :: Markup",
+    "Topic :: Utilities",
+]
 requires-python = ">=3.10"
 dependencies = [
     "mcp>=0.1.1",

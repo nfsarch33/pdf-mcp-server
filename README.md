@@ -5,7 +5,7 @@ server** for everything PDF: form filling, page operations, OCR,
 metadata, signatures, redaction, image and table extraction, batch
 processing, and LLM-backed document understanding.
 
-Built with Python, `pypdf`, `fillpdf`, and `pymupdf` (AGPL).
+Built with Python, `pypdf` (BSD), `fillpdf` (MIT), and `pymupdf` (AGPL-3.0).
 
 **Goal**: Extract 99% of information from any PDF file, including
 scanned / image-based documents, and fill any PDF form. Works equally
@@ -17,7 +17,7 @@ MCP server inside Cursor or Claude Desktop.
 [![CI](https://github.com/nfsarch33/pdf-mcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/nfsarch33/pdf-mcp-server/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/nfsarch33/pdf-mcp-server/actions/workflows/codeql.yml/badge.svg)](https://github.com/nfsarch33/pdf-mcp-server/actions/workflows/codeql.yml)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL%203.0-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 ## Quick start
 
@@ -509,7 +509,21 @@ deliberately opts in.
 - After merging a PR, delete the feature branch and run `git fetch --prune` locally to keep branch state clean.
 
 ## License
-GNU AGPL-3.0, see `LICENSE`.
+
+`pdf-mcp` itself is **Apache-2.0** (since v1.3.0; v1.2.x and earlier were AGPL-3.0).
+See [`LICENSE`](LICENSE) for full text and [`NOTICE`](NOTICE) for the relicense
+notice and attribution.
+
+> **Important:** `pdf-mcp` depends on [`pymupdf`](https://github.com/pymupdf/PyMuPDF),
+> which is **AGPL-3.0** (with an optional commercial license from Artifex). When
+> you distribute `pdf-mcp` together with `pymupdf`, the combined distribution is
+> subject to AGPL-3.0 terms because `pymupdf` is the copyleft component. The
+> Apache-2.0 license on `pdf-mcp`'s own code remains valid for use, modification,
+> and redistribution of `pdf-mcp` code in isolation or with permissive-licensed
+> dependencies. Closed-source/proprietary distributors should contact Artifex
+> for a commercial `pymupdf` license, or wait for a future release that
+> replaces `pymupdf` with permissive-licensed alternatives. See [`NOTICE`](NOTICE)
+> for the full third-party dependency breakdown.
 
 ## Changelog
 See `CHANGELOG.md`.
