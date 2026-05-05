@@ -10,29 +10,34 @@ in interactive zsh history, in `~/Library/Logs`, or in any session
 transcript visible to a model. Sensitive identifiers include:
 
 - internal IPs (Tailscale `100.x.x.x`, OCI public IPs, LAN `10.x.x.x`)
-- SSH key file paths (`~/.ssh/fleet_lan`, etc.) and key bytes
-- Bearer tokens, JFrog tokens, GitHub PATs, or any credential string
+- SSH key file paths (`$HOME/.ssh/fleet_lan`, etc.) and key bytes
+- Bearer tokens, JFrog tokens, GitHub PATs, AWS bearer tokens, HuggingFace
+  tokens, 1Password Service Account tokens, or any credential string
 - Private repo absolute paths (`/Users/jason.lian/ai-agent-business-stack`,
   `/Users/jason.lian/ironclaw`, ...)
 - Container names tied to private GPU hosts
 - Git author email, signing identity selection, and hostname pairs
 - OCI instance IDs (`ocid1.*`), tenancy IDs, and compartment IDs
+- 1Password (`op`) output that contains secret values
+- `env`/`printenv` output that includes any of the above token names
 
 The canonical wrapper for everything in that list is the `runx` Go CLI
-(`github.com/nfsarch33/runx`, installed at `/Users/jason.lian/runs/runx`).
+(`github.com/nfsarch33/runx`, installed at `$HOME/runs/runx`).
 `runx` resolves aliases at run time, loads key bytes from macOS Keychain,
-and writes structured NDJSON to `~/logs/runx/`.
+and writes structured NDJSON to `$HOME/logs/runx/`.
 
 ## Required Surfaces
 
 Use these `runx` surfaces instead of raw shell. Argv carries only alias
-names defined in `~/.config/runx/config.yaml`:
+names defined in `$HOME/.config/runx/config.yaml`:
 
 - SSH / port forwards: `runx ssh exec`, `runx ssh copy`, `runx tunnel
   daemon|start|status` instead of `ssh`, `autossh`, `scp`, or hand-written
   `ssh -L` invocations.
-- Git on personal repos: `runx git status|fetch|pull|push|commit|add|clone
+- Git on personal repos: `runx git status|fetch|pull|push|commit|add|clone|branch|checkout|log|diff|switch|rebase
   --repo <alias>` instead of bare `git -C <path>` against a private repo.
+  Pass through git-native flags after `--` (e.g.
+  `runx git branch --repo <alias> -- --merged main`).
 - PR management: `runx pr list|view|create|merge|close|rebase-loop
   --repo <alias>` instead of raw `gh pr` from a private repo path.
 - GitHub API: `runx gh api|repo-view|repo-edit --repo <alias>` instead of
@@ -40,9 +45,9 @@ names defined in `~/.config/runx/config.yaml`:
 - Docker (local or remote): `runx docker ps|compose|exec|logs [--target
   <host-alias>]` instead of raw `docker` or `docker compose` commands.
 - Go toolchain: `runx go test|build|vet|mod-tidy --repo <alias>
-  [--subdir go]` instead of `cd ~/private-repo && go test`.
+  [--subdir go]` instead of `cd $HOME/private-repo && go test`.
 - Make targets: `runx make build|test|lint --repo <alias> [--subdir go]`
-  instead of `cd ~/private-repo/go && make build`.
+  instead of `cd $HOME/private-repo/go && make build`.
 - Flutter app commands: `runx flutter test|build --app <alias>`.
 - Sentrux quality gate: `runx sentrux gate|save|check|scan|rescan
   --repo <alias>`.
@@ -51,30 +56,40 @@ names defined in `~/.config/runx/config.yaml`:
   of raw `launchctl load|unload` with plist paths.
 - Network checks: `runx nc <forward-alias>` instead of `nc -zv`.
 - Long-running presets: `runx run <preset>` (chrome-debug, json-pr-count,
-  etc.).
+  etc.). When a workflow needs a `python3 -c '...'` one-liner, add a
+  preset rather than typing it on argv.
 - History cleanup: `runx history scrub|audit`.
 - Logs: `runx logs show|tail|rotate <log-name>`.
 - Doctor: `runx doctor` for stack health.
 
-## Repo aliases (24 registered)
+## Repo aliases (33 registered as of v299)
 
 business, global-kb, ironclaw, openclaw, runx, ironclaw-mcp, ironclaw-ops,
 mission-control, pdf-mcp, linkedin-mcp, upwork-mcp, hermes, gstack, router,
 autoresearch, openclaw-rl, agentic-research, skills, academic-skills,
-secure-auth, windows-mcp, chromedp, auto-research-sleep, memo.
+secure-auth, windows-mcp, chromedp, auto-research-sleep, memo,
+cursor-tools, fleet-bench, offload-telemetry, cylrl, ansible-win,
+**uiauto-framework, uiauto-zendesk-scenarios, screen-unblocker, resume**.
+
+Drift gate: `runx config check-aliases v299` must return `ok: 33/33 v299 aliases present` (added in `runx` PR #5).
+
+All paths in the config use `$HOME/...` (resolved at load via
+`os.ExpandEnv` then `ExpandTilde`) for cross-machine portability.
 
 ## Rules for Agents
 
 1. Never put an internal IP, SSH key path, key bytes, bearer token, OCI ID,
-   or private repo absolute path on the command line, in `cat <<EOF`
-   heredocs, or in transcript output.
+   private repo absolute path, or any credential value on the command
+   line, in `cat <<EOF` heredocs, or in transcript output.
 2. Never spawn `autossh` or `ssh -L` from a launch agent. All long-lived
    forwards run as `runx tunnel daemon <name>`.
-3. Never log to `~/Library/Logs/<service>.ndjson`. All `runx`-driven logs
-   land in `~/logs/runx/<tool>.ndjson`.
-4. Temporary Go binaries live in `~/runs/`. Never run from `/tmp/`.
+3. Never log to `$HOME/Library/Logs/<service>.ndjson`. All `runx`-driven logs
+   land in `$HOME/logs/runx/<tool>.ndjson`.
+4. Temporary Go binaries live in `$HOME/runs/`. Never run from `/tmp/`.
 5. If a workflow needs a new sensitive command, extend `runx` (add a
-   subcommand and an alias entry) instead of inlining shell.
+   subcommand and an alias entry) instead of inlining shell. New scripting
+   defaults to **Go** with config in `$HOME/.config/runx/config.yaml` -- not
+   bash or python.
 6. Subprocesses spawned by `runx` already get `HISTFILE=/dev/null`,
    `HISTSIZE=0`, `RUNX_SESSION=1`, and `GH_PAGER=cat`.
 7. **Agent self-compliance**: when running sentrux, git, gh, make, go, or
@@ -82,13 +97,26 @@ secure-auth, windows-mcp, chromedp, auto-research-sleep, memo.
    `runx <subcmd> --repo <alias>` instead of raw commands. The alias-only
    argv keeps transcripts clean even when Cursor logs the shell call.
 8. Never create or execute scripts in `/tmp/`. Use `runx run <preset>` or
-   add a new preset to config for recurring patterns.
+   add a new preset to config for recurring patterns. Helper scripts that
+   must live on disk go to `$HOME/logs/runx/<name>.sh` (analytics + audit
+   only) or `$HOME/runs/<name>` (compiled Go binaries).
 9. For remote Docker operations, use `runx docker --target <host-alias>`
    instead of SSH-ing to a host and running docker commands manually.
+10. **`op` (1Password) output must NEVER be expanded into argv of another
+    command**. Pipe `op read` into a Go program that consumes secrets via
+    stdin, or store the secret in macOS Keychain and have the Go program
+    fetch it via `/usr/bin/security`. Never `op read 'op://vault/item/field'
+    | xargs <cmd>` or `MYTOKEN=$(op read ...) <cmd> --token "$MYTOKEN"`.
+11. **Never run `env`, `printenv`, or `env | grep TOKEN`** in any shell
+    that ends up in a transcript -- those commands print every token in
+    the process env, including `AWS_BEARER_TOKEN_BEDROCK`,
+    `HUGGING_FACE_HUB_TOKEN`, `OP_SERVICE_ACCOUNT_TOKEN`,
+    `_SAVED_GITHUB_TOKEN`, etc. To check whether a specific var is set,
+    use `[ -z "$VAR" ] && echo unset || echo set` (no value printed).
 
 ## References
 
 - Repo: `github.com/nfsarch33/runx` (Go, Cobra, MIT).
-- Config: `~/.config/runx/config.yaml` (mode `0600`).
-- SOP: `~/Code/global-kb/sop/no-shell-leak.md`.
-- Logs: `~/logs/runx/` (NDJSON, rotated).
+- Config: `$HOME/.config/runx/config.yaml` (mode `0600`).
+- SOP: `$HOME/Code/global-kb/sop/no-shell-leak.md`.
+- Logs: `$HOME/logs/runx/` (NDJSON, rotated).
