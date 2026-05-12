@@ -1,0 +1,64 @@
+# pdf-mcp-server
+
+> First-class CLI and MCP (Model Context Protocol) server for everything PDF:
+> form filling, page operations, OCR, metadata, signatures, redaction, image
+> and table extraction, batch processing, and LLM-backed document understanding.
+
+## Overview
+
+- Name: pdf-mcp-server
+- Purpose: 57-tool PDF processing suite exposed as both a verb-first CLI (`pdf-mcp`) and an MCP server for Cursor/Claude Desktop; covers forms, pages, text, extraction, metadata, signatures, OCR, AI/VLM analysis, batch ops, and security.
+- Language(s): Python
+- License: Apache-2.0 (pymupdf dependency is AGPL-3.0)
+- Authoritative README: <https://github.com/nfsarch33/pdf-mcp-server#readme>
+- Source of truth branch: `main`
+
+## Quick Start
+
+- Install:
+  ```
+  git clone https://github.com/nfsarch33/pdf-mcp-server.git
+  cd pdf-mcp-server
+  make install
+  ```
+- CLI usage:
+  ```
+  pdf-mcp --help
+  pdf-mcp form get-pdf-form-fields --json '{"pdf_path":"sample.pdf"}' --pretty
+  pdf-mcp extract extract-text --json '{"pdf_path":"doc.pdf","engine":"auto"}' --pretty
+  ```
+- Run as MCP server: `pdf-mcp serve`
+- Run tests: `make test`
+- Minimum runtime prerequisites: Python 3.10+, uv
+
+## Key Concepts
+
+- 57 tools across 10 verb groups: form (9), pages (8), text (13), extract (7), metadata (4), sign (6), ocr (2), ai (4), batch (2), security (2)
+- CLI and MCP share the same `pdf_mcp.registry` source of truth
+- LLM backend priority: local VLM (free) > Ollama (free) > OpenAI (paid)
+- Privacy-first: local processing by default; remote LLM requires explicit opt-in
+- Full per-tool reference: `USAGE.md`
+- Changelog: `CHANGELOG.md`
+- Testing: 526 tests, 75% line coverage gate in CI
+
+## Runnable Examples
+
+- Read form fields: `pdf-mcp form get-pdf-form-fields --json '{"pdf_path":"sample.pdf"}' --pretty`
+- Fill a form: `pdf-mcp form fill-pdf-form --json '{"input_path":"in.pdf","output_path":"out.pdf","data":{"Name":"Jane"}}'`
+- OCR a scan: `pdf-mcp extract extract-text --json '{"pdf_path":"scanned.pdf","engine":"ocr"}'`
+- Check LLM backends: `pdf-mcp ai get-llm-backend-info --pretty`
+
+## Related Repos
+
+- [cursor-tools](https://github.com/nfsarch33/cursor-tools) — Cursor IDE hook engine
+
+## Operational Notes
+
+- Issue tracker: <https://github.com/nfsarch33/pdf-mcp-server/issues>
+- Security policy: `SECURITY.md`
+- How to contribute: see Development Workflow in README
+
+---
+
+*This file follows the emerging `llms.txt` convention adopted by cloudwego/eino,
+Anthropic tooling, and others.*
