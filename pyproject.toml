@@ -24,7 +24,7 @@ dependencies = [
     "fillpdf>=0.7.3",
     "pymupdf>=1.26.7",
     "pyhanko>=0.32.0",
-    "cryptography>=42.0.0",
+    "cryptography>=46.0.7",
     # Typer powers the v1.3.0+ first-class CLI (pdf-mcp serve, etc.).
     # Pinned with a permissive lower bound to align with installed wheels
     # while keeping the door open for future security/feature uplifts.
