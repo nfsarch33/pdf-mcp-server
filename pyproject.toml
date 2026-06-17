@@ -20,7 +20,7 @@ classifiers = [
 requires-python = ">=3.10"
 dependencies = [
     "mcp>=0.1.1",
-    "pypdf>=6.10.2",
+    "pypdf>=6.13.0",
     "fillpdf>=0.7.3",
     "pymupdf>=1.26.7",
     "pyhanko>=0.32.0",
