@@ -35,7 +35,7 @@ dependencies = [
 # pytest-cov powers the v1.3.0 CI coverage gate
 # (see [tool.pytest.ini_options] / [tool.coverage.*]).
 dev = ["pytest", "pytest-cov>=5.0.0", "pre-commit", "ruff"]
-ocr = ["pytesseract>=0.3.10", "pillow>=12.2.0"]
+ocr = ["pytesseract>=0.3.10", "pillow>=12.3.0"]
 llm = ["openai>=1.0.0"]
 
 [project.scripts]
