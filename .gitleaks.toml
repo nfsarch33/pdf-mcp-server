@@ -1,19 +1,55 @@
+# Custom Gitleaks ruleset (extends Gitleaks defaults).
+# Source of truth: cursor-global-kb/templates/gitleaks.toml (v18725-3).
+# Run: gitleaks detect --config .gitleaks.toml --source .
+# History scan: gitleaks detect --config .gitleaks.toml --source . --log-opts="--all"
+#
+# New rules added in v18725 (post P0 zdai + glrt leaks):
+#   - zdai-bearer     : ZD AI gateway bearer (cutover 2026-05-28 EOD; still hunted)
+#   - glrt-runner     : GitLab CE runner auth token
+#   - aws-access-key  : AKIA / ASIA prefix
+#   - ops-ey-jwt      : 1Password service-account JWT
+#   - gh-pat          : github_pat_*/gh[pour]_*_... variants
+#   - openai-anthropic: sk- prefixed keys (OpenAI/Anthropic/MiniMax)
+#
+# All rules are allowlistable via .gitleaksignore using the *fingerprint* hash,
+# never the rule ID. Never blanket-suppress entire files unless they are
+# genuine test fixtures with synthetic secrets.
+
 [extend]
-# Start from gitleaks defaults and add small repo-specific allowlists.
+useDefault = true
 
-[allowlist]
-description = "Allowlist common false positives"
-paths = [
-  # Academic/personal file is ignored; keep it out of scanning noise.
-  "cursor-memory-complete-setup-guide.md",
-]
+[[rules]]
+id = "zdai-bearer"
+description = "Zendesk AI gateway bearer token (ZDGatewayOpenAI)"
+regex = '''zdai_[A-Za-z0-9_-]{40,80}'''
+tags = ["secret", "zd-gateway"]
 
-# Allowlisted patterns (avoid false positives on docs describing env var names)
-regexes = [
-  # Mentioning env var names in docs/templates is OK
-  "OPENAI_API_KEY",
-  "GITHUB_TOKEN",
-  "GITHUB_PERSONAL_ACCESS_TOKEN",
-]
+[[rules]]
+id = "glrt-runner"
+description = "GitLab CE runner auth token"
+regex = '''glrt-[A-Za-z0-9_-]{16,}'''
+tags = ["secret", "gitlab-runner"]
 
+[[rules]]
+id = "aws-access-key"
+description = "AWS access key ID (AKIA/ASIA)"
+regex = '''(A|K|AS)IA[0-9A-Z]{16}'''
+tags = ["secret", "aws"]
 
+[[rules]]
+id = "ops-ey-jwt"
+description = "1Password service-account JWT"
+regex = '''ops_eyJ[A-Za-z0-9_-]{20,}'''
+tags = ["secret", "1password"]
+
+[[rules]]
+id = "gh-pat"
+description = "GitHub PAT (classic or fine-grained)"
+regex = '''gh[pousr]_[A-Za-z0-9]{30,}'''
+tags = ["secret", "github"]
+
+[[rules]]
+id = "openai-anthropic"
+description = "OpenAI / Anthropic / MiniMax-style API key"
+regex = '''sk-(live-|test-)?[A-Za-z0-9]{20,}'''
+tags = ["secret", "llm"]

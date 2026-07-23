@@ -1,0 +1,4 @@
+# Add fingerprint hashes here to suppress verified-false-positive findings.
+# Use the gitleaks fingerprint hash (NOT the rule ID), one per line.
+# Format: <fingerprint>  # <rationale - one sentence>
+# See: ~/.cursor/rules/00-p0-secrets-pre-push-hook.mdc
