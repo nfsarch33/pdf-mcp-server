@@ -45,7 +45,7 @@ prompted this rule.)
 ## How to find the UUID
 
 ```bash
-op item list --vault HelixonSafe --format json | \
+op item list --vault <vault-name> --format json | \
   python3 -c "import sys, json; [print(f\"{i['id']:26s} | {i['title']}\") for i in json.load(sys.stdin)]"
 ```
 
@@ -53,23 +53,23 @@ op item list --vault HelixonSafe --format json | \
 
 ```go
 // CORRECT
-val, err := opRead("HelixonSafe", "ripotpfq43jzlreor4zo2ay734", "api-key")
+val, err := opRead("<vault-name>", "<item-uuid>", "api-key")
 
 // WRONG — display name with spaces and special chars
-val, err := opRead("HelixonSafe", "minimax-api-1", "api-key")
+val, err := opRead("<vault-name>", "<item-name>", "api-key")
 ```
 
 ```bash
 # CORRECT
-op read "op://HelixonSafe/ripotpfq43jzlreor4zo2ay734/api-key"
+op read "op://<vault-name>/<item-uuid>/api-key"
 
 # WRONG
-op read "op://HelixonSafe/minimax-api-1/api-key"
+op read "op://<vault-name>/<item-name>/api-key"
 ```
 
 ## Exceptions
 
-- The 1Password **vault** names (e.g. `HelixonSafe`) use display names
+- The 1Password **vault** names (e.g. `<vault-name>`) use display names
   by convention — they don't contain special characters and they're
   shorter.
 - Comments in code can refer to items by display name, but the
@@ -314,7 +314,7 @@ The Zendesk AI gateway is MacBook-only and requires the corporate VPN.
 
 ## Forbidden Consumers
 
-Never wire `https://ai-gateway.zende.sk/{bedrock,v1}` into `llm-cluster-router`, gstack, autoresearch, `pdf-mcp-server`, Helixon runtime (formerly IronClaw per `forbidden-runtime-helixon-only.mdc`), Mission Control, member DevOps/SysAdmin agents, Hermes, OpenClaw, or any Tailscale/OCI-attached node.
+Never wire `https://<internal-gateway-host>/{bedrock,v1}` into `llm-cluster-router`, gstack, autoresearch, `pdf-mcp-server`, Helixon runtime (formerly IronClaw per `forbidden-runtime-helixon-only.mdc`), Mission Control, member DevOps/SysAdmin agents, Hermes, OpenClaw, or any Tailscale/OCI-attached node.
 
 ## References
 
@@ -331,7 +331,7 @@ These rules are larger than the inline budget. Click to read the source file whe
 - [`00-codegraph-enforce.mdc`](cursor-config/rules/00-codegraph-enforce.mdc) — Enforce codegraph over deeper semantic fallbacks (semble, headroom, caveman) for *code questions* when ripgrep is insufficient. Codegraph is the 2nd-priority tool, not first. ALWAYS applied at L0. Operator-corrected 2026-07-20.
 - [`00-l0-compound-engineering.mdc`](cursor-config/rules/00-l0-compound-engineering.mdc) — "L0 doctrine: every Sprint, rule, SOP, hook, or automation must compound into the next — what Every-inc calls plugin infrastructure. New code should make the next 10× Sprints easier, not harder. Each sprint closeout MUST list the compound outputs in its KPI report."
 - [`00-l0-flutter-ui-default.mdc`](cursor-config/rules/00-l0-flutter-ui-default.mdc) — "L0 default: every new Helixon platform UI (admin, customer, multi-tenant, single-tenant) MUST ship in Flutter. React+Next.js is NOT a default — only acceptable for static/marketing pages where Flutter would be overkill. OSS/CE packages that already include their own UI (GitLab CE, Grafana, Prometheus, ArgoCD) are exempt."
-- [`00-l0-session-end-email.mdc`](cursor-config/rules/00-l0-session-end-email.mdc) — "L0 guardrail: every Cursor session MUST end with exactly one comprehensive session-close/handoff email sent to jaslian@gmail.com via the Resend/Brevo notify surface. Per-Sprint and per-tick emails are forbidden. NDJSON record per send. 1Password item for credentials. Caps at 1 email/day across all agents/sessions on the host."
+- [`00-l0-session-end-email.mdc`](cursor-config/rules/00-l0-session-end-email.mdc) — "L0 guardrail: every Cursor session MUST end with exactly one comprehensive session-close/handoff email sent to <operator-email> via the Resend/Brevo notify surface. Per-Sprint and per-tick emails are forbidden. NDJSON record per send. 1Password item for credentials. Caps at 1 email/day across all agents/sessions on the host."
 - [`00-l0-shareholder-reporting.mdc`](cursor-config/rules/00-l0-shareholder-reporting.mdc) — "L0 cadence: every Sprint range closeout MUST ship a Chinese-language shareholder brief (zh-CN, non-tech, %-scored) and an English-language technical truth ledger, archived under reports/shareholder/ + global-memories/shareholder-updates/. Audience is non-technical shareholders; language is plain Chinese; metrics are percentages, not jargon."
 - [`00-l0-ui-ux-quality-bar.mdc`](cursor-config/rules/00-l0-ui-ux-quality-bar.mdc) — "L0 design quality bar for every new Flutter UI: WCAG 2.1 AA accessibility, Lighthouse-style perf budgets, Material 3 compliance, golden-file visual regression, design-review gate. Companion to 00-l0-flutter-ui-default.mdc; both rules ship together."
 - [`00-mcp-allinone.mdc`](cursor-config/rules/00-mcp-allinone.mdc) — L0 rule — Always use the mcp-allinone container image for Helixon MCP servers; never spawn bare-MCP from Windows host.
@@ -363,7 +363,7 @@ These rules are larger than the inline budget. Click to read the source file whe
 - [`41-wsl-windows-filesystem-isolation.mdc`](cursor-config/rules/41-wsl-windows-filesystem-isolation.mdc) — "L0 guardrail: WSL ext4 and Windows C: are physically distinct filesystems. Files written via the IDE/Write tool land on the Windows path (/mnt/c/... or D:/...). Tools running inside WSL (git, ripgrep, helix-dev-tools) see the WSL ext4 path (/home/jaslian/Code/...). Always copy or write to the path the consuming tool will read."
 - [`42-integration-test-gating.mdc`](cursor-config/rules/42-integration-test-gating.mdc) — "L0 guardrail: any change to a Helixon central-server core service MUST ship a failing Ginkgo integration spec in the same PR (TDD); full integration suite is gated before merge."
 - [`agent-race-awareness.mdc`](cursor-config/rules/agent-race-awareness.mdc) — Hard rule. Treat every session as one of N concurrent agents. Detect, isolate, and merge cleanly without clobbering parallel work.
-- [`async-multi-machine-coordination.mdc`](cursor-config/rules/async-multi-machine-coordination.mdc) — Async multi-machine coordination rules for parallel Cursor instances across win1, win2, win3, win4. Enforced since v17002 (2026-07-09).
+- [`async-multi-machine-coordination.mdc`](cursor-config/rules/async-multi-machine-coordination.mdc) — Async multi-machine coordination rules for parallel Cursor instances across <fleet-host-1>, <fleet-host-2>, <fleet-host-3>, <fleet-host-4>. Enforced since v17002 (2026-07-09).
 - [`autonomous-personal-repo-ops.mdc`](cursor-config/rules/autonomous-personal-repo-ops.mdc) — Standing pre-approval for nfsarch33 personal-repo git/gh operations — overrides git-ops-guard for personal repos
 - [`completion-and-application-artifacts.mdc`](cursor-config/rules/completion-and-application-artifacts.mdc) — Ensure completed todo work is merged cleanly and resume packets include MD, DOCX, and PDF artifacts.
 - [`deprecation-semble-check.mdc`](cursor-config/rules/deprecation-semble-check.mdc) — Before building or extending stack components, semble-search global-kb for deprecation/supersession — do not build on retired systems (Mem0→Engram, minimax.io→minimaxi.com)
@@ -384,7 +384,7 @@ These rules are larger than the inline budget. Click to read the source file whe
 - [`evidence-based-development.mdc`](cursor-config/rules/evidence-based-development.mdc) — Evidence-first development and investigation discipline
 - [`fleet-destructive-op-deny.mdc`](cursor-config/rules/fleet-destructive-op-deny.mdc) — Fleet agents must refuse destructive shell/git/infra ops; route sensitive work through runx; fail-closed at exec layer when wired
 - [`fleet-health-automation.mdc`](cursor-config/rules/fleet-health-automation.mdc) — All fleet services must have health probes, automated restart, and alerting
-- [`fleet-travel-latency-china.mdc`](cursor-config/rules/fleet-travel-latency-china.mdc) — Fleet SSH latency expectations for home LAN vs China travel (Chengdu). Apply when probing wsl1-travel/wsl2-travel or interpreting doctor fleet --travel results.
+- [`fleet-travel-latency-china.mdc`](cursor-config/rules/fleet-travel-latency-china.mdc) — Fleet SSH latency expectations for home LAN vs China travel (Chengdu). Apply when probing <fleet-vm-1>-travel/<fleet-vm-2>-travel or interpreting doctor fleet --travel results.
 - [`git-ops-guard.mdc`](cursor-config/rules/git-ops-guard.mdc) — Block destructive or history-rewriting git operations without explicit human approval
 - [`golang-first-tooling.mdc`](cursor-config/rules/golang-first-tooling.mdc) — New tooling defaults to Go with config files. Bash and Python scripts are forbidden for new tooling except for genuinely tiny read-only one-liners or build bootstrap.
 - [`handoff-protocol-multi-machine.mdc`](cursor-config/rules/handoff-protocol-multi-machine.mdc) — Multi-machine handoff protocol for Cursor instances exiting or switching hosts. Enforced since v17002 (2026-07-09).
@@ -401,7 +401,7 @@ These rules are larger than the inline budget. Click to read the source file whe
 - [`no-sh-scripts.mdc`](cursor-config/rules/no-sh-scripts.mdc) — Block creation and execution of .sh scripts; use Go binaries, config files, and runx instead.
 - [`no-shell-leak.mdc`](cursor-config/rules/no-shell-leak.mdc) — No shell leak rule — long commands via runx config files, never inline.
 - [`ntfs-single-task.mdc`](cursor-config/rules/ntfs-single-task.mdc) — On NTFS workspaces (/mnt/d/Code), cap concurrent Task subagents at 1. Always apply when workspace root is on NTFS.
-- [`oci-ssh-jump-for-fleet.mdc`](cursor-config/rules/oci-ssh-jump-for-fleet.mdc) — All access to win1, wsl1, MacBook-fleet hosts goes through OCI ssh jump. Argv carries only alias names; raw IPs and hostnames are never typed in shell args.
+- [`oci-ssh-jump-for-fleet.mdc`](cursor-config/rules/oci-ssh-jump-for-fleet.mdc) — All access to <fleet-host-1>, <fleet-vm-1>, MacBook-fleet hosts goes through OCI ssh jump. Argv carries only alias names; raw IPs and hostnames are never typed in shell args.
 - [`operator-pair-rotation.mdc`](cursor-config/rules/operator-pair-rotation.mdc) — Operator OAuth / API credential pair-rotation discipline (CF-145 / v18663-4)
 - [`operator-suggestion-gate.mdc`](cursor-config/rules/operator-suggestion-gate.mdc) — Before any operator-facing manual step, grep KB ADR/SOP/handoff for established fleet decisions; cite source or mark UNKNOWN.
 - [`output-brevity.mdc`](cursor-config/rules/output-brevity.mdc) — Output size discipline for commits, PRs, tickets, and comments
@@ -428,7 +428,7 @@ These rules are larger than the inline budget. Click to read the source file whe
 - [`tool-discipline-before-use.mdc`](cursor-config/rules/tool-discipline-before-use.mdc) — Read README or --help before first CLI/MCP use; Context7 + Semble before 3rd-party library coding
 - [`upstream-sync.mdc`](cursor-config/rules/upstream-sync.mdc) — Mandatory upstream branch review and merge protocol before any code work
 - [`verification-iron-law.mdc`](cursor-config/rules/verification-iron-law.mdc) — No completion claims without fresh verification evidence - evidence before assertions always
-- [`win3-portable-everything.mdc`](cursor-config/rules/win3-portable-everything.mdc) — All new work must be documented and portable for win3 onboarding
+- [`<fleet-host-3>-portable-everything.mdc`](cursor-config/rules/<fleet-host-3>-portable-everything.mdc) — All new work must be documented and portable for <fleet-host-3> onboarding
 - [`workspace-cleanliness-gate.mdc`](cursor-config/rules/workspace-cleanliness-gate.mdc) — Treat workspace cleanliness as a hard gate for TODO completion, git operations, and multi-agent handoff.
 - [`zd-github-no-force-push.mdc`](cursor-config/rules/zd-github-no-force-push.mdc) — Zendesk org on GitHub — never force-push or rewrite history; enforced by helix-dev-tools pre-push hook
 - [`zd-user-story-format.mdc`](cursor-config/rules/zd-user-story-format.mdc) — Mandatory ZD user-story format (As a/I want/So that, INVEST, Given/When/Then, Confirmation) for all fleet sprint tickets and plan files.
@@ -442,7 +442,7 @@ These rules have a `globs:` frontmatter and apply only when matching files are t
 - [`00-p0-secrets-pre-push-hook.mdc`](cursor-config/rules/00-p0-secrets-pre-push-hook.mdc) — globs: `(no globs)` — (no description)
 - [`01-fleet-doctor-cadence.mdc`](cursor-config/rules/01-fleet-doctor-cadence.mdc) — globs: `["**/tools/*-tests.sh", "**/tools/workspace-doctor.sh"]` — Fleet doctor runs every 6h via systemd timer and must remain GREEN
 - [`01-sprint-evidence-required.mdc`](cursor-config/rules/01-sprint-evidence-required.mdc) — globs: `["**/evidence/**"]` — Every sprint must produce an evidence/ directory with README + artefacts (v14550)
-- [`01-systemd-user-convention.mdc`](cursor-config/rules/01-systemd-user-convention.mdc) — globs: `["**/*.service", "**/*.timer"]` — Conventions for systemd user units on win1/wsl1 (v14550)
+- [`01-systemd-user-convention.mdc`](cursor-config/rules/01-systemd-user-convention.mdc) — globs: `["**/*.service", "**/*.timer"]` — Conventions for systemd user units on <fleet-host-1>/<fleet-vm-1> (v14550)
 - [`01-tailscale-wsl-mirror.mdc`](cursor-config/rules/01-tailscale-wsl-mirror.mdc) — globs: `["**/*.sh", "**/*.service", "**/*.conf", "**/*.yaml"]` — Tailscale + WSL mirror network constraints for Helixon fleet (v14550)
 - [`12-factor-agents.mdc`](cursor-config/rules/12-factor-agents.mdc) — globs: `(no globs)` — (no description)
 - [`agentrace-integration.mdc`](cursor-config/rules/agentrace-integration.mdc) — globs: `["**/*.go", "**/go.mod"]` — Agentrace telemetry requirements for Go services in the Helix stack
@@ -455,7 +455,7 @@ These rules have a `globs:` frontmatter and apply only when matching files are t
 - [`evidence-filename-convention.mdc`](cursor-config/rules/evidence-filename-convention.mdc) — globs: `` — Evidence filename convention for sprint / range artefacts
 - [`evospine-cycle.mdc`](cursor-config/rules/evospine-cycle.mdc) — globs: `(no globs)` — (no description)
 - [`fleet-pr-review-autonomy.mdc`](cursor-config/rules/fleet-pr-review-autonomy.mdc) — globs: `` — Fleet PR review autonomy — peer review, auto-merge guardrails, poller
-- [`fleet-token-saving.mdc`](cursor-config/rules/fleet-token-saving.mdc) — globs: `` — Token-saving decision matrix for fleet agents (wsl1/wsl2). rtk/context-mode/headroom layers with fleet-safe rules — never rtk on runx-wrapped commands.
+- [`fleet-token-saving.mdc`](cursor-config/rules/fleet-token-saving.mdc) — globs: `` — Token-saving decision matrix for fleet agents (<fleet-vm-1>/<fleet-vm-2>). rtk/context-mode/headroom layers with fleet-safe rules — never rtk on runx-wrapped commands.
 - [`graceful-degradation.mdc`](cursor-config/rules/graceful-degradation.mdc) — globs: `(no globs)` — (no description)
 - [`handoff-automation-on-commit.mdc`](cursor-config/rules/handoff-automation-on-commit.mdc) — globs: `(no globs)` — (no description)
 - [`handoff-per-todo.mdc`](cursor-config/rules/handoff-per-todo.mdc) — globs: `(no globs)` — (no description)
