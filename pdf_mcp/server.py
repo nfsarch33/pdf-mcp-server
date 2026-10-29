@@ -34,12 +34,12 @@ import traceback
 from pathlib import Path
 from typing import Any, Callable
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 
 from .pdf_tools import PdfToolError
 from .registry import iter_all
 
-mcp = FastMCP("PDF Handler")
+mcp = MCPServer("PDF Handler")
 
 
 def _wrap_result(result: Any) -> Any:
@@ -68,12 +68,12 @@ def _handle_errors(fn: Callable[..., Any]) -> Callable[..., Any]:
 
 
 def _register_all_tools() -> None:
-    """Register every tool from :mod:`pdf_mcp.registry` on the FastMCP surface.
+    """Register every tool from :mod:`pdf_mcp.registry` on the MCPServer surface.
 
     Replaces 57 hand-written ``@mcp.tool() / @_handle_errors`` decorator
     pairs with a single registry-driven loop. The wrapper preserves
     ``__name__`` and ``__annotations__`` via :func:`functools.wraps` so
-    FastMCP's introspection-based JSON-Schema generation continues to
+    MCPServer's introspection-based JSON-Schema generation continues to
     work unchanged. The MCP-facing description is taken from the
     registry's curated ``description`` field, so the tools/list payload
     is byte-identical to the pre-refactor surface.

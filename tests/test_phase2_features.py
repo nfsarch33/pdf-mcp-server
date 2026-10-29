@@ -523,9 +523,9 @@ class TestMcpLayerPhase2:
         from pdf_mcp import server
 
         async def call():
-            _content, meta = await server.mcp.call_tool(
+            meta = (await server.mcp.call_tool(
                 "get_ocr_languages", {}
-            )
+            )).structured_content
             result = meta["result"]
             assert "error" not in result, result.get("error")
             return result
@@ -544,10 +544,10 @@ class TestMcpLayerPhase2:
             pytest.skip("1006.pdf not available")
 
         async def call():
-            _content, meta = await server.mcp.call_tool(
+            meta = (await server.mcp.call_tool(
                 "extract_tables",
                 {"pdf_path": pdf_path, "pages": [1]},
-            )
+            )).structured_content
             result = meta["result"]
             assert "error" not in result, result.get("error")
             return result
@@ -566,10 +566,10 @@ class TestMcpLayerPhase2:
             pytest.skip("scansmpl.pdf not available")
 
         async def call():
-            _content, meta = await server.mcp.call_tool(
+            meta = (await server.mcp.call_tool(
                 "get_image_info",
                 {"pdf_path": pdf_path},
-            )
+            )).structured_content
             result = meta["result"]
             assert "error" not in result, result.get("error")
             return result
@@ -588,10 +588,10 @@ class TestMcpLayerPhase2:
             pytest.skip("1006.pdf not available")
 
         async def call():
-            _content, meta = await server.mcp.call_tool(
+            meta = (await server.mcp.call_tool(
                 "extract_text",
                 {"pdf_path": pdf_path, "pages": [1], "engine": "smart"},
-            )
+            )).structured_content
             result = meta["result"]
             assert "error" not in result, result.get("error")
             return result
@@ -610,10 +610,10 @@ class TestMcpLayerPhase2:
             pytest.skip("1006.pdf not available")
 
         async def call():
-            _content, meta = await server.mcp.call_tool(
+            meta = (await server.mcp.call_tool(
                 "detect_form_fields",
                 {"pdf_path": pdf_path},
-            )
+            )).structured_content
             result = meta["result"]
             assert "error" not in result, result.get("error")
             return result
@@ -824,10 +824,10 @@ class TestAdvancedOcr:
             pytest.skip("1006.pdf not available")
 
         async def call():
-            _content, meta = await server.mcp.call_tool(
+            meta = (await server.mcp.call_tool(
                 "extract_text",
                 {"pdf_path": pdf_path, "pages": [1], "include_confidence": True, "min_confidence": 50},
-            )
+            )).structured_content
             result = meta["result"]
             assert "error" not in result, result.get("error")
             return result

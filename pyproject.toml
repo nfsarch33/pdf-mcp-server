@@ -19,11 +19,13 @@ classifiers = [
 ]
 requires-python = ">=3.10"
 dependencies = [
-    "mcp>=1.30.0",
+    "mcp>=2.3.0",
     "pypdf>=6.21.2",
     "fillpdf>=0.7.3",
     "pymupdf>=1.26.7",
     "pyhanko>=0.32.0",
+    # pyHanko's HTTP timestamp client imports requests; without it every signing tool is disabled.
+    "requests>=2.32.0",
     "cryptography>=50.0.0",
     # Typer powers the v1.3.0+ first-class CLI (pdf-mcp serve, etc.).
     # Pinned with a permissive lower bound to align with installed wheels

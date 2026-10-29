@@ -80,7 +80,7 @@ class LazyCallable:
         reference and do not re-import.
 
         Consumers that need the *function itself* (for example, to feed
-        FastMCP's :func:`mcp.server.fastmcp.FastMCP.tool` decorator,
+        MCPServer's :func:`mcp.server.mcpserver.MCPServer.tool` decorator,
         which introspects ``__name__``, ``__doc__`` and
         ``__annotations__``) should call :meth:`resolve` rather than
         invoking the :class:`LazyCallable` instance.

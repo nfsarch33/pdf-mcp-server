@@ -120,7 +120,7 @@ def serve() -> None:
     such as Cursor and Claude Desktop launch this subcommand and then
     speak MCP over the spawned process's stdin/stdout.
     """
-    # Lazy import: server.py pulls in pdf_tools and FastMCP machinery, which
+    # Lazy import: server.py pulls in pdf_tools and MCPServer machinery, which
     # is heavy and unnecessary for ``--version`` / ``--help`` paths.
     from pdf_mcp.server import mcp
 

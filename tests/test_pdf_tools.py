@@ -891,7 +891,7 @@ def test_mcp_layer_can_call_all_tools(tmp_path: Path):
     certs = _make_test_certificates(tmp_path)
 
     async def call(name: str, args: dict):
-        _content, meta = await server.mcp.call_tool(name, args)
+        meta = (await server.mcp.call_tool(name, args)).structured_content
         assert isinstance(meta, dict)
         assert "result" in meta and isinstance(meta["result"], dict)
         result = meta["result"]
@@ -1424,7 +1424,7 @@ def test_mcp_layer_real_world_1006_regression(tmp_path: Path):
     assert src.exists(), "Missing fixture tests/1006.pdf"
 
     async def call(name: str, args: dict):
-        _content, meta = await server.mcp.call_tool(name, args)
+        meta = (await server.mcp.call_tool(name, args)).structured_content
         assert isinstance(meta, dict)
         assert "result" in meta and isinstance(meta["result"], dict)
         result = meta["result"]
@@ -1610,7 +1610,7 @@ def test_mcp_layer_1006_all_tools_scenario_a(tmp_path: Path):
     assert src.exists(), "Missing fixture tests/1006.pdf"
 
     async def call(name: str, args: dict):
-        _content, meta = await server.mcp.call_tool(name, args)
+        meta = (await server.mcp.call_tool(name, args)).structured_content
         result = meta["result"]
         assert "error" not in result, result.get("error")
         return result
@@ -1860,7 +1860,7 @@ def test_mcp_layer_1006_all_tools_scenario_b(tmp_path: Path):
     assert src.exists(), "Missing fixture tests/1006.pdf"
 
     async def call(name: str, args: dict):
-        _content, meta = await server.mcp.call_tool(name, args)
+        meta = (await server.mcp.call_tool(name, args)).structured_content
         result = meta["result"]
         assert "error" not in result, result.get("error")
         return result

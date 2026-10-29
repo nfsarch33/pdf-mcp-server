@@ -198,6 +198,16 @@ This project follows Keep a Changelog and Semantic Versioning.
   rendered output.
 
 ### Fixed
+- **Migrate to `mcp` 2.x (`mcp>=2.3.0`)**: `mcp` 2.x removed
+  `mcp.server.fastmcp`, so a fresh install failed at
+  `from mcp.server.fastmcp import FastMCP` and `pdf-mcp serve` never
+  started. The server now uses `mcp.server.mcpserver.MCPServer`; tool
+  names, descriptions and order are unchanged. Tests read
+  `CallToolResult.structured_content`, since `MCPServer.call_tool()` no
+  longer returns a `(content, structured)` tuple.
+- Declare `requests` as a dependency. pyHanko's timestamp client imports
+  it, so on a fresh install every signing tool reported "pyHanko not
+  available".
 - **Broken regex fallback in `scripts/check_release_ready.py:42`**: the
   raw-string pattern used double-escaped backslashes (`\\s`), which inside
   a raw string is a literal backslash followed by `s` rather than a
