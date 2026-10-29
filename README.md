@@ -39,6 +39,27 @@ pdf-mcp serve                                     # stdio transport
 make test
 ```
 
+Install a release without cloning:
+
+```bash
+uv pip install "pdf-mcp @ git+https://github.com/nfsarch33/pdf-mcp-server@v2.0.0"
+```
+
+This project is not on PyPI. The PyPI package named `pdf-mcp` is a
+different project, so `pip install pdf-mcp` does not install this one.
+
+### Upgrading to 2.0
+
+- 2.0 requires `mcp>=2.3.0,<3`; the installer pulls it in. MCP clients
+  and existing Cursor / Claude Desktop configs need no change: the
+  protocol and the 57 tool names are the same.
+- Code that imports `pdf_mcp.server.mcp` now gets an `MCPServer`.
+  Its `call_tool()` returns a `CallToolResult`; read
+  `.structured_content` instead of unpacking a tuple.
+- `verify_digital_signatures` adds `ok` and `modified_after_signing`.
+  Check `ok`, not `intact`: an edit added after signing leaves
+  `intact` true. See [Signatures & Security](#signatures--security).
+
 Run the CLI on a real PDF:
 
 ```bash
@@ -62,7 +83,7 @@ pdf-mcp extract extract-text --json '{
 }' --pretty
 ```
 
-## CLI surface (v1.3.0+)
+## CLI surface
 
 `pdf-mcp` ships **all 57 underlying tools** as CLI subcommands grouped
 by verb. The taxonomy comes directly from `pdf_mcp.registry`, so the

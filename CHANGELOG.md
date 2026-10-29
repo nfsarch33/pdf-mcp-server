@@ -6,7 +6,7 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
-## 2.0.0 - 2026-10-29
+## 2.0.0 - 2026-10-30
 
 ### Breaking
 - Requires `mcp>=2.3.0,<3`; `mcp` 1.x is no longer supported. MCP clients see no change: the wire protocol and the 57 tool names, descriptions and order are the same.
