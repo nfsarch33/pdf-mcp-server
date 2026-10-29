@@ -14,7 +14,7 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ### Fixed
 - Declare `requests` as a dependency. pyHanko's timestamp client imports it, so on a fresh install every signing tool reported "pyHanko not available".
-- Pin `mcp<2`: `mcp` 2.x removed `mcp.server.fastmcp`, so a fresh `pip install` broke `pdf-mcp serve` and CI. Migration to `MCPServer` is tracked separately.
+- Migrate to `mcp` 2.x and lift the `mcp<2` cap (now `mcp>=2.3.0`). `mcp` 2.x removed `mcp.server.fastmcp`; the server now uses `mcp.server.mcpserver.MCPServer`, with tool names, descriptions and order unchanged. Tests read `CallToolResult.structured_content`, since `MCPServer.call_tool()` no longer returns a `(content, structured)` tuple.
 - `verify_digital_signatures` no longer prints a pyHanko traceback to stderr for every self-signed or untrusted certificate.
 - `add_signature_image` and visible signatures reject a rect outside the page instead of silently placing the image off-page.
 

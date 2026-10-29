@@ -414,7 +414,7 @@ class TestMcpLayerOcr:
             pytest.skip("1006.pdf fixture not available")
 
         async def call():
-            _content, meta = await server.mcp.call_tool("detect_pdf_type", {"pdf_path": str(path)})
+            meta = (await server.mcp.call_tool("detect_pdf_type", {"pdf_path": str(path)})).structured_content
             assert isinstance(meta, dict)
             assert "result" in meta
             result = meta["result"]
@@ -435,7 +435,9 @@ class TestMcpLayerOcr:
             pytest.skip("1006.pdf fixture not available")
 
         async def call():
-            _content, meta = await server.mcp.call_tool("extract_text", {"pdf_path": str(path), "engine": "native"})
+            meta = (
+                await server.mcp.call_tool("extract_text", {"pdf_path": str(path), "engine": "native"})
+            ).structured_content
             result = meta["result"]
             assert "error" not in result, result.get("error")
             return result
@@ -455,10 +457,12 @@ class TestMcpLayerOcr:
             pytest.skip("1006.pdf fixture not available")
 
         async def call():
-            _content, meta = await server.mcp.call_tool(
-                "extract_text",
-                {"pdf_path": str(path), "engine": "auto"},
-            )
+            meta = (
+                await server.mcp.call_tool(
+                    "extract_text",
+                    {"pdf_path": str(path), "engine": "auto"},
+                )
+            ).structured_content
             result = meta["result"]
             assert "error" not in result, result.get("error")
             return result
@@ -478,7 +482,9 @@ class TestMcpLayerOcr:
             pytest.skip("1006.pdf fixture not available")
 
         async def call():
-            _content, meta = await server.mcp.call_tool("get_pdf_text_blocks", {"pdf_path": str(path), "pages": [1]})
+            meta = (
+                await server.mcp.call_tool("get_pdf_text_blocks", {"pdf_path": str(path), "pages": [1]})
+            ).structured_content
             result = meta["result"]
             assert "error" not in result, result.get("error")
             return result
