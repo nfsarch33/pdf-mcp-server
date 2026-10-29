@@ -13,6 +13,7 @@ This project follows Keep a Changelog and Semantic Versioning.
 - `verify_digital_signatures`: `signer`, `timestamp`, `timestamp_trusted` and a `trust_note` for valid but untrusted (for example self-signed) certificates.
 
 ### Fixed
+- `verify_digital_signatures` reported a document edited by an incremental update after signing (added text or an annotation) as intact and valid. Each result now has `ok` (intact, valid and not modified after signing), `modified_after_signing`, `coverage` and `docmdp_ok`, and `modification_level` is a plain name such as `NONE` or `OTHER` instead of the enum repr.
 - Declare `requests` as a dependency. pyHanko's timestamp client imports it, so on a fresh install every signing tool reported "pyHanko not available".
 - Migrate to `mcp` 2.x and lift the `mcp<2` cap (now `mcp>=2.3.0`). `mcp` 2.x removed `mcp.server.fastmcp`; the server now uses `mcp.server.mcpserver.MCPServer`, with tool names, descriptions and order unchanged. Tests read `CallToolResult.structured_content`, since `MCPServer.call_tool()` no longer returns a `(content, structured)` tuple.
 - `verify_digital_signatures` no longer prints a pyHanko traceback to stderr for every self-signed or untrusted certificate.

@@ -731,6 +731,54 @@ def test_sign_pdf_pkcs12(tmp_path: Path):
     assert verify["signatures"][0].get("intact") is True
 
 
+def _signed_approval_pdf(tmp_path: Path) -> Path:
+    """An approval signature (no DocMDP certification), like a signed contract."""
+    certs = _make_test_certificates(tmp_path)
+    src = _make_pdf(tmp_path / "tamper_src.pdf", pages=1)
+    out = tmp_path / "tamper_signed.pdf"
+    pdf_tools.sign_pdf(
+        input_path=str(src),
+        output_path=str(out),
+        pfx_path=str(certs["pfx"]),
+        pfx_password=certs["password"].decode("utf-8"),
+    )
+    return out
+
+
+@pytest.mark.parametrize("edit", ["none", "byte_flip", "incremental_text", "incremental_annotation"])
+def test_verify_digital_signatures_reports_tampering(tmp_path: Path, edit: str):
+    if not getattr(pdf_tools, "_HAS_PYHANKO", False):
+        pytest.skip("pyHanko not available")
+    import fitz
+
+    signed = _signed_approval_pdf(tmp_path)
+    if edit == "byte_flip":
+        data = signed.read_bytes()
+        assert b"200 200" in data
+        signed.write_bytes(data.replace(b"200 200", b"200 201", 1))
+    elif edit != "none":
+        doc = fitz.open(str(signed))
+        if edit == "incremental_text":
+            doc[0].insert_text((20, 20), "TAMPERED", fontsize=10)
+        else:
+            doc[0].add_text_annot((50, 50), "note")
+        doc.saveIncr()
+        doc.close()
+
+    sig = pdf_tools.verify_digital_signatures(str(signed))["signatures"][0]
+    assert "error" not in sig, sig.get("error")
+    if edit == "none":
+        assert sig["intact"] is True and sig["modified_after_signing"] is False and sig["ok"] is True
+        assert sig["coverage"] == "ENTIRE_FILE"
+    elif edit == "byte_flip":
+        assert sig["intact"] is False and sig["ok"] is False
+    else:
+        assert sig["intact"] is True
+        assert sig["modified_after_signing"] is True and sig["ok"] is False
+        assert sig["coverage"] == "ENTIRE_REVISION"
+        assert sig["modification_level"] == "OTHER"
+
+
 def test_sign_pdf_pem(tmp_path: Path):
     if not getattr(pdf_tools, "_HAS_PYHANKO", False):
         pytest.skip("pyHanko not available")

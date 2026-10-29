@@ -1781,12 +1781,20 @@ def verify_digital_signatures(pdf_path: str) -> Dict[str, Any]:
             for sig in signatures:
                 try:
                     status = validation.validate_pdf_signature(sig, vc)
+                    coverage = status.coverage.name if status.coverage else None
+                    # An incremental update after signing leaves the signed bytes intact,
+                    # so intact/valid stay True; only coverage shows the later change.
+                    modified = coverage != "ENTIRE_FILE"
                     result = {
                         "field_name": sig.field_name,
+                        "ok": bool(status.intact and status.valid and not modified),
                         "intact": status.intact,
                         "valid": status.valid,
                         "trusted": status.trusted,
-                        "modification_level": str(status.modification_level),
+                        "modified_after_signing": modified,
+                        "coverage": coverage,
+                        "modification_level": (status.modification_level.name if status.modification_level else None),
+                        "docmdp_ok": status.docmdp_ok,
                     }
                     try:
                         result["signer"] = sig.signer_cert.subject.human_friendly

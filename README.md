@@ -253,6 +253,7 @@ Note: XFA/LiveCycle forms are not supported; convert to AcroForm or flatten firs
 - `sign_pdf_pem(input_path, output_path, key_path, cert_path, ...)`: sign with PEM key + cert chain, supports timestamping, revocation checks, DocMDP, `key_password_env` / `key_password_file`, and the same visible-box options as `sign_pdf`.
 - `encrypt_pdf(input_path, output_path, user_password, ...)`: password-protect PDF.
 - `verify_digital_signatures(pdf_path)`: verify digital signatures. Each result includes the signer, the timestamp and whether it is trusted, and a `trust_note` when the signature is valid but the certificate is not chained to a trusted root (for example self-signed).
+  Check `ok`: it is true only when the signed bytes are intact, the signature is valid and nothing was added after signing. `modified_after_signing` is true when a later incremental update (edited text, an added annotation) exists, even though `intact` and `valid` stay true for the signed revision; `coverage`, `modification_level` and `docmdp_ok` give the detail. Verify proves the signed revision is unchanged. It does not prove who signed unless `trusted` is true, which needs a CA-issued certificate. For a final document, sign with `certify=True` and `docmdp_permissions="no_changes"` so any later change breaks the certification.
 
 ### Metadata
 - `get_pdf_metadata(pdf_path, full=False)`: return document metadata; set `full=True` for extended info.
