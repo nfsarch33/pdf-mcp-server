@@ -28,7 +28,7 @@ This project follows Keep a Changelog and Semantic Versioning.
 - `add_signature_image` and visible signatures reject a rect outside the page instead of silently placing the image off-page.
 
 ### Changed (BREAKING for relicense-aware downstreams)
-- **License: AGPL-3.0 -> Apache-2.0** (effective v1.3.0).
+- **License: AGPL-3.0 -> Apache-2.0** (effective v2.0.0; 1.3.0 was never tagged).
   - The maintainer's own code is now distributed under Apache-2.0. Releases
     up to and including v1.2.18 remain governed by AGPL-3.0 for those who
     consumed them under that grant.

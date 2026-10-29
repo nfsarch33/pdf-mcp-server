@@ -511,7 +511,7 @@ deliberately opts in.
 
 ## License
 
-`pdf-mcp` itself is **Apache-2.0** (since v1.3.0; v1.2.x and earlier were AGPL-3.0).
+`pdf-mcp` itself is **Apache-2.0** (since v2.0.0; v1.2.x and earlier were AGPL-3.0).
 See [`LICENSE`](LICENSE) for full text and [`NOTICE`](NOTICE) for the relicense
 notice and attribution.
 
