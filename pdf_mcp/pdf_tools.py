@@ -67,8 +67,10 @@ except ImportError:
 try:
     from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
     from pyhanko.pdf_utils.reader import PdfFileReader
+    from pyhanko.pdf_utils.text import TextBoxStyle
     from pyhanko.sign import fields, signers, validation
     from pyhanko.sign.timestamps.requests_client import HTTPTimeStamper
+    from pyhanko.stamp import TextStampStyle
 
     _HAS_PYHANKO = True
 except ImportError:
@@ -1769,24 +1771,46 @@ def verify_digital_signatures(pdf_path: str) -> Dict[str, Any]:
         results = []
         verified = 0
         vc = validation.ValidationContext(allow_fetching=False)
-        for sig in signatures:
-            try:
-                status = validation.validate_pdf_signature(sig, vc)
-                result = {
-                    "field_name": sig.field_name,
-                    "intact": status.intact,
-                    "valid": status.valid,
-                    "trusted": status.trusted,
-                    "modification_level": str(status.modification_level),
-                }
-                if status.valid:
-                    verified += 1
-            except Exception as exc:
-                result = {
-                    "field_name": sig.field_name,
-                    "error": str(exc),
-                }
-            results.append(result)
+        # pyHanko logs a full traceback for every untrusted chain (for example a
+        # self-signed certificate). That is an expected outcome here, reported
+        # in the result, so keep it out of stderr.
+        hanko_logger = logging.getLogger("pyhanko")
+        previous_level = hanko_logger.level
+        hanko_logger.setLevel(logging.CRITICAL)
+        try:
+            for sig in signatures:
+                try:
+                    status = validation.validate_pdf_signature(sig, vc)
+                    result = {
+                        "field_name": sig.field_name,
+                        "intact": status.intact,
+                        "valid": status.valid,
+                        "trusted": status.trusted,
+                        "modification_level": str(status.modification_level),
+                    }
+                    try:
+                        result["signer"] = sig.signer_cert.subject.human_friendly
+                    except Exception:
+                        pass
+                    ts = getattr(status, "timestamp_validity", None)
+                    if ts is not None:
+                        result["timestamp"] = str(ts.timestamp)
+                        result["timestamp_trusted"] = bool(ts.trusted)
+                    if status.valid and not status.trusted:
+                        result["trust_note"] = (
+                            "Signature is intact and valid, but the certificate does not chain "
+                            "to a trusted root (for example a self-signed certificate)."
+                        )
+                    if status.valid:
+                        verified += 1
+                except Exception as exc:
+                    result = {
+                        "field_name": sig.field_name,
+                        "error": str(exc),
+                    }
+                results.append(result)
+        finally:
+            hanko_logger.setLevel(previous_level)
 
     return {"pdf_path": str(src), "signatures": results, "verified": verified}
 
@@ -1821,6 +1845,60 @@ def _build_validation_context(
     return validation.ValidationContext(allow_fetching=allow_fetching, trust_roots=trust_roots)
 
 
+def _resolve_secret(
+    value: Optional[str],
+    env_name: Optional[str],
+    file_path: Optional[str],
+    label: str,
+) -> Optional[bytes]:
+    """Return a secret from exactly one of: inline value, environment variable, or file."""
+    given = [x for x in (value, env_name, file_path) if x is not None]
+    if len(given) > 1:
+        raise PdfToolError(f"pass only one of {label}, {label}_env or {label}_file")
+    if env_name is not None:
+        secret = os.environ.get(env_name)
+        if secret is None:
+            raise PdfToolError(f"environment variable not set: {env_name}")
+        return secret.encode("utf-8")
+    if file_path is not None:
+        return _ensure_file(file_path).read_text(encoding="utf-8").strip().encode("utf-8")
+    return None if value is None else value.encode("utf-8")
+
+
+def _visible_field_spec(
+    src: Path,
+    field_name: str,
+    visible_page: Optional[int],
+    visible_rect: Optional[Sequence[float]],
+) -> "fields.SigFieldSpec":
+    """Build the signature field; visible when a page and rect are given.
+
+    ``visible_rect`` uses the same top-left origin as ``add_signature_image``
+    ([x0, y0, x1, y1] in points) and is converted to PDF user space here.
+    """
+    if visible_page is None and visible_rect is None:
+        return fields.SigFieldSpec(field_name)
+    if visible_page is None or visible_rect is None:
+        raise PdfToolError("visible_page and visible_rect must be given together")
+    if len(visible_rect) != 4:
+        raise PdfToolError("visible_rect must be [x0, y0, x1, y1]")
+    x0, y0, x1, y1 = (float(v) for v in visible_rect)
+    if x1 <= x0 or y1 <= y0:
+        raise PdfToolError("visible_rect must have x1 > x0 and y1 > y0")
+    reader = PdfReader(str(src))
+    if visible_page < 1 or visible_page > len(reader.pages):
+        raise PdfToolError(f"visible_page out of range: {visible_page}")
+    mediabox = reader.pages[visible_page - 1].mediabox
+    width, height = float(mediabox.width), float(mediabox.height)
+    if x0 < 0 or y0 < 0 or x1 > width or y1 > height:
+        raise PdfToolError(f"visible_rect {list(visible_rect)} is outside the page ({width:g} x {height:g} points)")
+    box = (int(round(x0)), int(round(height - y1)), int(round(x1)), int(round(height - y0)))
+    return fields.SigFieldSpec(field_name, on_page=visible_page - 1, box=box)
+
+
+DEFAULT_STAMP_TEXT = "Digitally signed by %(signer)s\nDate: %(ts)s"
+
+
 def _sign_pdf(
     input_path: str,
     output_path: str,
@@ -1833,9 +1911,22 @@ def _sign_pdf(
     embed_validation_info: bool,
     allow_fetching: bool,
     docmdp_permissions: Optional[str],
+    visible_page: Optional[int] = None,
+    visible_rect: Optional[Sequence[float]] = None,
+    stamp_text: Optional[str] = None,
+    stamp_font_size: float = 8,
 ) -> Dict[str, Any]:
     src = _ensure_file(input_path)
     dst = _prepare_output(output_path)
+    field_spec = _visible_field_spec(src, field_name, visible_page, visible_rect)
+    stamp_style = None
+    if visible_page is not None:
+        stamp_style = TextStampStyle(
+            stamp_text=stamp_text or DEFAULT_STAMP_TEXT,
+            text_box_style=TextBoxStyle(font_size=stamp_font_size),
+            border_width=1,
+            background=None,
+        )
 
     mdp_perm = _parse_docmdp_permissions(docmdp_permissions)
     validation_context = _build_validation_context(
@@ -1859,7 +1950,8 @@ def _sign_pdf(
             ),
             signer=signer,
             timestamper=timestamper,
-            new_field_spec=fields.SigFieldSpec(field_name),
+            new_field_spec=field_spec,
+            stamp_style=stamp_style,
         )
 
         def _sign() -> None:
@@ -1874,7 +1966,13 @@ def _sign_pdf(
             with ThreadPoolExecutor(max_workers=1) as executor:
                 executor.submit(_sign).result()
 
-    return {"output_path": str(dst), "field_name": field_name, "certify": certify}
+    return {
+        "output_path": str(dst),
+        "field_name": field_name,
+        "certify": certify,
+        "visible": visible_page is not None,
+        "timestamped": timestamper is not None,
+    }
 
 
 def sign_pdf(
@@ -1882,6 +1980,8 @@ def sign_pdf(
     output_path: str,
     pfx_path: str,
     pfx_password: Optional[str] = None,
+    pfx_password_env: Optional[str] = None,
+    pfx_password_file: Optional[str] = None,
     field_name: str = "Signature1",
     certify: bool = True,
     reason: Optional[str] = None,
@@ -1890,14 +1990,23 @@ def sign_pdf(
     embed_validation_info: bool = False,
     allow_fetching: bool = False,
     docmdp_permissions: Optional[str] = "fill_forms",
+    visible_page: Optional[int] = None,
+    visible_rect: Optional[Sequence[float]] = None,
+    stamp_text: Optional[str] = None,
+    stamp_font_size: float = 8,
 ) -> Dict[str, Any]:
     """
     Digitally sign a PDF using a PKCS#12/PFX certificate.
+
+    The password can come from ``pfx_password``, an environment variable
+    (``pfx_password_env``) or a file (``pfx_password_file``), so it never
+    has to appear in tool arguments. Pass ``visible_page`` and
+    ``visible_rect`` (top-left origin, points) for a visible signature box.
     """
     if not _HAS_PYHANKO:
         raise PdfToolError("pyHanko not available. Install pyhanko to sign PDFs.")
     pfx = _ensure_file(pfx_path)
-    password_bytes = None if pfx_password is None else pfx_password.encode("utf-8")
+    password_bytes = _resolve_secret(pfx_password, pfx_password_env, pfx_password_file, "pfx_password")
     signer = signers.SimpleSigner.load_pkcs12(str(pfx), passphrase=password_bytes)
     return _sign_pdf(
         input_path,
@@ -1911,6 +2020,10 @@ def sign_pdf(
         embed_validation_info,
         allow_fetching,
         docmdp_permissions,
+        visible_page,
+        visible_rect,
+        stamp_text,
+        stamp_font_size,
     )
 
 
@@ -1921,6 +2034,8 @@ def sign_pdf_pem(
     cert_path: str,
     chain_paths: Optional[List[str]] = None,
     key_password: Optional[str] = None,
+    key_password_env: Optional[str] = None,
+    key_password_file: Optional[str] = None,
     field_name: str = "Signature1",
     certify: bool = True,
     reason: Optional[str] = None,
@@ -1929,6 +2044,10 @@ def sign_pdf_pem(
     embed_validation_info: bool = False,
     allow_fetching: bool = False,
     docmdp_permissions: Optional[str] = "fill_forms",
+    visible_page: Optional[int] = None,
+    visible_rect: Optional[Sequence[float]] = None,
+    stamp_text: Optional[str] = None,
+    stamp_font_size: float = 8,
 ) -> Dict[str, Any]:
     """
     Digitally sign a PDF using PEM key + certificate chain.
@@ -1938,7 +2057,7 @@ def sign_pdf_pem(
     key = _ensure_file(key_path)
     cert = _ensure_file(cert_path)
     chain = [str(_ensure_file(p)) for p in (chain_paths or [])]
-    password_bytes = None if key_password is None else key_password.encode("utf-8")
+    password_bytes = _resolve_secret(key_password, key_password_env, key_password_file, "key_password")
     other_certs: List[Any] = []
     if chain:
         if hasattr(signers, "load_certs_from_pemder"):
@@ -1964,6 +2083,10 @@ def sign_pdf_pem(
         embed_validation_info,
         allow_fetching,
         docmdp_permissions,
+        visible_page,
+        visible_rect,
+        stamp_text,
+        stamp_font_size,
     )
 
 
@@ -2131,31 +2254,72 @@ def remove_comment(
 def add_signature_image(
     input_path: str,
     output_path: str,
-    page: int,
-    image_path: str,
-    rect: Sequence[float],
+    page: Optional[int] = None,
+    image_path: str = "",
+    rect: Optional[Sequence[float]] = None,
+    pages: Optional[List[int]] = None,
+    date_text: Optional[str] = None,
+    date_font_size: float = 8,
+    date_gap: float = 4,
 ) -> Dict[str, Any]:
-    """Add a signature image by inserting an image onto a page (returns xref)."""
+    """Add a signature image to one page (``page``) or several (``pages``).
+
+    ``rect`` is [x0, y0, x1, y1] in points with a top-left origin. When
+    ``date_text`` is given it is written into the page content just below
+    the image (for example "Date: 29 October 2026"), ``date_gap`` points
+    below its bottom edge; raise the gap to clear a signing line. Returns the image
+    xref per page.
+    """
     src = _ensure_file(input_path)
     dst = _prepare_output(output_path)
+    if not image_path:
+        raise PdfToolError("image_path is required")
     img = _ensure_file(image_path)
-    if page < 1:
-        raise PdfToolError("page must be >= 1")
-    if len(rect) != 4:
+    if rect is None or len(rect) != 4:
         raise PdfToolError("rect must be [x0, y0, x1, y1]")
+    if (page is None) == (pages is None):
+        raise PdfToolError("pass exactly one of page or pages")
+    targets = [page] if page is not None else list(pages or [])
+    if not targets:
+        raise PdfToolError("pages must not be empty")
+    if any(p < 1 for p in targets):
+        raise PdfToolError("page must be >= 1")
 
     doc = pymupdf.open(str(src))
     try:
-        if page > doc.page_count:
-            raise PdfToolError(f"page out of range: {page}")
-        p = doc.load_page(page - 1)
-        xref = p.insert_image(pymupdf.Rect(rect[0], rect[1], rect[2], rect[3]), filename=str(img))
+        for p in targets:
+            if p > doc.page_count:
+                raise PdfToolError(f"page out of range: {p}")
+        r = pymupdf.Rect(rect[0], rect[1], rect[2], rect[3])
+        if r.is_empty:
+            raise PdfToolError("rect must have x1 > x0 and y1 > y0")
+        for p in targets:
+            bounds = doc.load_page(p - 1).rect
+            if not bounds.contains(r):
+                raise PdfToolError(
+                    f"rect {list(rect)} is outside page {p} ({bounds.width:g} x {bounds.height:g} points)"
+                )
+        xrefs: Dict[int, int] = {}
+        for p in targets:
+            pg = doc.load_page(p - 1)
+            xrefs[p] = int(pg.insert_image(r, filename=str(img)))
+            if date_text:
+                pg.insert_text(
+                    (r.x0, r.y1 + date_gap + date_font_size),
+                    date_text,
+                    fontsize=date_font_size,
+                    fontname="helv",
+                )
         # Keep xref stable for downstream update/remove by saving without garbage collection.
         doc.save(str(dst), deflate=True)
     finally:
         doc.close()
 
-    return {"output_path": str(dst), "signature_xref": int(xref), "page": page}
+    result: Dict[str, Any] = {"output_path": str(dst), "pages": targets, "signature_xrefs": xrefs}
+    if page is not None:
+        result["page"] = page
+        result["signature_xref"] = xrefs[page]
+    return result
 
 
 def update_signature_image(
