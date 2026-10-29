@@ -246,13 +246,13 @@ Note: XFA/LiveCycle forms are not supported; convert to AcroForm or flatten firs
 - `add_comment` / `update_comment` / `remove_comment`: PDF comments (sticky notes).
 
 ### Signatures & Security
-- `add_signature_image(input_path, output_path, page, image_path, rect)`: add signature image.
+- `add_signature_image(input_path, output_path, page|pages, image_path, rect, date_text=None, date_font_size=8, date_gap=4)`: add a signature image to one page or a list of pages, optionally with a date written below it. `rect` is `[x0, y0, x1, y1]` in points from the top-left; a rect outside the page is rejected.
 - `update_signature_image(...)`: update or resize signature.
 - `remove_signature_image(...)`: remove signature image.
-- `sign_pdf(input_path, output_path, pfx_path, ...)`: sign with PKCS#12/PFX, optional `timestamp_url`, `embed_validation_info`, `allow_fetching`, `docmdp_permissions`.
-- `sign_pdf_pem(input_path, output_path, key_path, cert_path, ...)`: sign with PEM key + cert chain, supports timestamping, revocation checks, DocMDP.
+- `sign_pdf(input_path, output_path, pfx_path, ...)`: sign with PKCS#12/PFX, optional `timestamp_url`, `embed_validation_info`, `allow_fetching`, `docmdp_permissions`. The password comes from `pfx_password`, `pfx_password_env` (environment variable name) or `pfx_password_file`, so it need not appear in tool arguments. Pass `visible_page` and `visible_rect` (top-left origin, points) for a visible signature box; `stamp_text` accepts `%(signer)s` and `%(ts)s`.
+- `sign_pdf_pem(input_path, output_path, key_path, cert_path, ...)`: sign with PEM key + cert chain, supports timestamping, revocation checks, DocMDP, `key_password_env` / `key_password_file`, and the same visible-box options as `sign_pdf`.
 - `encrypt_pdf(input_path, output_path, user_password, ...)`: password-protect PDF.
-- `verify_digital_signatures(pdf_path)`: verify digital signatures.
+- `verify_digital_signatures(pdf_path)`: verify digital signatures. Each result includes the signer, the timestamp and whether it is trusted, and a `trust_note` when the signature is valid but the certificate is not chained to a trusted root (for example self-signed).
 
 ### Metadata
 - `get_pdf_metadata(pdf_path, full=False)`: return document metadata; set `full=True` for extended info.

@@ -3652,3 +3652,191 @@ class TestPassportSurnameSingleLetterCleanup:
         )
         assert fields.get("surname") == "SMITH"
         assert fields.get("given_names") == "JOHN MICHAEL"
+
+
+def _signed_with_visible_box(tmp_path: Path, **extra):
+    certs = _make_test_certificates(tmp_path)
+    src = _make_pdf(tmp_path / "vis_src.pdf", pages=2)
+    out = tmp_path / "vis_signed.pdf"
+    res = pdf_tools.sign_pdf(
+        input_path=str(src),
+        output_path=str(out),
+        pfx_path=str(certs["pfx"]),
+        pfx_password=certs["password"].decode("utf-8"),
+        certify=False,
+        visible_page=2,
+        visible_rect=[20, 40, 180, 90],
+        stamp_text="Digitally signed by %(signer)s",
+        **extra,
+    )
+    return certs, out, res
+
+
+def test_sign_pdf_visible_box_lands_on_requested_page(tmp_path: Path):
+    if not getattr(pdf_tools, "_HAS_PYHANKO", False):
+        pytest.skip("pyHanko not available")
+    _, out, res = _signed_with_visible_box(tmp_path)
+    assert res["visible"] is True
+    doc = pymupdf.open(str(out))
+    try:
+        widgets = list(doc[1].widgets())
+        assert len(widgets) == 1
+        r = widgets[0].rect
+        # top-left input rect maps back to the same place
+        assert abs(r.x0 - 20) < 2 and abs(r.y0 - 40) < 2 and abs(r.y1 - 90) < 2
+        assert list(doc[0].widgets()) == []
+    finally:
+        doc.close()
+    verify = pdf_tools.verify_digital_signatures(str(out))
+    sig = verify["signatures"][0]
+    assert sig["intact"] is True and sig["valid"] is True
+    assert "signer" in sig
+
+
+def test_sign_pdf_visible_requires_page_and_rect(tmp_path: Path):
+    if not getattr(pdf_tools, "_HAS_PYHANKO", False):
+        pytest.skip("pyHanko not available")
+    certs = _make_test_certificates(tmp_path)
+    src = _make_pdf(tmp_path / "vis_bad.pdf", pages=1)
+    with pytest.raises(pdf_tools.PdfToolError, match="together"):
+        pdf_tools.sign_pdf(
+            input_path=str(src),
+            output_path=str(tmp_path / "x.pdf"),
+            pfx_path=str(certs["pfx"]),
+            pfx_password=certs["password"].decode("utf-8"),
+            visible_page=1,
+        )
+    with pytest.raises(pdf_tools.PdfToolError, match="out of range"):
+        pdf_tools.sign_pdf(
+            input_path=str(src),
+            output_path=str(tmp_path / "y.pdf"),
+            pfx_path=str(certs["pfx"]),
+            pfx_password=certs["password"].decode("utf-8"),
+            visible_page=5,
+            visible_rect=[10, 10, 100, 50],
+        )
+
+
+def test_sign_pdf_password_from_env_and_file(tmp_path: Path, monkeypatch):
+    if not getattr(pdf_tools, "_HAS_PYHANKO", False):
+        pytest.skip("pyHanko not available")
+    certs = _make_test_certificates(tmp_path)
+    src = _make_pdf(tmp_path / "pw_src.pdf", pages=1)
+    monkeypatch.setenv("PDF_MCP_TEST_PFX_PW", certs["password"].decode("utf-8"))
+    res = pdf_tools.sign_pdf(
+        input_path=str(src),
+        output_path=str(tmp_path / "env.pdf"),
+        pfx_path=str(certs["pfx"]),
+        pfx_password_env="PDF_MCP_TEST_PFX_PW",
+    )
+    assert Path(res["output_path"]).exists()
+    pw_file = tmp_path / "pw.txt"
+    pw_file.write_text(certs["password"].decode("utf-8") + "\n")
+    res = pdf_tools.sign_pdf(
+        input_path=str(src),
+        output_path=str(tmp_path / "file.pdf"),
+        pfx_path=str(certs["pfx"]),
+        pfx_password_file=str(pw_file),
+    )
+    assert Path(res["output_path"]).exists()
+    with pytest.raises(pdf_tools.PdfToolError, match="only one of"):
+        pdf_tools.sign_pdf(
+            input_path=str(src),
+            output_path=str(tmp_path / "both.pdf"),
+            pfx_path=str(certs["pfx"]),
+            pfx_password="x",
+            pfx_password_env="PDF_MCP_TEST_PFX_PW",
+        )
+    monkeypatch.delenv("PDF_MCP_TEST_PFX_PW")
+    with pytest.raises(pdf_tools.PdfToolError, match="not set"):
+        pdf_tools.sign_pdf(
+            input_path=str(src),
+            output_path=str(tmp_path / "missing.pdf"),
+            pfx_path=str(certs["pfx"]),
+            pfx_password_env="PDF_MCP_TEST_PFX_PW",
+        )
+
+
+def test_verify_reports_trust_note_without_traceback(tmp_path: Path, capfd):
+    if not getattr(pdf_tools, "_HAS_PYHANKO", False):
+        pytest.skip("pyHanko not available")
+    _, out, _ = _signed_with_visible_box(tmp_path)
+    capfd.readouterr()
+    verify = pdf_tools.verify_digital_signatures(str(out))
+    captured = capfd.readouterr()
+    assert "Traceback" not in captured.err
+    sig = verify["signatures"][0]
+    assert sig["trusted"] is False
+    assert "trust_note" in sig
+
+
+def test_add_signature_image_many_pages_with_date(tmp_path: Path):
+    src = _make_pdf(tmp_path / "img_src.pdf", pages=3)
+    img = tmp_path / "sig.png"
+    pix = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 60, 20), False)
+    pix.clear_with(0)
+    pix.save(str(img))
+    out = tmp_path / "img_out.pdf"
+    res = pdf_tools.add_signature_image(
+        input_path=str(src),
+        output_path=str(out),
+        image_path=str(img),
+        rect=[100, 150, 160, 170],
+        pages=[1, 3],
+        date_text="29/10/2026",
+    )
+    assert res["pages"] == [1, 3]
+    assert set(res["signature_xrefs"]) == {1, 3}
+    assert "signature_xref" not in res
+    doc = pymupdf.open(str(out))
+    try:
+        assert "29/10/2026" in doc[0].get_text()
+        assert "29/10/2026" not in doc[1].get_text()
+        assert "29/10/2026" in doc[2].get_text()
+    finally:
+        doc.close()
+
+
+def test_add_signature_image_page_or_pages_required(tmp_path: Path):
+    src = _make_pdf(tmp_path / "img_bad.pdf", pages=1)
+    img = tmp_path / "sig2.png"
+    pix = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 10, 10), False)
+    pix.clear_with(0)
+    pix.save(str(img))
+    with pytest.raises(pdf_tools.PdfToolError, match="exactly one"):
+        pdf_tools.add_signature_image(
+            input_path=str(src),
+            output_path=str(tmp_path / "o.pdf"),
+            image_path=str(img),
+            rect=[0, 0, 10, 10],
+            page=1,
+            pages=[1],
+        )
+
+
+def test_signature_rects_outside_page_are_rejected(tmp_path: Path):
+    src = _make_pdf(tmp_path / "bounds.pdf", pages=1)
+    img = tmp_path / "sig3.png"
+    pix = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 10, 10), False)
+    pix.clear_with(0)
+    pix.save(str(img))
+    with pytest.raises(pdf_tools.PdfToolError, match="outside page"):
+        pdf_tools.add_signature_image(
+            input_path=str(src),
+            output_path=str(tmp_path / "o.pdf"),
+            image_path=str(img),
+            rect=[400, 700, 460, 720],
+            page=1,
+        )
+    if not getattr(pdf_tools, "_HAS_PYHANKO", False):
+        return
+    certs = _make_test_certificates(tmp_path)
+    with pytest.raises(pdf_tools.PdfToolError, match="outside the page"):
+        pdf_tools.sign_pdf(
+            input_path=str(src),
+            output_path=str(tmp_path / "s.pdf"),
+            pfx_path=str(certs["pfx"]),
+            pfx_password=certs["password"].decode("utf-8"),
+            visible_page=1,
+            visible_rect=[300, 100, 540, 150],
+        )

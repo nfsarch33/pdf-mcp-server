@@ -942,6 +942,7 @@ dependencies = [
     { name = "pyhanko" },
     { name = "pymupdf" },
     { name = "pypdf" },
+    { name = "requests" },
     { name = "typer" },
 ]
 
@@ -964,7 +965,7 @@ ocr = [
 requires-dist = [
     { name = "cryptography", specifier = ">=50.0.0" },
     { name = "fillpdf", specifier = ">=0.7.3" },
-    { name = "mcp", specifier = ">=1.30.0" },
+    { name = "mcp", specifier = ">=1.30.0,<2" },
     { name = "openai", marker = "extra == 'llm'", specifier = ">=1.0.0" },
     { name = "pillow", marker = "extra == 'ocr'", specifier = ">=12.3.0" },
     { name = "pre-commit", marker = "extra == 'dev'" },
@@ -974,6 +975,7 @@ requires-dist = [
     { name = "pytesseract", marker = "extra == 'ocr'", specifier = ">=0.3.10" },
     { name = "pytest", marker = "extra == 'dev'" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=5.0.0" },
+    { name = "requests", specifier = ">=2.32.0" },
     { name = "ruff", marker = "extra == 'dev'" },
     { name = "typer", specifier = ">=0.12.0" },
 ]
