@@ -6,6 +6,18 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+### Added
+- `sign_pdf` / `sign_pdf_pem`: visible signature box via `visible_page`, `visible_rect` (top-left origin, same as `add_signature_image`), `stamp_text` and `stamp_font_size`. Results report `visible` and `timestamped`.
+- `sign_pdf`: `pfx_password_env` and `pfx_password_file`; `sign_pdf_pem`: `key_password_env` and `key_password_file`. Secrets no longer have to be passed as tool arguments.
+- `add_signature_image`: `pages` (sign several pages in one call), `date_text`, `date_font_size` and `date_gap` (date written into the page under the image).
+- `verify_digital_signatures`: `signer`, `timestamp`, `timestamp_trusted` and a `trust_note` for valid but untrusted (for example self-signed) certificates.
+
+### Fixed
+- Declare `requests` as a dependency. pyHanko's timestamp client imports it, so on a fresh install every signing tool reported "pyHanko not available".
+- Migrate to `mcp` 2.x and lift the `mcp<2` cap (now `mcp>=2.3.0`). `mcp` 2.x removed `mcp.server.fastmcp`; the server now uses `mcp.server.mcpserver.MCPServer`, with tool names, descriptions and order unchanged. Tests read `CallToolResult.structured_content`, since `MCPServer.call_tool()` no longer returns a `(content, structured)` tuple.
+- `verify_digital_signatures` no longer prints a pyHanko traceback to stderr for every self-signed or untrusted certificate.
+- `add_signature_image` and visible signatures reject a rect outside the page instead of silently placing the image off-page.
+
 ### Changed (BREAKING for relicense-aware downstreams)
 - **License: AGPL-3.0 -> Apache-2.0** (effective v1.3.0).
   - The maintainer's own code is now distributed under Apache-2.0. Releases
@@ -198,16 +210,6 @@ This project follows Keep a Changelog and Semantic Versioning.
   rendered output.
 
 ### Fixed
-- **Migrate to `mcp` 2.x (`mcp>=2.3.0`)**: `mcp` 2.x removed
-  `mcp.server.fastmcp`, so a fresh install failed at
-  `from mcp.server.fastmcp import FastMCP` and `pdf-mcp serve` never
-  started. The server now uses `mcp.server.mcpserver.MCPServer`; tool
-  names, descriptions and order are unchanged. Tests read
-  `CallToolResult.structured_content`, since `MCPServer.call_tool()` no
-  longer returns a `(content, structured)` tuple.
-- Declare `requests` as a dependency. pyHanko's timestamp client imports
-  it, so on a fresh install every signing tool reported "pyHanko not
-  available".
 - **Broken regex fallback in `scripts/check_release_ready.py:42`**: the
   raw-string pattern used double-escaped backslashes (`\\s`), which inside
   a raw string is a literal backslash followed by `s` rather than a
