@@ -13,6 +13,8 @@ This project follows Keep a Changelog and Semantic Versioning.
 - `verify_digital_signatures`: `signer`, `timestamp`, `timestamp_trusted` and a `trust_note` for valid but untrusted (for example self-signed) certificates.
 
 ### Fixed
+- Declare `requests` as a dependency. pyHanko's timestamp client imports it, so on a fresh install every signing tool reported "pyHanko not available".
+- Pin `mcp<2`: `mcp` 2.x removed `mcp.server.fastmcp`, so a fresh `pip install` broke `pdf-mcp serve` and CI. Migration to `MCPServer` is tracked separately.
 - `verify_digital_signatures` no longer prints a pyHanko traceback to stderr for every self-signed or untrusted certificate.
 - `add_signature_image` and visible signatures reject a rect outside the page instead of silently placing the image off-page.
 
