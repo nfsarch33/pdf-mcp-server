@@ -6,6 +6,14 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+## 2.0.0 - 2026-10-29
+
+### Breaking
+- Requires `mcp>=2.3.0,<3`; `mcp` 1.x is no longer supported. MCP clients see no change: the wire protocol and the 57 tool names, descriptions and order are the same.
+- Code that embeds `pdf_mcp.server.mcp` now gets an `mcp.server.mcpserver.MCPServer`, whose `call_tool()` returns a `CallToolResult` (read `.structured_content`) instead of a `(content, structured)` tuple.
+- `verify_digital_signatures` returns `modification_level` as a plain name (`NONE`, `OTHER`) instead of the enum repr.
+- 1.3.0 was never tagged, so this release also carries the 1.3.0 changes below, including the relicense to Apache-2.0.
+
 ### Added
 - `sign_pdf` / `sign_pdf_pem`: visible signature box via `visible_page`, `visible_rect` (top-left origin, same as `add_signature_image`), `stamp_text` and `stamp_font_size`. Results report `visible` and `timestamped`.
 - `sign_pdf`: `pfx_password_env` and `pfx_password_file`; `sign_pdf_pem`: `key_password_env` and `key_password_file`. Secrets no longer have to be passed as tool arguments.
