@@ -11,7 +11,7 @@ RELICENSE NOTICE (v1.2.18 -> Apache-2.0)
 ================================================================================
 
 Releases up to and including v1.2.18 were distributed under the GNU Affero
-General Public License version 3.0 (AGPL-3.0). Starting with v1.3.0, this
+General Public License version 3.0 (AGPL-3.0). Starting with v2.0.0, this
 project is distributed under the Apache License, Version 2.0.
 
 The relicense applies to all source code, configuration, and documentation
