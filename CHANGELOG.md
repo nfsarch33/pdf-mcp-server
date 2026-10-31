@@ -9,7 +9,7 @@ This project follows Keep a Changelog and Semantic Versioning.
 ### Added
 - `Containerfile`: a Python 3.12 slim image with Tesseract (English), run as a non-root user, entrypoint `pdf-mcp`, default command `serve`. `release.yml` builds it on a version tag, checks that it lists 57 tools over stdio, and pushes `ghcr.io/nfsarch33/pdf-mcp-server:<tag>`. The README has the podman command and an MCP client config.
 
-## 2.0.0 - 2026-10-30
+## 2.0.0 - 2026-11-01
 
 ### Breaking
 - Requires `mcp>=2.3.0,<3`; `mcp` 1.x is no longer supported. MCP clients see no change: the wire protocol and the 57 tool names, descriptions and order are the same.
@@ -22,6 +22,10 @@ This project follows Keep a Changelog and Semantic Versioning.
 - `sign_pdf`: `pfx_password_env` and `pfx_password_file`; `sign_pdf_pem`: `key_password_env` and `key_password_file`. Secrets no longer have to be passed as tool arguments.
 - `add_signature_image`: `pages` (sign several pages in one call), `date_text`, `date_font_size` and `date_gap` (date written into the page under the image).
 - `verify_digital_signatures`: `signer`, `timestamp`, `timestamp_trusted` and a `trust_note` for valid but untrusted (for example self-signed) certificates.
+- `scripts/ci/deny-pattern.sh`, run in CI on every pull request and push to `main`: fails when the tree carries editor rule files, secret-manager paths, absolute home paths, private or tailnet addresses, or a symlink out of the repository.
+
+### Removed
+- The generated `AGENTS.md`, `cursor-kilo-mappings.md` and a symlink to a local rules directory, which described the maintainer's private tooling. `AGENTS.md` is now a short contributor guide for coding agents.
 
 ### Fixed
 - `verify_digital_signatures` reported a document edited by an incremental update after signing (added text or an annotation) as intact and valid. Each result now has `ok` (intact, valid and not modified after signing), `modified_after_signing`, `coverage` and `docmdp_ok`, and `modification_level` is a plain name such as `NONE` or `OTHER` instead of the enum repr.
