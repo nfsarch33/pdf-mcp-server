@@ -33,7 +33,8 @@ if git grep -nIE "${args[@]}" -- . ':!scripts/ci/deny-pattern.sh' ':!uv.lock'; t
   hits=1
 fi
 links=$(git ls-files -s | awk '$1 == "120000" {print $4}' | while read -r f; do
-  t=$(git cat-file -p ":$f"); [[ "$t" == /* || "$t" == ../* ]] && echo "$f -> $t"; done || true)
+  t=$(git cat-file -p ":$f"); r=$(realpath -m --relative-to=. "$(dirname "$f")/$t")
+  [[ "$t" == /* || "$r" == .. || "$r" == ../* ]] && echo "$f -> $t"; done || true)
 if [[ -n "$links" ]]; then echo "symlink out of repo: $links"; hits=1; fi
 
 if (( hits )); then echo "deny-pattern: FAIL"; exit 1; fi
