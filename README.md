@@ -222,7 +222,7 @@ Release tags after v2.0.0 also publish the image as
 `pdf-mcp` below to skip the build.
 
 MCP client config (Cursor `~/.cursor/mcp.json`, Claude Desktop
-`claude_desktop_config.json`); replace `/home/me/docs` with your folder:
+`claude_desktop_config.json`); replace `/path/to/docs` with your folder:
 
 ```json
 {
@@ -230,7 +230,7 @@ MCP client config (Cursor `~/.cursor/mcp.json`, Claude Desktop
     "pdf-mcp": {
       "command": "podman",
       "args": ["run", "-i", "--rm", "--userns=keep-id",
-               "-v", "/home/me/docs:/home/me/docs:Z",
+               "-v", "/path/to/docs:/path/to/docs:Z",
                "pdf-mcp"]
     }
   }
