@@ -20,9 +20,9 @@ useDefault = true
 
 [[rules]]
 id = "zdai-bearer"
-description = "Zendesk AI gateway bearer token (ZDGatewayOpenAI)"
+description = "AI gateway bearer token (zdai_ prefix)"
 regex = '''zdai_[A-Za-z0-9_-]{40,80}'''
-tags = ["secret", "zd-gateway"]
+tags = ["secret", "ai-gateway"]
 
 [[rules]]
 id = "glrt-runner"
