@@ -6,6 +6,9 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+### Added
+- `Containerfile`: a Python 3.12 slim image with Tesseract (English), run as a non-root user, entrypoint `pdf-mcp`, default command `serve`. `release.yml` builds it on a version tag, checks that it lists 57 tools over stdio, and pushes `ghcr.io/nfsarch33/pdf-mcp-server:<tag>`. The README has the podman command and an MCP client config.
+
 ## 2.0.0 - 2026-10-30
 
 ### Breaking

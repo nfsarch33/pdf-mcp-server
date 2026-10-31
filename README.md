@@ -206,6 +206,40 @@ Edit `~/.cursor/mcp.json`:
 ```
 Restart Cursor after saving.
 
+## Run in a container
+
+The image bundles the server with Tesseract (English), so OCR works
+without a local Tesseract install. Tool calls pass host paths, so mount
+each directory the server should read or write at the same path inside
+the container.
+
+```bash
+podman pull ghcr.io/nfsarch33/pdf-mcp-server:v2.0.0
+# or build it: podman build -t ghcr.io/nfsarch33/pdf-mcp-server:v2.0.0 .
+```
+
+MCP client config (Cursor `~/.cursor/mcp.json`, Claude Desktop
+`claude_desktop_config.json`); replace `/home/me/docs` with your folder:
+
+```json
+{
+  "mcpServers": {
+    "pdf-mcp": {
+      "command": "podman",
+      "args": ["run", "-i", "--rm", "--userns=keep-id",
+               "-v", "/home/me/docs:/home/me/docs:Z",
+               "ghcr.io/nfsarch33/pdf-mcp-server:v2.0.0"]
+    }
+  }
+}
+```
+
+The container runs as a non-root user (uid 1000). With rootless podman,
+`--userns=keep-id` maps that user to you, so tools can write output
+files into the mounted folder; without it, writes fail with
+`Permission denied`. With `docker`, drop `--userns=keep-id`; writes then
+need the folder to be writable by uid 1000.
+
 ## Features overview (57 tools across 10 verbs)
 
 | Verb group | Tools | What it does |
