@@ -1,10 +1,10 @@
 # Custom Gitleaks ruleset (extends Gitleaks defaults).
-# Source of truth: cursor-global-kb/templates/gitleaks.toml (v18725-3).
+# Project gitleaks config. Allowlist entries cover documented test fixtures only.
 # Run: gitleaks detect --config .gitleaks.toml --source .
 # History scan: gitleaks detect --config .gitleaks.toml --source . --log-opts="--all"
 #
-# New rules added in v18725 (post P0 zdai + glrt leaks):
-#   - zdai-bearer     : ZD AI gateway bearer (cutover 2026-05-28 EOD; still hunted)
+# Extra rules on top of the defaults:
+#   - zdai-bearer     : AI gateway bearer tokens (zdai_ prefix)
 #   - glrt-runner     : GitLab CE runner auth token
 #   - aws-access-key  : AKIA / ASIA prefix
 #   - ops-ey-jwt      : 1Password service-account JWT
@@ -20,9 +20,9 @@ useDefault = true
 
 [[rules]]
 id = "zdai-bearer"
-description = "Zendesk AI gateway bearer token (ZDGatewayOpenAI)"
+description = "AI gateway bearer token (zdai_ prefix)"
 regex = '''zdai_[A-Za-z0-9_-]{40,80}'''
-tags = ["secret", "zd-gateway"]
+tags = ["secret", "ai-gateway"]
 
 [[rules]]
 id = "glrt-runner"
