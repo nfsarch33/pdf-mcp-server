@@ -214,9 +214,12 @@ each directory the server should read or write at the same path inside
 the container.
 
 ```bash
-podman pull ghcr.io/nfsarch33/pdf-mcp-server:v2.0.0
-# or build it: podman build -t ghcr.io/nfsarch33/pdf-mcp-server:v2.0.0 .
+podman build -t pdf-mcp .
 ```
+
+Release tags after v2.0.0 also publish the image as
+`ghcr.io/nfsarch33/pdf-mcp-server:<tag>`; use that name in place of
+`pdf-mcp` below to skip the build.
 
 MCP client config (Cursor `~/.cursor/mcp.json`, Claude Desktop
 `claude_desktop_config.json`); replace `/home/me/docs` with your folder:
@@ -228,7 +231,7 @@ MCP client config (Cursor `~/.cursor/mcp.json`, Claude Desktop
       "command": "podman",
       "args": ["run", "-i", "--rm", "--userns=keep-id",
                "-v", "/home/me/docs:/home/me/docs:Z",
-               "ghcr.io/nfsarch33/pdf-mcp-server:v2.0.0"]
+               "pdf-mcp"]
     }
   }
 }
