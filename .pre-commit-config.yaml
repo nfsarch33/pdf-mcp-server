@@ -1,7 +1,4 @@
 # Layered Gitleaks (fast regex) + TruffleHog (live verification) pre-push hook.
-# Source of truth: cursor-global-kb/templates/.pre-commit-config.yaml (v18725-3).
-# Rule: ~/.cursor/rules/00-p0-secrets-pre-push-hook.mdc
-# SOP:   sop/secrets-pre-push-hook.md
 #
 # Install: make precommit-install   (auto-installs pre-commit==3.8.0 if missing)
 # Smoke:   echo 'AKIAIOSFODNN7EXAMPLE' >> /tmp/test.py && git add . && git commit -m noop && git push
