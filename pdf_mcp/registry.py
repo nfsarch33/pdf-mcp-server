@@ -239,7 +239,7 @@ def _seed_default_registry() -> None:
     register_tool(
         name="flatten_pdf",
         verb="form",
-        description="Flatten a PDF (remove form fields/annotations).",
+        description="Flatten form fields; include_annotations=true also burns annotations (e.g. FreeText) into the page.",
         import_path=f"{pt}:flatten_pdf",
     )
     register_tool(
@@ -284,13 +284,13 @@ def _seed_default_registry() -> None:
     register_tool(
         name="add_text_annotation",
         verb="text",
-        description="Add a FreeText annotation to a page (managed text insertion).",
+        description="Add a FreeText annotation to a page (managed text insertion); optional font_size, font_color, border_width, origin.",
         import_path=f"{pt}:add_text_annotation",
     )
     register_tool(
         name="update_text_annotation",
         verb="text",
-        description="Update an existing annotation by annotation_id.",
+        description="Update an existing annotation by annotation_id; optional font_size, font_color, border_width.",
         import_path=f"{pt}:update_text_annotation",
     )
     register_tool(

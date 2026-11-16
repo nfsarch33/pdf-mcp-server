@@ -276,7 +276,7 @@ call. Pick the surface that matches your workflow.
 - `fill_pdf_form(input_path, output_path, data, flatten=False)`: fill fields; optional flatten.
 - `fill_pdf_form_any(input_path, output_path, data, flatten=False)`: fill standard or non-standard forms using label detection when needed.
 - `clear_pdf_form_fields(input_path, output_path, fields=None)`: clear values while keeping fields fillable.
-- `flatten_pdf(input_path, output_path)`: flatten forms/annotations.
+- `flatten_pdf(input_path, output_path, include_annotations=False)`: flatten form fields. `include_annotations=True` also burns annotations (FreeText, highlights, stamps) into the page content. Returns `flattened: false` with a `warning` when there was nothing to flatten.
 - `create_pdf_form(output_path, fields, page_size=None, pages=1)`: create a new PDF with AcroForm fields.
 - `get_form_templates()`: list built-in templates for common workflows.
 - `create_pdf_form_from_template(output_path, template_name)`: create a form from a built-in template.
@@ -291,8 +291,8 @@ Note: XFA/LiveCycle forms are not supported; convert to AcroForm or flatten firs
 - `remove_pages(input_path, pages, output_path)`: remove specific pages.
 
 ### Annotations & Text
-- `add_text_annotation(input_path, page, text, output_path, rect=None, annotation_id=None)`: add FreeText annotation.
-- `update_text_annotation(input_path, output_path, annotation_id, text, pages=None)`: update annotation by id.
+- `add_text_annotation(input_path, page, text, output_path, rect=None, annotation_id=None, font_size=None, font_color=None, border_width=None, origin="bottom-left")`: add FreeText annotation. `font_size` defaults to 12 pt, `font_color` is `[r, g, b]` (0-1), `border_width=0` removes the border. `rect` is in PDF points from the bottom-left corner; pass `origin="top-left"` to use the `bbox` values from `get_pdf_text_blocks` directly.
+- `update_text_annotation(input_path, output_path, annotation_id, text, pages=None, font_size=None, font_color=None, border_width=None)`: update annotation text (and optionally style) by id.
 - `remove_text_annotation(input_path, output_path, annotation_id, pages=None)`: remove annotation by id.
 - `remove_annotations(input_path, output_path, pages, subtype=None)`: remove annotations, optionally by subtype.
 - `redact_text_regex(input_path, output_path, pattern, ...)`: redact text using a regex pattern.
@@ -456,6 +456,13 @@ print(result["summary"])  # "Invoice #12345 for $162.00..."
 - Inputs must exist and be files; errors return `{ "error": "..." }`.
 - Form flattening prefers fillpdf+poppler; falls back to a pypdf-only flatten (removes form structures).
  - Text insert/edit/remove is implemented via managed FreeText annotations, not by editing PDF content streams.
+- Coordinates: `get_pdf_text_blocks` returns top-left `bbox` values; `add_text_annotation` takes bottom-left PDF coordinates unless you pass `origin="top-left"`.
+- Filling a letter template without form fields: add borderless annotations, then burn them in.
+
+  ```bash
+  pdf-mcp text add-text-annotation --json '{"input_path":"in.pdf","output_path":"a.pdf","page":1,"text":"Example Pty Ltd","rect":[76,222,236,238],"origin":"top-left","border_width":0,"font_size":11}'
+  pdf-mcp form flatten-pdf --json '{"input_path":"a.pdf","output_path":"final.pdf","include_annotations":true}'
+  ```
 
 ## Smoke tests (manual)
 ```bash
