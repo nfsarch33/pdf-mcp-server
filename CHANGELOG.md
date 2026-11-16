@@ -6,10 +6,19 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+### Changed
+- CLI help snapshots reflect the boolean-option metavars rendered by the current Typer/Click versions.
+
 ### Added
 - `Containerfile`: a Python 3.12 slim image with Tesseract (English), run as a non-root user, entrypoint `pdf-mcp`, default command `serve`. `release.yml` builds it on a version tag, checks that it lists 57 tools over stdio, and pushes `ghcr.io/nfsarch33/pdf-mcp-server:<tag>`. The README has the podman command and an MCP client config.
 
+- `add_text_annotation` / `update_text_annotation`: optional `font_size`, `font_color` (`[r, g, b]`, 0-1) and `border_width` (`0` = no border). Given any of them, the annotation gets a `/BS` entry and an appearance stream, so it renders the same in every viewer. Without them the annotation is written exactly as before (#104).
+- `add_text_annotation`: `origin="top-left"` takes `rect` in the same top-left coordinates that `get_pdf_text_blocks` returns (#104).
+- `flatten_pdf`: `include_annotations=true` burns every annotation and form field into the page content (PyMuPDF `bake`), so FreeText values become plain page text. Available in the MCP server and as `pdf-mcp form flatten-pdf` (#104).
+
 ### Fixed
+- `flatten_pdf` no longer reports success on a PDF without form fields. It returns `flattened: false` with a `warning` (naming any annotations still editable) and copies the file unchanged. Before, fillpdf printed "Form Not Found" and the call returned success, or, without fillpdf, the annotations were silently deleted. Every result now carries `flattened` (#104).
+- `update_text_annotation` regenerates an existing appearance stream, so viewers show the new text instead of the old one (#104).
 - `scripts/ci/deny-pattern.sh` resolves each symlink target relative to the link, so a target such as `a/../../x` that leaves the repository is caught.
 
 ## 2.0.0 - 2026-11-01

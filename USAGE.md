@@ -43,7 +43,7 @@ PDF form discovery, filling, templates, and flattening.
 | `create-pdf-form` | Create a new PDF with AcroForm fields. |
 | `get-form-templates` | List built-in form templates for common workflows. |
 | `create-pdf-form-from-template` | Create a PDF form using a built-in template. |
-| `flatten-pdf` | Flatten a PDF (remove form fields/annotations). |
+| `flatten-pdf` | Flatten form fields; include_annotations=true also burns annotations (e.g. FreeText) into the page. |
 | `clear-pdf-form-fields` | Clear (delete) values for PDF form fields while keeping fields fillable. |
 | `detect-form-fields` | Detect potential form fields in a PDF using text analysis. |
 
@@ -77,8 +77,8 @@ Text annotations, redaction, watermarks, comments, page numbers, Bates stamps.
 
 | Tool | Description |
 | ---- | ----------- |
-| `add-text-annotation` | Add a FreeText annotation to a page (managed text insertion). |
-| `update-text-annotation` | Update an existing annotation by annotation_id. |
+| `add-text-annotation` | Add a FreeText annotation to a page (managed text insertion); optional font_size, font_color, border_width, origin. |
+| `update-text-annotation` | Update an existing annotation by annotation_id; optional font_size, font_color, border_width. |
 | `remove-text-annotation` | Remove an existing annotation by annotation_id. |
 | `remove-annotations` | Remove annotations from given pages. Optionally filter by subtype (e.g., FreeText). |
 | `redact-text-regex` | Redact text using a regex pattern. |

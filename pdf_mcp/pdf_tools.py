@@ -1006,20 +1006,57 @@ def encrypt_pdf(
     }
 
 
-def flatten_pdf(input_path: str, output_path: str) -> Dict:
+def flatten_pdf(input_path: str, output_path: str, include_annotations: bool = False) -> Dict:
+    """Flatten form fields so the document is no longer editable.
+
+    With ``include_annotations=True`` every annotation and form field is burned
+    into the page content (PyMuPDF ``bake``): FreeText values become ordinary page
+    text and no annotations remain. ``flattened`` is False, with a ``warning``,
+    when there was nothing to flatten.
+    """
     src = _ensure_file(input_path)
     dst = _prepare_output(output_path)
+
+    if include_annotations:
+        with pymupdf.open(str(src)) as doc:
+            baked = sum(len(list(page.annots())) + len(list(page.widgets())) for page in doc)
+            doc.bake()
+            data = doc.tobytes(garbage=1)
+        dst.write_bytes(data)
+        result: Dict[str, Any] = {
+            "output_path": str(dst),
+            "flattened": baked > 0,
+            "flattened_with": "pymupdf",
+            "annotations_baked": baked,
+        }
+        if not baked:
+            result["warning"] = "No annotations or form fields found; nothing was flattened."
+        return result
+
+    reader = PdfReader(str(src))
+    if not reader.get_fields():
+        # fillpdf prints "Form Not Found" and writes the file unchanged here; don't call
+        # that success.
+        writer = PdfWriter(clone_from=reader)
+        with dst.open("wb") as output_file:
+            writer.write(output_file)
+        annots = sum(len((page.get("/Annots") or ArrayObject()).get_object()) for page in reader.pages)
+        warning = "No form fields found; nothing was flattened."
+        if annots:
+            warning += (
+                f" {annots} annotation(s) are still editable; use include_annotations=true to burn them into the page."
+            )
+        return {"output_path": str(dst), "flattened": False, "warning": warning}
 
     if _HAS_FILLPDF:
         try:
             fillpdfs.flatten_pdf(str(src), str(dst))
-            return {"output_path": str(dst), "flattened_with": "fillpdf"}
+            return {"output_path": str(dst), "flattened": True, "flattened_with": "fillpdf"}
         except Exception:
             # fillpdf uses pdfrw which can fail on PDFs with compressed object streams
             # (common in some Adobe InDesign exports). Fall back to pypdf below.
             pass
 
-    reader = PdfReader(str(src))
     writer = PdfWriter()
     for page in reader.pages:
         writer.add_page(page)
@@ -1028,7 +1065,7 @@ def flatten_pdf(input_path: str, output_path: str) -> Dict:
     with dst.open("wb") as output_file:
         writer.write(output_file)
 
-    return {"output_path": str(dst), "flattened_with": "pypdf"}
+    return {"output_path": str(dst), "flattened": True, "flattened_with": "pypdf"}
 
 
 def merge_pdfs(pdf_list: Iterable[str], output_path: str) -> Dict:
@@ -1276,6 +1313,48 @@ def redact_text_regex(
     return {"output_path": str(dst), "redacted": redacted, "pages": len(page_indices)}
 
 
+def _validate_freetext_style(
+    font_size: Optional[float],
+    font_color: Optional[Sequence[float]],
+    border_width: Optional[float],
+) -> None:
+    if font_size is not None and font_size <= 0:
+        raise PdfToolError("font_size must be greater than 0")
+    if font_color is not None and (len(font_color) != 3 or any(not 0 <= float(c) <= 1 for c in font_color)):
+        raise PdfToolError("font_color must be [r, g, b] with each value between 0 and 1")
+    if border_width is not None and border_width < 0:
+        raise PdfToolError("border_width must be 0 or greater (0 = no border)")
+
+
+def _restyle_freetext(
+    path: Path,
+    annotation_id: str,
+    page_indices: Sequence[int],
+    font_size: Optional[float],
+    font_color: Optional[Sequence[float]],
+    border_width: Optional[float],
+) -> None:
+    """Style FreeText annotations matched by /NM and regenerate their appearance stream.
+
+    PyMuPDF writes /BS, /DA and /AP, so the annotation renders the same in every
+    viewer. Arguments left as None keep the annotation's current style.
+    """
+    with pymupdf.open(str(path)) as doc:
+        for idx in page_indices:
+            page = doc[idx]
+            for annot in page.annots(types=[pymupdf.PDF_ANNOT_FREE_TEXT]):
+                if annot.info.get("id") != annotation_id:
+                    continue
+                if border_width is not None:
+                    annot.set_border(width=border_width)
+                annot.update(
+                    fontsize=font_size or 0,
+                    text_color=tuple(float(c) for c in font_color) if font_color else None,
+                )
+        data = doc.tobytes()
+    path.write_bytes(data)
+
+
 def add_text_annotation(
     input_path: str,
     page: int,
@@ -1283,18 +1362,35 @@ def add_text_annotation(
     output_path: str,
     rect: Optional[Sequence[float]] = None,
     annotation_id: Optional[str] = None,
+    font_size: Optional[float] = None,
+    font_color: Optional[Sequence[float]] = None,
+    border_width: Optional[float] = None,
+    origin: str = "bottom-left",
 ) -> Dict:
     """
     Add a FreeText annotation (managed text insert) to a page.
 
     This is used to provide a deterministic, testable way to insert text without
     editing PDF content streams.
+
+    ``rect`` is ``[x1, y1, x2, y2]`` in PDF points. With ``origin="bottom-left"``
+    (default) y grows upwards from the page bottom, as in the PDF file. With
+    ``origin="top-left"`` y grows downwards, matching the ``bbox`` values that
+    ``get_pdf_text_blocks`` returns.
+
+    Style (all optional; omitted keeps the old default of Helvetica 12 pt, black,
+    viewer-default border): ``font_size`` in points, ``font_color`` as
+    ``[r, g, b]`` floats 0-1, ``border_width`` in points (0 = no border). When any
+    style is given an appearance stream is written too.
     """
     src = _ensure_file(input_path)
     dst = _prepare_output(output_path)
 
     if page == 0:
         raise PdfToolError("Page numbers must be 1-based")
+    if origin not in ("bottom-left", "top-left"):
+        raise PdfToolError('origin must be "bottom-left" or "top-left"')
+    _validate_freetext_style(font_size, font_color, border_width)
 
     reader = PdfReader(str(src))
     total = len(reader.pages)
@@ -1305,6 +1401,14 @@ def add_text_annotation(
 
     if not annotation_id:
         annotation_id = f"pdf-mcp-{secrets.token_hex(6)}"
+
+    if origin == "top-left":
+        if rect is None:
+            raise PdfToolError('origin="top-left" needs rect=[x1, y1, x2, y2]')
+        with pymupdf.open(str(src)) as mdoc:
+            # PyMuPDF (top-left) space -> PDF user space; handles cropbox and rotation.
+            pdf_rect = pymupdf.Rect(rect) * ~mdoc[page_idx].transformation_matrix
+        rect = (pdf_rect.x0, pdf_rect.y0, pdf_rect.x1, pdf_rect.y1)
 
     annot = DictionaryObject(
         {
@@ -1335,6 +1439,9 @@ def add_text_annotation(
     with dst.open("wb") as output_file:
         writer.write(output_file)
 
+    if font_size is not None or font_color is not None or border_width is not None:
+        _restyle_freetext(dst, annotation_id, [page_idx], font_size, font_color, border_width)
+
     return {"output_path": str(dst), "annotation_id": annotation_id, "page": page}
 
 
@@ -1344,9 +1451,18 @@ def update_text_annotation(
     annotation_id: str,
     text: str,
     pages: Optional[List[int]] = None,
+    font_size: Optional[float] = None,
+    font_color: Optional[Sequence[float]] = None,
+    border_width: Optional[float] = None,
 ) -> Dict:
+    """Update an annotation's text, and optionally its style, by annotation_id.
+
+    Style arguments work as in ``add_text_annotation``; omitted ones keep the
+    current style. An existing appearance stream is regenerated so the new text shows.
+    """
     src = _ensure_file(input_path)
     dst = _prepare_output(output_path)
+    _validate_freetext_style(font_size, font_color, border_width)
 
     reader = PdfReader(str(src))
     total = len(reader.pages)
@@ -1356,6 +1472,7 @@ def update_text_annotation(
     writer.clone_document_from_reader(reader)
 
     updated = 0
+    has_appearance = False
     for idx in page_indices:
         page_obj = writer.pages[idx]
         annots = page_obj.get("/Annots")
@@ -1366,6 +1483,7 @@ def update_text_annotation(
             obj = ref.get_object() if hasattr(ref, "get_object") else ref
             if str(obj.get("/NM")) == annotation_id:
                 obj[NameObject("/Contents")] = TextStringObject(text)
+                has_appearance = has_appearance or "/AP" in obj
                 updated += 1
 
     if updated == 0:
@@ -1373,6 +1491,10 @@ def update_text_annotation(
 
     with dst.open("wb") as output_file:
         writer.write(output_file)
+
+    styled = font_size is not None or font_color is not None or border_width is not None
+    if styled or has_appearance:
+        _restyle_freetext(dst, annotation_id, page_indices, font_size, font_color, border_width)
 
     return {"output_path": str(dst), "updated": updated, "annotation_id": annotation_id}
 
